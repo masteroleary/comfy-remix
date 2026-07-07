@@ -4,9 +4,13 @@ A local web app for browsing, curating, and managing AI-generated media (images,
 
 > **To start the app:** `cd D:/Archive && npm start` (runs `node server.js`, serves on **http://localhost:8080**). After editing server.js or index.html, restart with `node restart.js`.
 >
-> **Auto-start:** runs headless at boot via scheduled task **`ArchiveAutoStartBoot`** — Trigger=AtStartup, Principal=**SYSTEM** (RunLevel Highest), runs `C:\Program Files\nodejs\node.exe server.js` from `D:\Archive`, hidden, no time limit, auto-restart 3× on failure. Serves HTTP 8080 + HTTPS 8443 (certs in `certs/`) before any login. The older at-logon task **`ArchiveAutoStart`** (user `webde`) is left **Disabled** to avoid double-starting node (EADDRINUSE on 8080). The 8080 listener is **node** — if you ever see python on 8080, that's an unrelated squatter (e.g. ComfyUI) and a second node will EADDRINUSE. Setup/retest scripts: `D:\Archive\scripts\setup_archive_startup.ps1` and `scripts\retest_archive_boot.ps1` (self-elevating).
+> **Auto-start:** runs headless at boot via scheduled task **`ComfyRemixAutoStart`** (renamed from `ArchiveAutoStartBoot` on 2026-07-07) — Trigger=AtStartup, Principal=**SYSTEM** (RunLevel Highest), runs `C:\Program Files\nodejs\node.exe server.js` from `D:\Archive`, hidden, no time limit, auto-restart 3× on failure. Serves HTTP 8080 + HTTPS 8443 (certs in `certs/`) before any login. The older at-logon task **`ArchiveAutoStart`** (user `webde`) is left **Disabled** to avoid double-starting node (EADDRINUSE on 8080). The 8080 listener is **node** — if you ever see python on 8080, that's an unrelated squatter (e.g. ComfyUI) and a second node will EADDRINUSE.
 >
-> **Known caveat (SYSTEM context):** under SYSTEM the in-app Claude-chat panel may not resolve the user's global `claude` CLI, but core media serving (browse/favorite/delete, HTTP+HTTPS) works. Accepted tradeoff for pre-login availability. To revert to the per-user at-logon model: `Enable-ScheduledTask ArchiveAutoStart` and disable/unregister `ArchiveAutoStartBoot`.
+> **Restarting after code changes (server.js):** run `D:\Archive\scripts\register_comfyremix_task.ps1` (self-elevating; one UAC prompt at the console). It kills the current listener, (re)registers `ComfyRemixAutoStart`, starts it, and writes the outcome to `scripts\register_task_result.txt` — **always read that log to confirm**, because of the visibility gotcha below. Static pages (index/inspect/jobs/chat/voice html, common.css, key-prompt.js) are served from disk — no restart needed.
+>
+> **Windows 11 24H2+ gotcha:** non-admin `Get-ScheduledTask` **cannot see SYSTEM tasks** — the boot task will look missing from a normal shell. That's query visibility, not absence. Verify via the result log above, via an elevated shell, or by checking who owns port 8080 (`Get-NetTCPConnection -LocalPort 8080 -State Listen`).
+>
+> **Known caveat (SYSTEM context):** under SYSTEM the in-app Claude-chat panel can't resolve the user's global `claude` login — set **`anthropicApiKey`** in ⚙ Settings (it's injected into the CLI env), after which the assistant works headless. To revert to the per-user at-logon model: `Enable-ScheduledTask ArchiveAutoStart` and disable/unregister `ComfyRemixAutoStart`.
 
 ## Architecture
 
@@ -85,7 +89,7 @@ Notes / gotchas:
 - Broad app rules intentionally left alone: OVR/VR Server and Meta Quest/VR (used over Wi-Fi/LAN, not Tailscale), plus node/VS Code/Steam/etc.
 - Open follow-ups: Ollama was observed listening on IPv6 `::` only (not `0.0.0.0`), so IPv4 Tailscale clients may not reach `11434` until it also binds IPv4. The Archive app binds `0.0.0.0`; binding it to the Tailscale IP would add defense in depth.
 
-**Tailscale unattended mode** (required for pre-login reachability): `HKLM\SOFTWARE\Tailscale IPN\UnattendedMode = "always"` (REG_SZ) is set, so the tailnet stays connected after reboot **before any user logs in**. Without it, Tailscale drops at logoff and the box is unreachable until someone logs in at the desk (this broke pre-login RDP). Combined with the SYSTEM at-startup Archive task + Profile=Any RDP rules, the machine is fully reachable headless after a cold boot. Setup script: `D:\Archive\scripts\enable_headless_access.ps1` (unattended + Profile=Any in one run).
+**Tailscale unattended mode** (required for pre-login reachability): `HKLM\SOFTWARE\Tailscale IPN\UnattendedMode = "always"` (REG_SZ) is set, so the tailnet stays connected after reboot **before any user logs in**. Without it, Tailscale drops at logoff and the box is unreachable until someone logs in at the desk (this broke pre-login RDP). Combined with the SYSTEM at-startup `ComfyRemixAutoStart` task + Profile=Any RDP rules, the machine is fully reachable headless after a cold boot. Setup script: `D:\Archive\scripts\enable_headless_access.ps1` (unattended + Profile=Any in one run).
 
 To re-verify rule scope (read-only):
 ```powershell
