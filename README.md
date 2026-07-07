@@ -52,7 +52,7 @@ The home screen is a set of tiles; a few tools live in the header (🤖 Claude, 
 
 **What it does:** Lists every workflow in your ComfyUI install directory with a checkbox to expose it in the app — no renaming or copying of the original files. For each enabled workflow you can set a display label and map which node is the **prompt / steps / seed** (auto-detected by convention, overridable from a dropdown). Choices are stored in a sidecar file so your original workflow `.json` files are never modified.
 
-**Setup:** none; reads directly from `comfyDir`.
+**Setup:** none; reads directly from `comfyDir`. **Starter workflows included:** on first run the app copies the bundled examples from [default-workflows/](default-workflows/) (anime & photoreal text-to-image, image-to-image, image-to-video) into your ComfyUI workflows folder and enables them. They reference common community custom nodes (rgthree, Impact Pack, Efficiency Nodes, etc.) and placeholder model names — swap in the checkpoints/LoRAs you actually have.
 
 ### 🤖 Claude Code Assistant
 

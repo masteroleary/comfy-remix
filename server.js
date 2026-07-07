@@ -938,6 +938,29 @@ function saveWfStore(store) {
   try { fs.writeFileSync(WF_STORE_PATH, JSON.stringify(store, null, 2)); return true; } catch { return false; }
 }
 
+// First-run bootstrap: copy the bundled starter workflows (default-workflows/)
+// into the ComfyUI install and enable them, so a fresh clone has working
+// examples. Files already present are never overwritten.
+function seedDefaultWorkflows() {
+  const srcDir = path.join(__dirname, 'default-workflows');
+  try {
+    if (!fs.existsSync(srcDir) || !fs.existsSync(WORKFLOWS_DIR)) return;
+    const seeded = [];
+    for (const f of fs.readdirSync(srcDir).filter(n => n.endsWith('.json'))) {
+      const dest = path.join(WORKFLOWS_DIR, f);
+      if (!fs.existsSync(dest)) { fs.copyFileSync(path.join(srcDir, f), dest); seeded.push(f); }
+    }
+    if (seeded.length) {
+      const store = loadWfStore();
+      let changed = false;
+      for (const f of seeded) if (!store.enabled.includes(f)) { store.enabled.push(f); changed = true; }
+      if (changed) saveWfStore(store);
+      console.log('[Workflows] Seeded starter workflows:', seeded.join(', '));
+    }
+  } catch (e) { console.log('[Workflows] seeding failed:', e.message); }
+}
+seedDefaultWorkflows();
+
 // Recursively list every workflow .json under the install workflows dir.
 // Returns names relative to WORKFLOWS_DIR using forward slashes.
 function listAllWorkflows() {
