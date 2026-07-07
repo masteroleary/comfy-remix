@@ -1902,6 +1902,66 @@ runTests();
     return;
   }
 
+  // API: Recognize which enabled workflow an embedded graph is (structural match).
+  // POST { workflow } -> { name, label, score } of the best match, or {} if none.
+  // Fingerprint = node-type multiset + typed link topology; widget values (prompt,
+  // seed, lora strengths), positions, titles, and mute/bypass modes are ignored.
+  if (pn === '/api/workflow-match' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', c => bodyStr += c);
+    req.on('end', () => {
+      let body;
+      try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      const emb = body && body.workflow;
+      if (!emb || !Array.isArray(emb.nodes)) { jsonRes(res, {}); return; }
+
+      // Link keys are slotless (fromType>toType) and compared by containment, not
+      // Jaccard: newer ComfyUI frontends materialize extra links and renumber slots
+      // when serializing into the PNG, so exact-slot Jaccard under-scores true matches.
+      function fingerprint(wf) {
+        const nodes = (wf.nodes || []).filter(n => n && n.type && !UI_ONLY_TYPES.has(n.type));
+        const typeById = {};
+        nodes.forEach(n => { typeById[n.id] = n.type; });
+        const types = nodes.map(n => n.type).sort();
+        const links = (wf.links || []).map(l => {
+          const ft = typeById[l[1]], tt = typeById[l[3]];
+          return (ft && tt) ? ft + '>' + tt : null;
+        }).filter(Boolean).sort();
+        return { types, links };
+      }
+      function multisetIntersection(a, b) {
+        const m = new Map();
+        a.forEach(v => m.set(v, (m.get(v) || 0) + 1));
+        let inter = 0;
+        const m2 = new Map();
+        b.forEach(v => m2.set(v, (m2.get(v) || 0) + 1));
+        for (const [v, c] of m2) inter += Math.min(c, m.get(v) || 0);
+        return inter;
+      }
+
+      const embFp = fingerprint(emb);
+      if (embFp.types.length < 8) { jsonRes(res, {}); return; } // too small to identify confidently
+
+      const store = loadWfStore();
+      let best = null;
+      for (const name of store.enabled) {
+        try {
+          const wf = JSON.parse(fs.readFileSync(path.join(WORKFLOWS_DIR, name), 'utf8'));
+          const fp = fingerprint(wf);
+          const ti = multisetIntersection(embFp.types, fp.types);
+          const typeJac = (embFp.types.length + fp.types.length - ti) ? ti / (embFp.types.length + fp.types.length - ti) : 1;
+          const li = multisetIntersection(embFp.links, fp.links);
+          const minLinks = Math.min(embFp.links.length, fp.links.length);
+          const linkContain = minLinks ? li / minLinks : 1;
+          const score = 0.7 * typeJac + 0.3 * linkContain;
+          if (!best || score > best.score) best = { name, label: store.labels[name] || defaultLabel(name), score };
+        } catch {}
+      }
+      jsonRes(res, best && best.score >= 0.9 ? { ...best, score: Math.round(best.score * 1000) / 1000 } : {});
+    });
+    return;
+  }
+
   // API: Mapping candidates + auto-detected guesses for a single workflow
   if (pn === '/api/workflow-nodes' && req.method === 'GET') {
     const wfName = url.searchParams.get('name');

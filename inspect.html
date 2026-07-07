@@ -348,9 +348,9 @@ framesSelect.addEventListener('change', () => localStorage.setItem('archiveFrame
 function loadWorkflowConfig(name) {
   if (name === 'inherit') {
     setupInheritControls();
-    return;
+    return Promise.resolve();
   }
-  fetch('/api/workflow-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
+  return fetch('/api/workflow-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
     // Check if workflow file changed since last cache
     const savedMtime = localStorage.getItem('archiveMtime_' + name);
     const fileChanged = !savedMtime || String(cfg.mtime) !== savedMtime;
@@ -613,7 +613,68 @@ function refreshWorkflowDropdown(selectName) {
     if (workflowSelect.value !== 'inherit') loadWorkflowConfig(workflowSelect.value);
   }).catch(() => {});
 }
-refreshWorkflowDropdown();
+const wfDropdownReady = refreshWorkflowDropdown();
+
+// The image's actual seed, from its embedded API prompt (Seed node preferred).
+function extractImageSeed() {
+  const wp = window.workingPrompt || {};
+  let fallback = null;
+  for (const n of Object.values(wp)) {
+    if (!n || !n.inputs) continue;
+    for (const [k, v] of Object.entries(n.inputs)) {
+      if (!k.includes('seed') || typeof v !== 'number' || v < 0) continue;
+      if (n.class_type === 'Seed (rgthree)') return v;
+      if (fallback === null) fallback = v;
+    }
+  }
+  return fallback;
+}
+
+// Structural recognition: if the image's embedded graph matches an enabled APP
+// workflow (same nodes/wiring — prompt/seed/widget values may differ), switch the
+// selector from Inherit to it and preload the controls with the image's own
+// prompt/seed/LoRA states. Only acts while Inherit is selected.
+async function recognizeWorkflow(wf) {
+  if (workflowSelect.value !== 'inherit') return false;
+  try {
+    const r = await fetch('/api/workflow-match', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow: wf })
+    });
+    if (!r.ok) return false;
+    const m = await r.json();
+    if (!m || !m.name) return false;
+    await wfDropdownReady; // options may still be loading
+    if (workflowSelect.value !== 'inherit') return false; // user picked something meanwhile
+    if (!workflowSelect.querySelector('option[value="' + m.name.replace(/"/g, '\\"') + '"]')) return false;
+    workflowSelect.value = m.name;
+    localStorage.setItem('archiveWorkflowSelect', m.name);
+    await loadWorkflowConfig(m.name);
+    log('Recognized saved workflow "' + (m.label || m.name) + '" (' + Math.round(m.score * 100) + '% match) — switched from Inherit');
+
+    // Preload the controls with this image's values (session-only; the saved
+    // workflow defaults in localStorage are untouched unless you edit something).
+    const embPrompt = extractImagePrompt();
+    if (embPrompt && promptSection.style.display !== 'none') promptInput.value = embPrompt;
+    const embSeed = extractImageSeed();
+    if (hasSeedControl && embSeed !== null) {
+      seedInput.value = String(embSeed);
+      seedPinMode = false; // visible but unpinned: runs randomize until you tap 📌
+      reflectSeedPin();
+    }
+    const embLoras = collectInheritLoras();
+    if (currentLoras.length && embLoras.length) {
+      let applied = 0;
+      for (const row of currentLoras) {
+        const e = embLoras.find(x => x.lora === row.lora);
+        if (e) { row.on = e.on; row.strength = e.strength; applied++; }
+      }
+      if (applied) renderLoras();
+    }
+    log("Controls preloaded from the image's prompt, seed, and LoRAs");
+    return true;
+  } catch { return false; }
+}
 
 // ── Manage Workflows modal ──
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
@@ -807,9 +868,12 @@ fetch(metaUrl)
     status.textContent = 'Rendering...';
     if (data.prompt) { document.getElementById('runSection').style.display = ''; }
 
-    // If embedded workflow contains APP VIDEO config, populate the UI from it
+    // Try to recognize the embedded graph as an enabled APP workflow and
+    // auto-switch to it (async); fall back to the legacy VIDEO-config heuristic.
     if (data.workflow && data.workflow.nodes) {
-      applyEmbeddedConfig(data.workflow);
+      recognizeWorkflow(data.workflow).then(matched => {
+        if (!matched) applyEmbeddedConfig(data.workflow);
+      });
     }
     // Image prompt is now available — offer to copy it into the selected workflow,
     // or (on Inherit) build the editable prompt/seed/LoRA controls from it
@@ -1267,6 +1331,18 @@ const allOutputFiles = [];
 
 runBtn.onclick = async () => {
   if (!promptData && workflowSelect.value === 'inherit') return;
+
+  // ComfyUI must be up before anything else (upload, queue, WS all need it)
+  status.textContent = 'Checking ComfyUI...';
+  try {
+    const ping = await fetch('/api/comfy/system_stats', { signal: AbortSignal.timeout(4000) });
+    if (!ping.ok) throw new Error('HTTP ' + ping.status);
+  } catch (e) {
+    status.textContent = 'ComfyUI not running';
+    alert('ComfyUI is not running.\n\nStart ComfyUI on this machine, wait for it to finish loading, then hit Run again.');
+    return;
+  }
+
   const runCount = parseInt(runCountSelect.value) || 1;
   const runProgress = document.getElementById('runProgress');
 
