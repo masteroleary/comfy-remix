@@ -347,14 +347,7 @@ framesSelect.addEventListener('change', () => localStorage.setItem('archiveFrame
 
 function loadWorkflowConfig(name) {
   if (name === 'inherit') {
-    promptSection.style.display = 'none';
-    loraSection.style.display = 'none';
-    framesSelect.style.display = 'none';
-    genSection.style.display = 'none';
-    presetSection.style.display = 'none';
-    currentLoras = [];
-    currentPresets = [];
-    hasSeedControl = hasStepsControl = false;
+    setupInheritControls();
     return;
   }
   fetch('/api/workflow-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
@@ -477,30 +470,108 @@ promptInput.addEventListener('input', () => {
 // Pull the positive prompt out of the image's embedded API prompt so it can be
 // copied into whatever APP workflow is selected (which loads its own saved
 // prompt by default and may not match this image).
-function extractImagePrompt() {
+// Returns { nodeId, key, text } of the best positive-prompt source, or null.
+function extractImagePromptRef() {
   const wp = window.workingPrompt;
-  if (!wp) return '';
+  if (!wp) return null;
   const tiers = [[], [], []]; // 0: MAIN PROMPT, 1: positive-prompt titled, 2: any prompt-ish text
-  for (const node of Object.values(wp)) {
+  for (const [nodeId, node] of Object.entries(wp)) {
     if (!node || !node.inputs) continue;
     const title = (node._meta && node._meta.title) || '';
     const cls = node.class_type || '';
     if (/negative|neg\b/i.test(title)) continue;
     // longest string input on this node
-    let text = '';
-    for (const v of Object.values(node.inputs)) {
-      if (typeof v === 'string' && v.length > text.length) text = v;
+    let text = '', key = null;
+    for (const [k, v] of Object.entries(node.inputs)) {
+      if (typeof v === 'string' && v.length > text.length) { text = v; key = k; }
     }
     if (!text.trim()) continue;
-    if (/MAIN/i.test(title) && /PROMPT/i.test(title)) tiers[0].push(text);
-    else if (/positive/i.test(title) && /prompt/i.test(title)) tiers[1].push(text);
-    else if (text.length > 20 && /CLIPTextEncode|TextBox|wildcards|String|concat/i.test(cls)) tiers[2].push(text);
+    const ref = { nodeId, key, text };
+    if (/MAIN/i.test(title) && /PROMPT/i.test(title)) tiers[0].push(ref);
+    else if (/positive/i.test(title) && /prompt/i.test(title)) tiers[1].push(ref);
+    else if (text.length > 20 && /CLIPTextEncode|TextBox|wildcards|String|concat/i.test(cls)) tiers[2].push(ref);
   }
   for (const tier of tiers) {
-    if (tier.length) return tier.sort((a, b) => b.length - a.length)[0];
+    if (tier.length) return tier.sort((a, b) => b.text.length - a.text.length)[0];
   }
-  return '';
+  return null;
 }
+function extractImagePrompt() {
+  const ref = extractImagePromptRef();
+  return ref ? ref.text : '';
+}
+// ── Inherit-mode controls ──
+// The Inherited run replays the API prompt embedded in the image; these build
+// editable prompt/seed/LoRA controls directly from that prompt. Edits are
+// per-image and ephemeral (not persisted like APP-workflow settings).
+function collectInheritLoras() {
+  const rows = [];
+  const wp = window.workingPrompt || {};
+  for (const [nodeId, n] of Object.entries(wp)) {
+    const cls = n.class_type || '';
+    if (/Power Lora Loader/i.test(cls)) {
+      for (const [k, v] of Object.entries(n.inputs || {})) {
+        if (/^lora_\d+$/.test(k) && v && typeof v === 'object' && v.lora) {
+          rows.push({ kind: 'power', nodeId, key: k, lora: v.lora, on: v.on !== false, strength: typeof v.strength === 'number' ? v.strength : 1 });
+        }
+      }
+    } else if (cls === 'LoraLoader' || cls === 'LoraLoaderModelOnly') {
+      const inp = n.inputs || {};
+      if (typeof inp.lora_name === 'string') {
+        const s = typeof inp.strength_model === 'number' ? inp.strength_model : 1;
+        rows.push({ kind: 'plain', nodeId, lora: inp.lora_name, on: s !== 0, strength: s || 1 });
+      }
+    } else if (/Lora Loader \(LoraManager\)/i.test(cls)) {
+      const arr = n.inputs && n.inputs.loras && Array.isArray(n.inputs.loras.__value__) ? n.inputs.loras.__value__ : [];
+      arr.forEach((e, idx) => {
+        if (e && e.name) rows.push({ kind: 'lm', nodeId, idx, lora: e.name, on: e.active !== false, strength: typeof e.strength === 'number' ? e.strength : 1 });
+      });
+    }
+  }
+  return rows;
+}
+
+function setupInheritControls() {
+  presetSection.style.display = 'none';
+  framesSelect.style.display = 'none';
+  stepsField.style.display = 'none';
+  currentPresets = [];
+  hasStepsControl = false;
+
+  // Prompt (from the image's own embedded prompt)
+  const ref = extractImagePromptRef();
+  window.inheritPromptRef = ref;
+  if (ref) {
+    promptInput.value = ref.text;
+    promptSection.style.display = '';
+  } else {
+    promptSection.style.display = 'none';
+  }
+  updateCopyPromptBtn(); // hides the copy button (redundant on inherit)
+
+  // Seed (randomize by default; 📌 pins an exact value into every seed input)
+  hasSeedControl = !!window.workingPrompt;
+  if (hasSeedControl) {
+    seedInput.value = '';
+    seedPinMode = false;
+    seedField.style.display = 'flex';
+    genSection.style.display = '';
+    reflectSeedPin();
+  } else {
+    seedField.style.display = 'none';
+    genSection.style.display = 'none';
+  }
+
+  // LoRAs found in the embedded prompt
+  currentLoras = collectInheritLoras();
+  if (currentLoras.length > 0) {
+    renderLoras();
+    loraSection.style.display = '';
+  } else {
+    loraSection.style.display = 'none';
+  }
+}
+
 const copyImgPromptBtn = document.getElementById('copyImgPromptBtn');
 function updateCopyPromptBtn() {
   const show = workflowSelect.value !== 'inherit'
@@ -740,8 +811,10 @@ fetch(metaUrl)
     if (data.workflow && data.workflow.nodes) {
       applyEmbeddedConfig(data.workflow);
     }
-    // Image prompt is now available — offer to copy it into the selected workflow
+    // Image prompt is now available — offer to copy it into the selected workflow,
+    // or (on Inherit) build the editable prompt/seed/LoRA controls from it
     updateCopyPromptBtn();
+    if (workflowSelect.value === 'inherit') setupInheritControls();
 
     let html = '';
     try {
@@ -1084,10 +1157,48 @@ function applyReplacementsToNodes(prompt){
   return prompt;
 }
 
+// Write the inherit-mode UI edits (prompt text, LoRA toggles/strengths, pinned
+// seed) back into a cloned copy of the image's embedded prompt before submit.
+function applyInheritEdits(prompt) {
+  const ref = window.inheritPromptRef;
+  if (ref && promptSection.style.display !== 'none' && prompt[ref.nodeId] && prompt[ref.nodeId].inputs
+      && promptInput.value !== ref.text) {
+    prompt[ref.nodeId].inputs[ref.key] = promptInput.value;
+    log('Prompt edited for this run');
+  }
+  for (const l of currentLoras) {
+    const n = prompt[l.nodeId];
+    if (!n || !n.inputs) continue;
+    if (l.kind === 'power' && n.inputs[l.key] && typeof n.inputs[l.key] === 'object') {
+      n.inputs[l.key].on = l.on;
+      n.inputs[l.key].strength = l.strength;
+    } else if (l.kind === 'plain') {
+      // Plain LoraLoader has no on/off — strength 0 disables it
+      n.inputs.strength_model = l.on ? l.strength : 0;
+      if ('strength_clip' in n.inputs) n.inputs.strength_clip = l.on ? l.strength : 0;
+    } else if (l.kind === 'lm') {
+      const arr = n.inputs.loras && n.inputs.loras.__value__;
+      if (Array.isArray(arr) && arr[l.idx]) { arr[l.idx].active = l.on; arr[l.idx].strength = l.strength; }
+    }
+  }
+  if (isSeedPinned()) {
+    const v = parseInt(seedInput.value, 10);
+    for (const n of Object.values(prompt)) {
+      if (!n.inputs) continue;
+      for (const k of Object.keys(n.inputs)) {
+        if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = v;
+      }
+    }
+  }
+  return prompt;
+}
+
 async function getRunPrompt(presetTitle) {
   const sel = workflowSelect.value;
   if (sel === 'inherit') {
-    const p = applyReplacementsToNodes(JSON.parse(JSON.stringify(window.workingPrompt)));
+    let p = JSON.parse(JSON.stringify(window.workingPrompt));
+    p = applyInheritEdits(p);
+    p = applyReplacementsToNodes(p);
     if (activeReplacements().length) log('Applied ' + activeReplacements().length + ' prompt replacement(s)');
     return p;
   }
