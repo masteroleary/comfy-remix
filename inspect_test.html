@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workflow - test</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:16px}
+.top-bar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.top-bar h1{font-size:16px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-back{background:#2c2c2e;color:#f2f2f7}.btn-back:hover{background:#3a3a3c}
+.btn-run{background:#30d158;color:#000}.btn-run:hover{background:#28b84c}.btn-run:active{transform:scale(.97)}.btn-run:disabled{opacity:.5;cursor:not-allowed}
+.btn-copy{background:#2c2c2e;color:#f2f2f7}.btn-copy:hover{background:#3a3a3c}
+.btn-cancel{background:#ff453a;color:#fff}.btn-cancel:hover{background:#d63030}
+.status{font-size:13px;color:#8e8e93;margin-left:8px}
+.media-wrap{margin:16px 0;max-width:800px}
+.media-wrap img,.media-wrap video{width:100%;border-radius:10px;display:block}
+.meta-section{margin:16px 0}
+.meta-section h2{font-size:14px;color:#8e8e93;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.meta-section pre{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7}
+.node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.node-card{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px}
+.node-type{font-size:13px;font-weight:600;color:#0a84ff;margin-bottom:4px}
+.node-title{font-size:11px;color:#8e8e93;margin-bottom:6px}
+.node-input{font-size:11px;color:#b0b0b5;line-height:1.5}
+.node-input .key{color:#bf5af2}.node-input .val{color:#f2f2f7}
+.loading{text-align:center;color:#8e8e93;padding:40px;font-size:14px}
+.summary-section{margin:12px 0}
+.summary-label{font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.summary-val{font-size:13px;color:#f2f2f7;margin-bottom:10px;line-height:1.5;word-break:break-word}
+.summary-val .tag{display:inline-block;background:#2c2c2e;border:1px solid #38383a;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:12px}
+.accordion{border:1px solid #38383a;border-radius:8px;margin:12px 0;overflow:hidden}
+.accordion-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1c1c1e;cursor:pointer;user-select:none}
+.accordion-hdr h2{font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin:0}
+.accordion-arrow{color:#8e8e93;transition:transform .2s;font-size:12px}
+.accordion.open .accordion-arrow{transform:rotate(90deg)}
+.accordion-body{display:none;padding:12px 14px;background:#0d0d0d}
+.accordion.open .accordion-body{display:block}
+.exec-panel{margin:12px 0;display:none}.exec-panel.vis{display:block}
+.progress-wrap{background:#1c1c1e;border-radius:6px;height:8px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:#0a84ff;border-radius:6px;width:0%;transition:width .3s}
+.progress-fill.done{background:#30d158}.progress-fill.err{background:#ff453a}
+.exec-log{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px;font-size:11px;font-family:monospace;max-height:200px;overflow-y:auto;color:#b0b0b5;margin-top:8px;white-space:pre-wrap}
+.exec-log .log-done{color:#30d158}.exec-log .log-err{color:#ff453a}
+.tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid #38383a}
+.tab{padding:10px 20px;background:none;border:none;color:#8e8e93;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:#f2f2f7;border-bottom-color:#0a84ff}.tab:hover{color:#f2f2f7}
+.tab-content{display:none}.tab-content.active{display:block}
+.run-controls{display:flex;gap:8px;align-items:center;margin:12px 0}
+.nodes-section h2{font-size:16px;margin-bottom:8px}
+.node-search{width:100%;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px;font-size:13px;margin-bottom:10px}
+.node-search:focus{outline:none;border-color:#0a84ff}
+.node-card.editable{cursor:pointer}.node-card.editable .node-hdr:hover{color:#0a84ff}
+.node-card.editing{border-color:#0a84ff}
+.node-card.edited{border-color:#30d158}
+.node-card.hidden{display:none}
+.node-edit-form{margin-top:8px;padding-top:8px;border-top:1px solid #38383a}
+.edit-label{display:block;font-size:11px;color:#8e8e93;margin-top:8px;margin-bottom:2px}
+.edit-input{width:100%;background:#0d0d0d;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:8px;font-size:13px;font-family:inherit}
+.edit-input:focus{outline:none;border-color:#0a84ff}
+textarea.edit-input{resize:vertical;line-height:1.4}
+.edit-actions{display:flex;gap:8px;margin-top:8px}
+.btn-apply{background:#1b3a1b;color:#34c759;border-color:#34c759}
+.btn-edit-cancel{background:#2c2c2e;color:#8e8e93;border-color:#48484a}
+</style></head><body>
+<div class="top-bar">
+  <h1>test</h1>
+  <button class="btn btn-back" onclick="history.back()">← Back</button>
+  <button class="btn btn-copy" id="copyBtn" disabled>Copy Prompt JSON</button>
+  <span class="status" id="status">Loading metadata...</span>
+</div>
+<div class="tabs">
+  <button class="tab active" data-tab="workflow">Workflow</button>
+  <button class="tab" data-tab="preview">Preview</button>
+</div>
+<div class="tab-content active" id="tab-workflow">
+  <div id="runSection" style="display:none">
+    <div class="run-controls">
+      <button class="btn btn-run" id="runBtn">▶ Run Workflow</button>
+      <button class="btn btn-cancel" id="cancelBtn" style="display:none">■ Cancel</button>
+    </div>
+    <div class="exec-panel" id="execPanel">
+      <div class="progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="exec-log" id="execLog"></div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" id="saveLogBtn" onclick="saveLog()">Save Log</button><span id="openMediaSlot"></span></div>
+    </div>
+  </div>
+  <div id="metaContent"><div class="loading">Loading metadata...</div></div>
+</div>
+<div class="tab-content" id="tab-preview">
+  <div class="media-wrap">
+    <img src="/file/E%3A%5CArchive%5CMedia%5CFaceswap_00001_.png">
+  </div>
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  };
+});
+
+const metaContent = document.getElementById('metaContent');
+const runBtn = document.getElementById('runBtn');
+const copyBtn = document.getElementById('copyBtn');
+const status = document.getElementById('status');
+let promptData = null;
+
+const metaUrl = '/api/metadata?path=' + encodeURIComponent('D:\\Archive\\Media\\Faceswap_00001_.png');
+status.textContent = 'Fetching: ' + metaUrl.substring(0, 80) + '...';
+
+fetch(metaUrl)
+  .then(r => {
+    status.textContent = 'HTTP ' + r.status + ', parsing JSON...';
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + r.statusText);
+    return r.json();
+  })
+  .then(data => {
+    if (data.error) {
+      metaContent.innerHTML = '<div class="loading">Server error: ' + data.error + '</div>';
+      status.textContent = 'Error: ' + data.error;
+      return;
+    }
+    if (!data.prompt && !data.workflow) {
+      metaContent.innerHTML = '<div class="loading">No workflow metadata found in this file.</div>';
+      status.textContent = 'No metadata';
+      return;
+    }
+    promptData = data.prompt;
+    // Make a working copy for edits
+    window.workingPrompt = JSON.parse(JSON.stringify(data.prompt));
+    status.textContent = 'Rendering...';
+    if (data.prompt) { copyBtn.disabled = false; document.getElementById('runSection').style.display = ''; }
+
+    let html = '';
+    try {
+    if (data.prompt && typeof data.prompt === 'object') {
+      const models = [];
+      const loras = [];
+      const entries = Object.entries(data.prompt);
+
+      for (const [id, node] of entries) {
+        const cls = (node.class_type || '').toLowerCase();
+        const inputs = node.inputs || {};
+        if (cls.includes('checkpointloader') || cls.includes('unetloader') || cls.includes('diffusionmodel')) {
+          const name = inputs.ckpt_name || inputs.unet_name || inputs.model_name || '';
+          if (name && typeof name === 'string') models.push(name);
+        }
+        if (cls.includes('lora')) {
+          const name = inputs.lora_name || '';
+          if (name && typeof name === 'string') loras.push(name);
+        }
+      }
+
+      // Summary section
+      html += '<div class="summary-section">';
+      if (models.length) {
+        html += '<div class="summary-label">Model</div><div class="summary-val">';
+        models.forEach(m => { html += '<span class="tag">' + m.replace(/</g,'&lt;') + '</span>'; });
+        html += '</div>';
+      }
+      if (loras.length) {
+        html += '<div class="summary-label">LoRAs</div><div class="summary-val">';
+        loras.forEach(m => { html += '<span class="tag">' + m.replace(/</g,'&lt;') + '</span>'; });
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Nodes section with search
+      html += '<div class="nodes-section"><h2>Nodes (' + entries.length + ')</h2>';
+      html += '<input type="text" class="node-search" id="nodeSearch" placeholder="Search nodes...">';
+      html += '<div class="node-grid" id="nodeGrid">';
+      entries.sort((a,b) => parseInt(a[0]) - parseInt(b[0]));
+      for (const [id, node] of entries) {
+        const title = (node._meta && node._meta.title) || '';
+        const cls = node.class_type || '?';
+        const editableInputs = [];
+        let inputsHtml = '';
+        if (node.inputs) {
+          for (const [k, v] of Object.entries(node.inputs)) {
+            if (Array.isArray(v)) continue;
+            let display = typeof v === 'string' ? v : JSON.stringify(v);
+            if (display.length > 120) display = display.substring(0, 120) + '...';
+            inputsHtml += '<div class="node-input"><span class="key">' + k + ':</span> <span class="val">' + display.replace(/</g,'&lt;') + '</span></div>';
+            if (typeof v === 'string' || typeof v === 'number') {
+              editableInputs.push({ key: k, val: v, type: typeof v });
+            }
+          }
+        }
+        const hasEditable = editableInputs.length > 0;
+        const inputVals = editableInputs.map(i => typeof i.val === 'string' ? i.val : '').join(' ');
+        const searchText = (cls + ' ' + title + ' ' + id + ' ' + inputVals).replace(/"/g,'&quot;').replace(/</g,'').toLowerCase();
+        html += '<div class="node-card' + (hasEditable ? ' editable' : '') + '" data-node-id="' + id + '" data-search="' + searchText + '">';
+        html += '<div class="node-hdr">';
+        html += '<div class="node-type">[' + id + '] ' + cls.replace(/</g,'&lt;') + '</div>';
+        if (title) html += '<div class="node-title">' + title.replace(/</g,'&lt;') + '</div>';
+        html += '</div>';
+        html += inputsHtml;
+        // Edit form (hidden)
+        if (hasEditable) {
+          html += '<div class="node-edit-form" style="display:none">';
+          editableInputs.forEach(inp => {
+            const escaped = typeof inp.val === 'string' ? inp.val.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : inp.val;
+            html += '<label class="edit-label">' + inp.key + '</label>';
+            if (inp.type === 'string' && String(inp.val).length > 50) {
+              html += '<textarea class="edit-input" data-key="' + inp.key + '" rows="6">' + escaped + '</textarea>';
+            } else if (inp.type === 'number') {
+              html += '<input type="number" class="edit-input" data-key="' + inp.key + '" value="' + inp.val + '" step="any">';
+            } else {
+              html += '<input type="text" class="edit-input" data-key="' + inp.key + '" value="' + escaped + '">';
+            }
+          });
+          html += '<div class="edit-actions"><button class="btn btn-apply" onclick="applyNodeEdit(this)">Apply</button><button class="btn btn-edit-cancel" onclick="cancelNodeEdit(this)">Cancel</button></div>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+    // Raw JSON accordions (closed)
+    if (data.prompt) {
+      html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Raw Prompt JSON</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body"><pre style="background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7">' + JSON.stringify(data.prompt, null, 2).replace(/</g,'&lt;') + '</pre></div></div>';
+    }
+    if (data.workflow) {
+      html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Raw Workflow JSON</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body"><pre style="background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7">' + JSON.stringify(data.workflow, null, 2).replace(/</g,'&lt;') + '</pre></div></div>';
+    }
+    } catch(renderErr) {
+      html = '<div class="loading">Render error: ' + renderErr.message + '<br><pre>' + renderErr.stack + '</pre></div>';
+    }
+    metaContent.innerHTML = html;
+    status.textContent = '';
+    initNodes();
+  })
+  .catch(err => {
+    metaContent.innerHTML = '<div class="loading">Fetch failed: ' + err.message + '<br><br><b>URL:</b> ' + metaUrl + '<br><b>Tip:</b> <a href="' + metaUrl + '" style="color:#0a84ff">Open API directly</a></div>';
+    status.textContent = 'Error: ' + err.message;
+  });
+
+function initNodes() {
+  const search = document.getElementById('nodeSearch');
+  const grid = document.getElementById('nodeGrid');
+  if (!search || !grid) return;
+
+  // Search filter
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase().trim();
+    grid.querySelectorAll('.node-card').forEach(card => {
+      card.classList.toggle('hidden', q && !card.dataset.search.includes(q));
+    });
+  });
+
+  // Click to toggle edit form
+  grid.querySelectorAll('.node-card.editable').forEach(card => {
+    card.querySelector('.node-hdr').addEventListener('click', () => {
+      const form = card.querySelector('.node-edit-form');
+      const isOpen = form.style.display !== 'none';
+      // Close all others
+      grid.querySelectorAll('.node-edit-form').forEach(f => { f.style.display = 'none'; });
+      grid.querySelectorAll('.node-card').forEach(c => c.classList.remove('editing'));
+      if (!isOpen) {
+        form.style.display = '';
+        card.classList.add('editing');
+        const firstInput = form.querySelector('.edit-input');
+        if (firstInput) firstInput.focus();
+      }
+    });
+  });
+}
+
+function applyNodeEdit(btn) {
+  const form = btn.closest('.node-edit-form');
+  const card = btn.closest('.node-card');
+  const nodeId = card.dataset.nodeId;
+  form.querySelectorAll('.edit-input').forEach(inp => {
+    const key = inp.dataset.key;
+    let val = inp.value;
+    if (inp.type === 'number') {
+      val = Number(val);
+      // Preserve integer type if original was integer
+      if (Number.isInteger(val)) val = Math.round(val);
+    }
+    if (window.workingPrompt[nodeId] && window.workingPrompt[nodeId].inputs) {
+      window.workingPrompt[nodeId].inputs[key] = val;
+    }
+  });
+  form.style.display = 'none';
+  card.classList.remove('editing');
+  card.classList.add('edited');
+  // Update displayed values
+  const inputs = card.querySelectorAll('.node-input');
+  const wp = window.workingPrompt[nodeId].inputs;
+  inputs.forEach(div => {
+    const keyEl = div.querySelector('.key');
+    if (keyEl) {
+      const k = keyEl.textContent.replace(':', '').trim();
+      if (wp[k] !== undefined && !Array.isArray(wp[k])) {
+        const valEl = div.querySelector('.val');
+        let d = typeof wp[k] === 'string' ? wp[k] : JSON.stringify(wp[k]);
+        if (d.length > 120) d = d.substring(0, 120) + '...';
+        valEl.textContent = d;
+      }
+    }
+  });
+}
+
+function cancelNodeEdit(btn) {
+  const form = btn.closest('.node-edit-form');
+  const card = btn.closest('.node-card');
+  form.style.display = 'none';
+  card.classList.remove('editing');
+  // Reset form values from workingPrompt
+  const nodeId = card.dataset.nodeId;
+  const wp = window.workingPrompt[nodeId].inputs;
+  form.querySelectorAll('.edit-input').forEach(inp => {
+    const key = inp.dataset.key;
+    if (wp[key] !== undefined) inp.value = wp[key];
+  });
+}
+
+const execPanel = document.getElementById('execPanel');
+const progressFill = document.getElementById('progressFill');
+const execLog = document.getElementById('execLog');
+const cancelBtn = document.getElementById('cancelBtn');
+let ws = null;
+let currentPromptId = null;
+
+function log(msg, cls) {
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = msg + '\n';
+  execLog.appendChild(span);
+  execLog.scrollTop = execLog.scrollHeight;
+}
+
+function execDone(ok) {
+  runBtn.disabled = false;
+  runBtn.style.display = '';
+  cancelBtn.style.display = 'none';
+  progressFill.style.width = '100%';
+  progressFill.className = 'progress-fill ' + (ok ? 'done' : 'err');
+  if (ws) { ws.close(); ws = null; }
+  currentPromptId = null;
+}
+
+runBtn.onclick = async () => {
+  if (!promptData) return;
+
+  // Increment seed and strip is_changed cache hints (forces re-execution)
+  for (const [id, node] of Object.entries(window.workingPrompt)) {
+    if (node.inputs && typeof node.inputs.seed === 'number') {
+      node.inputs.seed++;
+    }
+    delete node.is_changed;
+  }
+
+  runBtn.disabled = true;
+  status.textContent = 'Connecting...';
+  execPanel.classList.add('vis');
+  execLog.innerHTML = '';
+  progressFill.style.width = '0%';
+  progressFill.className = 'progress-fill';
+
+  const totalNodes = Object.keys(promptData).length;
+  let nodesCompleted = 0;
+  const outputFiles = [];
+  const nodeMap = {};
+  Object.entries(promptData).forEach(([id, n]) => {
+    nodeMap[id] = (n._meta && n._meta.title) || n.class_type || id;
+  });
+
+  const clientId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const comfyHost = location.host;
+  log('Client ID: ' + clientId);
+  log('Connecting WebSocket to ' + comfyHost + '...');
+
+  let wsReconnects = 0;
+  let submitted = false;
+
+  function onWsMessage(evt) {
+    if (typeof evt.data !== 'string') return;
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+    const d = msg.data || {};
+    if (d.prompt_id && d.prompt_id !== currentPromptId) return;
+
+    switch (msg.type) {
+      case 'execution_start':
+        status.textContent = 'Running...';
+        log('Execution started');
+        break;
+      case 'execution_cached':
+        if (d.nodes) {
+          nodesCompleted += d.nodes.length;
+          log('Cached: ' + d.nodes.length + ' node(s) skipped');
+          progressFill.style.width = Math.round(nodesCompleted / totalNodes * 100) + '%';
+        }
+        break;
+      case 'executing':
+        if (d.node == null) break;
+        const name = nodeMap[d.node] || d.node;
+        status.textContent = 'Running — ' + name;
+        log('▶ [' + d.node + '] ' + name);
+        break;
+      case 'executed':
+        nodesCompleted++;
+        progressFill.style.width = Math.round(nodesCompleted / totalNodes * 100) + '%';
+        status.textContent = 'Running (' + nodesCompleted + '/' + totalNodes + ')';
+        if (d.output) {
+          const imgs = d.output.images || d.output.gifs || [];
+          imgs.forEach(f => { if (f.filename && f.type === 'output') outputFiles.push({ filename: f.filename, subfolder: f.subfolder || '' }); });
+        }
+        break;
+      case 'progress':
+        if (d.max > 0) {
+          const pct = Math.round(d.value / d.max * 100);
+          status.textContent = 'Running — step ' + d.value + '/' + d.max + ' (' + pct + '%)';
+        }
+        break;
+      case 'execution_success':
+        status.textContent = 'Complete!';
+        log('Workflow completed successfully!', 'log-done');
+        if (outputFiles.length > 0) {
+          const last = outputFiles[outputFiles.length - 1];
+          const comfyOut = 'D:/ComfyUI_windows_portable/ComfyUI/output';
+          const fullPath = comfyOut + (last.subfolder ? '\\' + last.subfolder : '') + '\\' + last.filename;
+          const ext = last.filename.split('.').pop().toLowerCase();
+          const ftype = ['mp4','webm','mkv','mov'].includes(ext) ? 'video' : 'image';
+          const params = new URLSearchParams({ path: fullPath, name: last.filename, type: ftype });
+          const openBtn = document.createElement('button');
+          openBtn.className = 'btn btn-run';
+          openBtn.textContent = 'Open Media';
+          openBtn.onclick = () => { location.href = '/inspect?' + params.toString() + '&_=' + Date.now(); };
+          document.getElementById('openMediaSlot').appendChild(openBtn);
+          if (outputFiles.length > 1) { log(outputFiles.length + ' files generated, showing last'); }
+        }
+        execDone(true);
+        break;
+      case 'execution_error':
+        status.textContent = 'Error: ' + (d.exception_message || 'unknown');
+        log('Error in node ' + d.node_id + ' (' + (d.node_type || '') + '): ' + (d.exception_message || ''), 'log-err');
+        execDone(false);
+        break;
+      case 'execution_interrupted':
+        status.textContent = 'Interrupted';
+        log('Execution interrupted', 'log-err');
+        execDone(false);
+        break;
+    }
+  }
+
+  function connectWs() {
+    try {
+      ws = new WebSocket('ws://' + comfyHost + '/comfy-ws?clientId=' + clientId);
+      ws.binaryType = 'arraybuffer';
+    } catch (e) {
+      log('WebSocket create error: ' + e.message, 'log-err');
+      execDone(false);
+      return;
+    }
+    ws.onmessage = onWsMessage;
+    ws.onerror = () => {
+      log('WebSocket error', 'log-err');
+    };
+    ws.onclose = () => {
+      if (currentPromptId && wsReconnects < 3) {
+        wsReconnects++;
+        log('WebSocket dropped, reconnecting (' + wsReconnects + '/3)...');
+        status.textContent = 'Reconnecting...';
+        setTimeout(connectWs, 1000);
+      } else if (currentPromptId) {
+        status.textContent = 'Connection lost';
+        log('WebSocket closed after ' + wsReconnects + ' retries', 'log-err');
+        execDone(false);
+      }
+    };
+    ws.onopen = async () => {
+      log('WebSocket connected');
+      if (submitted) return;
+      submitted = true;
+      status.textContent = 'Queueing workflow...';
+      log('Submitting workflow (' + totalNodes + ' nodes)...');
+      try {
+        const body = JSON.stringify({ prompt: window.workingPrompt, client_id: clientId });
+        log('Payload: ' + (body.length / 1024).toFixed(1) + ' KB');
+        const resp = await fetch('/api/comfy/api/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+        });
+        log('Response: HTTP ' + resp.status);
+        const result = await resp.json();
+        if (result.error) {
+          const errMsg = result.error.message || JSON.stringify(result.error);
+          log('Error: ' + errMsg, 'log-err');
+          execDone(false);
+          return;
+        }
+        currentPromptId = result.prompt_id;
+        status.textContent = 'Queued...';
+        log('Queued - prompt ' + currentPromptId.substring(0, 8) + '...');
+        runBtn.style.display = 'none';
+        cancelBtn.style.display = '';
+      } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+        log('Error: ' + e.name + ': ' + e.message, 'log-err');
+        execDone(false);
+      }
+    };
+  }
+
+  connectWs();
+};
+
+cancelBtn.onclick = async () => {
+  try {
+    await fetch('/api/comfy/api/interrupt', { method: 'POST' });
+    log('Cancel requested...', 'log-err');
+  } catch {}
+};
+
+copyBtn.onclick = () => {
+  if (!promptData) return;
+  navigator.clipboard.writeText(JSON.stringify(promptData, null, 2)).then(() => {
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => { copyBtn.textContent = 'Copy Prompt JSON'; }, 2000);
+  });
+};
+
+async function saveLog() {
+  const btn = document.getElementById('saveLogBtn');
+  const payload = {
+    timestamp: new Date().toISOString(),
+    host: location.host,
+    page: location.href,
+    userAgent: navigator.userAgent,
+    status: status.textContent,
+    log: execLog.innerText,
+    wsState: ws ? ['CONNECTING','OPEN','CLOSING','CLOSED'][ws.readyState] : 'null',
+    promptId: currentPromptId
+  };
+  try {
+    const r = await fetch('/api/debug-results', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload, null, 2) });
+    if (r.ok) { btn.textContent = 'Saved!'; setTimeout(() => { btn.textContent = 'Save Log'; }, 2000); }
+    else { btn.textContent = 'Error ' + r.status; }
+  } catch(e) { btn.textContent = e.message; }
+}
+</script></body></html>

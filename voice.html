@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Agent</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+html,body{height:100%;background:var(--bg);overflow:hidden}
+body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;display:flex;flex-direction:column}
+
+.top-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:calc(10px + var(--safe-t)) 12px 10px;
+  background:rgba(13,13,13,.92);
+  backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;
+}
+.home-btn{
+  background:var(--surface2);border:none;color:var(--accent);
+  padding:8px 12px;border-radius:var(--r-sm);font-size:18px;cursor:pointer;
+}
+.top-bar h1{font-size:16px;font-weight:600;flex:1}
+.icon-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  width:36px;height:36px;border-radius:var(--r-sm);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.top-end-btn{
+  background:transparent;border:1px solid var(--red);color:var(--red);
+  padding:6px 12px;border-radius:var(--r-sm);font-size:13px;font-weight:600;cursor:pointer;
+  transition:opacity .15s;
+}
+.top-end-btn:active:not(:disabled){opacity:.6}
+.top-end-btn:disabled{opacity:.3;cursor:not-allowed;border-color:var(--border);color:var(--text3)}
+
+.img-toggle-btn{
+  background:transparent;border:1px solid var(--border);color:var(--text2);
+  padding:6px 10px;border-radius:var(--r-sm);font-size:13px;cursor:pointer;
+  white-space:nowrap;
+}
+.img-toggle-btn.on{border-color:var(--accent);color:var(--accent)}
+.img-toggle-btn.off{border-color:var(--border);color:var(--text3)}
+.img-toggle-btn:active{opacity:.6}
+
+/* When images are disabled, hide image bubbles in the transcript */
+.images-off .bubble.image-bubble{display:none}
+
+.img-recycle-btn{
+  position:absolute;top:6px;right:6px;z-index:2;
+  background:rgba(0,0,0,.55);border:none;color:#fff;
+  width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  backdrop-filter:blur(4px);
+}
+.img-recycle-btn:hover{background:rgba(0,0,0,.8)}
+.img-recycle-btn:disabled{opacity:.5;cursor:not-allowed}
+.img-recycle-btn:active{transform:scale(.92)}
+
+.reply-mode-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  padding:8px 12px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;height:40px;
+}
+.reply-mode-btn.short{color:var(--accent);border-color:var(--accent)}
+.reply-mode-btn.descriptive{color:var(--amber);border-color:var(--amber)}
+.reply-mode-btn:active{opacity:.6}
+.auto-save-status{font-size:11px;color:var(--text3);white-space:nowrap;min-width:60px;text-align:right;transition:opacity .2s}
+.auto-save-status.saving{color:var(--amber)}
+.auto-save-status.saved{color:var(--green)}
+
+/* Character 3-dot menu */
+.char-menu-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  width:36px;height:36px;border-radius:var(--r-sm);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;
+}
+.char-menu-btn:hover{color:var(--text)}
+.char-menu-btn:active{opacity:.6}
+.char-menu{
+  display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:20;
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);
+  min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:4px;
+}
+.char-menu.open{display:flex;flex-direction:column}
+.char-menu button{
+  background:none;border:none;color:var(--text);
+  padding:9px 12px;border-radius:var(--r-sm);font-size:14px;text-align:left;cursor:pointer;
+  white-space:nowrap;
+}
+.char-menu button:hover:not(:disabled){background:var(--surface3)}
+.char-menu button:disabled{color:var(--text3);cursor:not-allowed;opacity:.5}
+.char-menu button.danger{color:var(--red)}
+.char-menu button.danger:hover:not(:disabled){background:rgba(255,69,58,.1)}
+
+.saved-convos{width:100%;max-width:500px;display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.saved-convos-title{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.convo-card{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:10px 12px;cursor:pointer;text-align:left;
+}
+.convo-card:active{transform:scale(.98)}
+.convo-card-info{flex:1;min-width:0}
+.convo-card-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.convo-card-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.convo-card-del{
+  background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;
+  padding:4px 6px;flex-shrink:0;
+}
+.convo-card-del:hover{color:var(--red)}
+
+.status-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;font-size:12px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.off{background:var(--text3)}
+.status-dot.connecting{background:var(--amber);animation:pulse 1s infinite}
+.status-dot.live{background:var(--green)}
+.status-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+.transcript{
+  flex:1;overflow-y:auto;padding:16px 14px;
+  display:flex;flex-direction:column;gap:10px;
+}
+/* Thin rounded scrollbars (applies to transcript, messages, settings panel, etc.) */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
+*::-webkit-scrollbar-corner{background:transparent}
+.bubble{max-width:85%;padding:10px 14px;border-radius:16px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+.bubble.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.bubble.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
+.bubble.system{align-self:center;background:transparent;color:var(--text3);font-size:12px;padding:4px 8px}
+.bubble.partial{opacity:.65;font-style:italic}
+.bubble{position:relative;padding-bottom:26px}
+.bubble-actions{
+  position:absolute;bottom:4px;right:6px;
+  display:flex;gap:4px;opacity:0;transition:opacity .15s;
+}
+.bubble:hover .bubble-actions,.bubble:focus-within .bubble-actions{opacity:1}
+@media (hover:none){.bubble-actions{opacity:.5}}
+.bubble-act{
+  background:rgba(0,0,0,.25);border:none;color:inherit;
+  width:22px;height:22px;border-radius:50%;font-size:12px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;line-height:1;
+}
+.bubble-act:hover{background:rgba(0,0,0,.5)}
+.bubble-act:active{transform:scale(.9)}
+.bubble.assistant .bubble-act{background:var(--surface2);color:var(--text2)}
+.bubble.assistant .bubble-act:hover{background:var(--surface3);color:var(--text)}
+
+.control-bar{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:16px 14px calc(14px + var(--safe-b));
+  background:rgba(13,13,13,.92);border-top:1px solid var(--border);
+}
+.mic-btn{
+  width:84px;height:84px;border-radius:50%;border:none;cursor:pointer;
+  background:var(--accent);color:#fff;font-size:36px;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s, background .2s;
+  box-shadow:0 4px 20px rgba(10,132,255,.3);
+}
+.mic-btn:active{transform:scale(.92)}
+.mic-btn.recording{background:var(--red);box-shadow:0 4px 24px rgba(255,69,58,.5);animation:recording 1.6s ease-in-out infinite}
+.mic-btn.speaking{background:var(--green);box-shadow:0 4px 24px rgba(48,209,88,.5)}
+.mic-btn:disabled{opacity:.4;cursor:default;box-shadow:none}
+@keyframes recording{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+
+.mic-hint{font-size:12px;color:var(--text2);text-align:center}
+
+.vad-levels{display:flex;gap:3px;align-items:flex-end;height:24px}
+.vad-levels span{width:3px;background:var(--accent);border-radius:2px;transition:height .06s ease-out}
+
+/* Settings drawer — right side */
+.settings-overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5)}
+.settings-overlay.open{display:flex;justify-content:flex-end}
+.settings-panel{
+  background:var(--surface);border-radius:16px 0 0 16px;
+  padding:0 16px 20px;width:340px;max-width:85vw;height:100%;overflow-y:auto;
+  animation:slideIn .2s ease-out;
+}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.settings-header{display:flex;align-items:center;justify-content:space-between;padding:16px 0 12px;position:sticky;top:0;background:var(--surface);z-index:1}
+.settings-header h2{font-size:15px;font-weight:600}
+.settings-close{
+  padding:6px 14px;background:var(--surface2);border:1px solid var(--border);
+  color:var(--accent);border-radius:var(--r-sm);font-size:14px;font-weight:500;cursor:pointer;
+}
+.settings-row{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.settings-row label{font-size:12px;color:var(--text2);font-weight:500}
+.settings-row select,.settings-row input,.settings-row textarea{
+  background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  padding:8px 10px;border-radius:var(--r-sm);font-size:14px;width:100%;
+  font-family:inherit;
+}
+.settings-row textarea{resize:vertical}
+.settings-row .hint{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* Start screen */
+.start-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px 20px;text-align:center}
+.start-screen.hidden{display:none}
+.start-title{font-size:20px;font-weight:600}
+.start-desc{font-size:14px;color:var(--text2);max-width:360px;line-height:1.5}
+.start-btn{background:var(--accent);border:none;color:#fff;padding:12px 28px;border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer}
+.start-btn:active{opacity:.8}
+.start-err{color:var(--red);font-size:13px;max-width:360px}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <button class="home-btn" onclick="location.href='/'">&#8962;</button>
+  <h1>Voice Agent</h1>
+  <span class="auto-save-status" id="autoSaveStatus"></span>
+  <button class="img-toggle-btn" id="imgToggleBtn" title="Enable or disable image generation + visibility">&#127912; On</button>
+  <button class="top-end-btn" id="topEndBtn" disabled onclick="endSession()" title="End Session">End</button>
+  <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
+</div>
+
+<div class="status-bar">
+  <div class="status-dot off" id="statusDot"></div>
+  <span id="statusText">Not connected</span>
+  <span id="costDisplay" style="margin-left:auto;color:var(--amber);font-variant-numeric:tabular-nums"></span>
+</div>
+
+<div class="main">
+  <!-- Start screen -->
+  <div class="start-screen" id="startScreen">
+    <div class="start-title">🎙️ Voice Agent</div>
+    <div class="start-desc">Real-time speech-to-speech with Grok. Talk into your mic and get instant voice replies. &lt;1s latency, automatic turn-taking, barge-in support.</div>
+    <button class="start-btn" onclick="startSession()">Start Session</button>
+    <div class="start-err" id="startErr"></div>
+    <div class="start-desc" style="font-size:11px;color:var(--text3)">Cost: $0.05/min while connected. Auto-ends after 1 min of silence (idle timer), 30 min max session, or when you tap End.</div>
+    <div id="totalCost" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
+    <div class="saved-convos" id="savedConvos"></div>
+  </div>
+
+  <!-- Transcript (hidden until session started) -->
+  <div class="transcript" id="transcript" style="display:none"></div>
+
+  <!-- Control bar (hidden until session started) -->
+  <div class="control-bar" id="controlBar" style="display:none">
+    <div class="vad-levels" id="vadLevels"><span style="height:2px"></span><span style="height:2px"></span><span style="height:2px"></span><span style="height:2px"></span><span style="height:2px"></span></div>
+    <button class="mic-btn" id="micBtn" title="Toggle mic">&#127908;</button>
+    <div class="mic-hint" id="micHint">Speak to chat. Tap to mute.</div>
+    <div style="display:flex;gap:6px;width:100%;max-width:500px;margin-top:4px;align-items:center">
+      <button id="replyModeBtn" title="Toggle response length" class="reply-mode-btn short">Short</button>
+      <input type="text" id="textInput" placeholder="Or type a message..." style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:20px;font-size:15px;outline:none;font-family:inherit">
+      <button id="sendTextBtn" style="background:var(--accent);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0">&#9654;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings drawer -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <h2>Voice Settings</h2>
+      <button class="settings-close" onclick="closeSettings()">Done</button>
+    </div>
+    <div class="settings-row">
+      <label>Character</label>
+      <div style="display:flex;gap:6px;align-items:center;position:relative">
+        <select id="characterSelect" style="flex:1">
+          <option value="">Default</option>
+        </select>
+        <button class="char-menu-btn" id="charMenuBtn" title="Character actions">&#8943;</button>
+        <div class="char-menu" id="charMenu" role="menu">
+          <button data-action="new" role="menuitem">+ New Character</button>
+          <button data-action="rename" role="menuitem">&#9998; Rename</button>
+          <button data-action="duplicate" role="menuitem">&#128203; Duplicate</button>
+          <button data-action="delete" role="menuitem" class="danger">&#10005; Delete</button>
+        </div>
+      </div>
+      <div class="hint">Pick a saved character or use the menu (<b>⋯</b>) to manage them.</div>
+    </div>
+    <div class="settings-row">
+      <label>Voice</label>
+      <select id="voiceSelect">
+        <option value="eve">eve — energetic</option>
+        <option value="ara">ara — warm</option>
+        <option value="rex">rex — professional</option>
+        <option value="sal">sal — versatile</option>
+        <option value="leo">leo — authoritative</option>
+      </select>
+      <div class="hint">Saved with the selected character.</div>
+    </div>
+    <div class="settings-row">
+      <label>Turn Detection</label>
+      <select id="turnDetectSelect">
+        <option value="server_vad">Automatic (server VAD)</option>
+        <option value="none">Manual (push-to-talk)</option>
+      </select>
+      <div class="hint">Automatic = the server decides when you've stopped speaking</div>
+    </div>
+    <div class="settings-row">
+      <label>System Prompt</label>
+      <textarea id="systemPrompt" rows="12" style="min-height:240px">You are a helpful, natural, and conversational voice assistant. Keep responses concise and spoken-friendly. Avoid markdown formatting.</textarea>
+    </div>
+    <div class="settings-row">
+      <label>Portrait (image prompt for this character)</label>
+      <textarea id="portraitPrompt" rows="5" style="min-height:100px" placeholder="e.g. Anime-style young adult woman, long auburn hair, green eyes, black leather jacket over a band tee, cel-shaded illustration, clean line art. Leave blank to let the agent invent one."></textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <button class="char-menu-btn" id="portraitGenBtn" title="Generate or regenerate the portrait image" style="width:auto;padding:0 14px;height:32px;font-size:14px;display:inline-flex;gap:6px">&#8634; Generate</button>
+        <span id="portraitGenStatus" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <img id="portraitImage" style="display:none;max-width:240px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="window.open(this.src,'_blank')">
+      <div class="hint">Tap generate to create the character's portrait. Stored on the character so every session uses the same visual. Costs $0.02/image.</div>
+    </div>
+  </div>
+</div>
+
+
+<script src="/key-prompt.js"></script>
+<script>
+
+// ── Settings persistence ──
+const SETTINGS_KEY = 'voice-settings';
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; }
+}
+// Per-device UI state only. Anything that lives on a character record (prompt, portrait, voice)
+// is NOT stored here — it comes from the character file on the server.
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    turnDetect: turnDetectSelect.value,
+    characterId: characterSelect ? characterSelect.value : '',
+  }));
+}
+const voiceSelect = document.getElementById('voiceSelect');
+const turnDetectSelect = document.getElementById('turnDetectSelect');
+const systemPrompt = document.getElementById('systemPrompt');
+const portraitPrompt = document.getElementById('portraitPrompt');
+const characterSelect = document.getElementById('characterSelect');
+const charMenuBtn = document.getElementById('charMenuBtn');
+const charMenu = document.getElementById('charMenu');
+const portraitGenBtn = document.getElementById('portraitGenBtn');
+const portraitGenStatus = document.getElementById('portraitGenStatus');
+const portraitImage = document.getElementById('portraitImage');
+
+function showPortraitImage(url) {
+  if (url) {
+    portraitImage.src = url;
+    portraitImage.style.display = 'block';
+  } else {
+    portraitImage.removeAttribute('src');
+    portraitImage.style.display = 'none';
+  }
+}
+
+// ── Characters ──
+let characters = [];
+function refreshCharMenuState() {
+  // In the menu: Rename / Duplicate / Delete require a selected (non-Default) character.
+  // Delete also requires at least 2 characters to exist.
+  const hasSelection = !!characterSelect.value;
+  const btns = charMenu.querySelectorAll('button');
+  btns.forEach(b => {
+    const action = b.dataset.action;
+    let disabled = false;
+    let title = '';
+    if (action === 'rename' || action === 'duplicate') {
+      disabled = !hasSelection;
+      title = disabled ? 'Select a character first' : '';
+    } else if (action === 'delete') {
+      if (!hasSelection) { disabled = true; title = 'Select a character first'; }
+      else if (characters.length <= 1) { disabled = true; title = 'At least one character must remain — create a new one first'; }
+    }
+    b.disabled = disabled;
+    b.title = title;
+  });
+}
+async function loadCharacters() {
+  try {
+    const r = await fetch('/api/characters');
+    characters = await r.json();
+    const savedId = loadSettings().characterId || '';
+    characterSelect.innerHTML = '<option value="">Default</option>' + characters.map(c =>
+      `<option value="${c.id}"${c.id === savedId ? ' selected' : ''}>${escapeAttr(c.name)}</option>`
+    ).join('');
+    // If we restored a character, also restore its prompt + portrait + voice so UI stays in sync
+    if (savedId) {
+      const c = characters.find(x => x.id === savedId);
+      if (c) {
+        systemPrompt.value = c.prompt;
+        portraitPrompt.value = c.portrait || '';
+        if (c.voice) voiceSelect.value = c.voice;
+        showPortraitImage(c.portraitImageUrl || '');
+      }
+    } else {
+      showPortraitImage('');
+    }
+    refreshCharMenuState();
+  } catch { characters = []; refreshCharMenuState(); }
+}
+function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+characterSelect.addEventListener('change', () => {
+  const id = characterSelect.value;
+  if (id) {
+    const c = characters.find(x => x.id === id);
+    if (c) {
+      systemPrompt.value = c.prompt;
+      portraitPrompt.value = c.portrait || '';
+      if (c.voice) voiceSelect.value = c.voice;
+      showPortraitImage(c.portraitImageUrl || '');
+    }
+  } else {
+    showPortraitImage('');
+  }
+  saveSettings();
+  refreshCharMenuState();
+  if (ws) updateSession();
+});
+
+// ── Character menu ──
+function closeCharMenu() { charMenu.classList.remove('open'); }
+charMenuBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  charMenu.classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!charMenu.contains(e.target) && e.target !== charMenuBtn) closeCharMenu();
+});
+charMenu.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn || btn.disabled) return;
+  closeCharMenu();
+  const action = btn.dataset.action;
+  if (action === 'new') return charActionNew();
+  if (action === 'rename') return charActionRename();
+  if (action === 'duplicate') return charActionDuplicate();
+  if (action === 'delete') return charActionDelete();
+});
+
+async function charActionNew() {
+  const name = prompt('New character name:');
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        prompt: systemPrompt.value || 'You are a helpful voice assistant.',
+        portrait: portraitPrompt.value || '',
+        voice: voiceSelect.value,
+      }),
+    });
+    const saved = await r.json();
+    if (!r.ok) { alert('Error: ' + (saved.error || 'save failed')); return; }
+    await loadCharacters();
+    characterSelect.value = saved.id;
+    saveSettings();
+    refreshCharMenuState();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionRename() {
+  const id = characterSelect.value;
+  if (!id) return;
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt('Rename character:', c.name);
+  if (!name || !name.trim() || name === c.name) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...c, name: name.trim() }),
+    });
+    if (!r.ok) { const err = await r.json().catch(()=>({})); alert('Rename failed: ' + (err.error || '')); return; }
+    await loadCharacters();
+    characterSelect.value = id;
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionDuplicate() {
+  const id = characterSelect.value;
+  if (!id) return;
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt('Name for the copy:', c.name + ' (copy)');
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        prompt: c.prompt,
+        portrait: c.portrait || '',
+        voice: c.voice || voiceSelect.value,
+      }),
+    });
+    const saved = await r.json();
+    if (!r.ok) { alert('Duplicate failed: ' + (saved.error || '')); return; }
+    await loadCharacters();
+    characterSelect.value = saved.id;
+    // Re-apply UI fields from the new selection
+    characterSelect.dispatchEvent(new Event('change'));
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionDelete() {
+  const id = characterSelect.value;
+  if (!id) return;
+  if (characters.length <= 1) { alert('At least one character must remain — create a new one first.'); return; }
+  const c = characters.find(x => x.id === id);
+  if (!confirm('Delete character "' + (c ? c.name : id) + '"?')) return;
+  try {
+    await fetch('/api/characters/' + encodeURIComponent(id), { method: 'DELETE' });
+    await loadCharacters();
+    characterSelect.value = '';
+    saveSettings();
+    refreshCharMenuState();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+portraitGenBtn.addEventListener('click', async () => {
+  const id = characterSelect.value;
+  if (!id) { alert('Select or save a character first (menu → + New).'); return; }
+  const prompt = portraitPrompt.value.trim();
+  if (!prompt) { alert('Enter a Portrait description first.'); return; }
+  portraitGenBtn.disabled = true;
+  const originalLabel = portraitGenBtn.innerHTML;
+  portraitGenBtn.innerHTML = '&#8634; Generating…';
+  portraitGenStatus.textContent = 'Calling Grok Imagine ($0.02)…';
+  try {
+    // Ensure latest prompt is persisted to the character first
+    await persistCharacterEdit();
+    const r = await fetch('/api/characters/' + encodeURIComponent(id) + '/portrait', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, aspect_ratio: '1:1' }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.url) {
+      portraitGenStatus.textContent = 'Error: ' + (data.error || 'failed');
+      portraitGenStatus.style.color = 'var(--red)';
+    } else {
+      // Bust the cache so the new image loads
+      const busted = data.url + '?t=' + Date.now();
+      showPortraitImage(busted);
+      portraitGenStatus.textContent = 'Saved to this character.';
+      portraitGenStatus.style.color = 'var(--green)';
+      // Update local cache
+      const c = characters.find(x => x.id === id);
+      if (c) c.portraitImageUrl = data.url;
+      setTimeout(() => { portraitGenStatus.textContent = ''; portraitGenStatus.style.color = ''; }, 4000);
+    }
+  } catch (e) {
+    portraitGenStatus.textContent = 'Error: ' + e.message;
+    portraitGenStatus.style.color = 'var(--red)';
+  } finally {
+    portraitGenBtn.disabled = false;
+    portraitGenBtn.innerHTML = originalLabel;
+  }
+});
+
+loadCharacters();
+const s = loadSettings();
+if (s.turnDetect) turnDetectSelect.value = s.turnDetect;
+voiceSelect.addEventListener('change', () => { persistCharacterEdit(); if (ws) updateSession(); });
+turnDetectSelect.addEventListener('change', () => { saveSettings(); if (ws) updateSession(); });
+portraitPrompt.addEventListener('input', () => { if (charSaveTimer) clearTimeout(charSaveTimer); charSaveTimer = setTimeout(persistCharacterEdit, 600); });
+portraitPrompt.addEventListener('change', () => { persistCharacterEdit(); });
+// Debounced save of edits to the currently-selected character
+let charSaveTimer = null;
+async function persistCharacterEdit() {
+  const id = characterSelect.value;
+  if (!id) return; // No character selected
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const newPrompt = systemPrompt.value;
+  const newPortrait = portraitPrompt.value;
+  const newVoice = voiceSelect.value;
+  if (c.prompt === newPrompt && (c.portrait || '') === newPortrait && (c.voice || '') === newVoice) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, name: c.name, prompt: newPrompt, portrait: newPortrait, voice: newVoice }),
+    });
+    const saved = await r.json();
+    if (r.ok) {
+      c.prompt = newPrompt;
+      c.portrait = newPortrait;
+      c.voice = newVoice;
+    }
+  } catch {}
+}
+systemPrompt.addEventListener('input', () => {
+  if (charSaveTimer) clearTimeout(charSaveTimer);
+  charSaveTimer = setTimeout(persistCharacterEdit, 600);
+});
+systemPrompt.addEventListener('change', () => {
+  if (charSaveTimer) { clearTimeout(charSaveTimer); charSaveTimer = null; }
+  persistCharacterEdit();
+  if (ws) updateSession();
+});
+
+// ── Settings drawer ──
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+settingsBtn.addEventListener('click', () => settingsOverlay.classList.add('open'));
+settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+function closeSettings() { settingsOverlay.classList.remove('open'); saveSettings(); }
+
+// ── Session state ──
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const startScreen = document.getElementById('startScreen');
+const startErr = document.getElementById('startErr');
+const transcript = document.getElementById('transcript');
+const controlBar = document.getElementById('controlBar');
+const micBtn = document.getElementById('micBtn');
+const micHint = document.getElementById('micHint');
+const vadLevels = document.getElementById('vadLevels');
+const topEndBtn = document.getElementById('topEndBtn');
+
+// If a session was active before page refresh, offer to resume
+(function detectPreviousSession() {
+  const flag = sessionStorage.getItem('voice-session-active');
+  if (!flag) return;
+  const age = Date.now() - parseInt(flag, 10);
+  // Session ephemeral token lives 5min; xAI session max is 30 min. If the flag is within the last 30 min, show resume.
+  if (age > 30 * 60 * 1000) { sessionStorage.removeItem('voice-session-active'); return; }
+  const startScr = document.getElementById('startScreen');
+  if (!startScr) return;
+  // Replace the start content with a resume card
+  const title = startScr.querySelector('.start-title');
+  const desc = startScr.querySelector('.start-desc');
+  const btn = startScr.querySelector('.start-btn');
+  if (title) title.textContent = '🎙️ Session was active';
+  if (desc) desc.innerHTML = 'The page refreshed while a voice session was running. Tap below to start a new session with your saved settings.<br><br><a href="#" id="dismissResume" style="color:var(--text3);font-size:12px">Dismiss</a>';
+  if (btn) btn.textContent = 'Resume Session';
+  setTimeout(() => {
+    const dismiss = document.getElementById('dismissResume');
+    if (dismiss) dismiss.onclick = (e) => {
+      e.preventDefault();
+      sessionStorage.removeItem('voice-session-active');
+      location.reload();
+    };
+  }, 0);
+})();
+
+let ws = null;
+let audioCtx = null;
+let micStream = null;
+let micSource = null;
+let micProcessor = null;
+let micMuted = false;
+let playbackCtx = null;
+let playbackQueueTime = 0;
+const SAMPLE_RATE = 24000;
+
+// Cost tracking
+const costDisplay = document.getElementById('costDisplay');
+let costSessionId = null;
+let costSessionStartMs = 0;
+let costTickInterval = null;
+function formatCost(usd) { return '$' + usd.toFixed(2); }
+function startCostTick() {
+  costSessionStartMs = Date.now();
+  if (costTickInterval) clearInterval(costTickInterval);
+  costTickInterval = setInterval(() => {
+    const mins = (Date.now() - costSessionStartMs) / 60000;
+    const cur = mins * 0.05;
+    costDisplay.textContent = 'Session: ' + formatCost(cur);
+  }, 1000);
+}
+function stopCostTick() {
+  if (costTickInterval) { clearInterval(costTickInterval); costTickInterval = null; }
+}
+
+// Idle timeout: end session after 60s with no user speech
+const IDLE_TIMEOUT_MS = 60000;
+const IDLE_WARN_MS = 10000; // show warning in last 10s
+let idleDeadline = 0;
+let idleTimerInterval = null;
+
+function resetIdleTimer() {
+  idleDeadline = Date.now() + IDLE_TIMEOUT_MS;
+}
+
+function startIdleTimer() {
+  resetIdleTimer();
+  if (idleTimerInterval) clearInterval(idleTimerInterval);
+  idleTimerInterval = setInterval(() => {
+    const remaining = idleDeadline - Date.now();
+    if (remaining <= 0) {
+      addBubble('system', 'Session ended — no speech for 1 minute');
+      endSession();
+      return;
+    }
+    if (remaining <= IDLE_WARN_MS) {
+      const secs = Math.ceil(remaining / 1000);
+      micHint.textContent = 'Ending in ' + secs + 's — say something to stay connected';
+    } else if (micHint.textContent.startsWith('Ending in')) {
+      micHint.textContent = micMuted ? 'Mic muted. Tap to unmute.' : 'Speaking live. Tap to mute.';
+    }
+  }, 500);
+}
+
+function stopIdleTimer() {
+  if (idleTimerInterval) { clearInterval(idleTimerInterval); idleTimerInterval = null; }
+}
+
+// Partial transcript bubbles
+let userPartialEl = null;
+let assistantPartialEl = null;
+
+function setStatus(dot, text) {
+  statusDot.className = 'status-dot ' + dot;
+  statusText.textContent = text;
+}
+
+function addBubble(role, text, partial) {
+  const div = document.createElement('div');
+  div.className = 'bubble ' + role + (partial ? ' partial' : '');
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  div.appendChild(textSpan);
+  div._textEl = textSpan;
+  if (role === 'user' || role === 'assistant') {
+    const actions = document.createElement('div');
+    actions.className = 'bubble-actions';
+    const rewindBtn = document.createElement('button');
+    rewindBtn.className = 'bubble-act';
+    rewindBtn.innerHTML = '&#8630;'; // rewind
+    rewindBtn.title = 'Rewind to this point (truncate current session)';
+    rewindBtn.onclick = (e) => { e.stopPropagation(); rewindToBubble(div, false); };
+    const forkBtn = document.createElement('button');
+    forkBtn.className = 'bubble-act';
+    forkBtn.innerHTML = '&#8623;'; // fork
+    forkBtn.title = 'Fork to a new saved conversation from this point';
+    forkBtn.onclick = (e) => { e.stopPropagation(); rewindToBubble(div, true); };
+    const renderBtn = document.createElement('button');
+    renderBtn.className = 'bubble-act';
+    renderBtn.innerHTML = '&#127912;'; // palette / art
+    renderBtn.title = 'Ask the agent to render this scene as an image (uses conversation context)';
+    renderBtn.onclick = (e) => { e.stopPropagation(); askAgentToRender(div); };
+    actions.appendChild(rewindBtn);
+    actions.appendChild(forkBtn);
+    actions.appendChild(renderBtn);
+    div.appendChild(actions);
+  }
+  transcript.appendChild(div);
+  transcript.scrollTop = transcript.scrollHeight;
+  return div;
+}
+
+function askAgentToRender(div) {
+  if (!ws || ws.readyState !== 1) { alert('Not connected to a live session.'); return; }
+  if (!imagesEnabled) { alert('Image generation is currently disabled. Toggle it on in the top bar.'); return; }
+  // Gather context: the clicked bubble + up to 4 preceding bubbles (whichever provide scene detail)
+  const allBubbles = Array.from(transcript.querySelectorAll('.bubble'));
+  const idx = allBubbles.indexOf(div);
+  if (idx < 0) return;
+  const windowStart = Math.max(0, idx - 4);
+  const context = allBubbles.slice(windowStart, idx + 1)
+    .filter(b => !b.classList.contains('system') && !b.classList.contains('partial'))
+    .map(b => {
+      const role = b.classList.contains('user') ? 'Me' : 'You';
+      const text = (b._textEl ? b._textEl.textContent : b.textContent) || '';
+      return role + ': ' + text.trim();
+    })
+    .join('\n');
+  const prompt = 'Call render_scene for the scene described by my highlighted message. IMPORTANT: include your character\'s specific appearance details (the ones I gave you in the system prompt — hair, body, clothing, style) near the start of the render_scene prompt — the reference image alone is not enough. Then synthesize scene details (setting, mood, pose, lighting) from the last few exchanges; do NOT repeat my line verbatim. Context:\n"""\n' + context + '\n"""\nRender the last "Me" line above, using the earlier context for setting and mood, and your appearance details from the system prompt for the character. Keep within Grok Imagine content policy (reframe if needed — e.g. minimal covering, tighter crop, implied rather than explicit).';
+  // Send as a user message (so it becomes part of the conversation turn)
+  ws.send(JSON.stringify({
+    type: 'conversation.item.create',
+    item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: prompt }] },
+  }));
+  ws.send(JSON.stringify({ type: 'response.create' }));
+  addBubble('system', '🎨 Asked agent to render this scene…');
+  resetIdleTimer();
+}
+
+// Helper to update a bubble's text without nuking its action buttons
+function setBubbleText(div, text) {
+  if (div._textEl) div._textEl.textContent = text;
+  else div.textContent = text;
+}
+
+async function rewindToBubble(div, fork) {
+  if (div.classList.contains('partial')) return;
+  const label = fork
+    ? 'Fork this point forward into a new saved conversation? Earlier messages will be dropped from the new convo.'
+    : 'Rewind to this point? Everything after will be cleared.';
+  if (!confirm(label)) return;
+
+  const allBubbles = Array.from(transcript.querySelectorAll('.bubble'));
+  const idx = allBubbles.indexOf(div);
+  if (idx < 0) return;
+  // Rewind keeps everything up to and including the clicked bubble.
+  // Fork keeps the clicked bubble and everything after it (tail slice).
+  const keep = fork ? allBubbles.slice(idx) : allBubbles.slice(0, idx + 1);
+  const messagesRaw = keep
+    .filter(b => !b.classList.contains('system') && !b.classList.contains('partial'))
+    .map(b => ({
+      role: b.classList.contains('user') ? 'user' : 'assistant',
+      content: (b._textEl ? b._textEl.textContent : b.textContent) || '',
+    }))
+    .filter(m => m.content && m.content !== '(listening...)' && m.content !== '(audio)');
+  const messages = dedupMessages(messagesRaw);
+
+  if (!messages.length) { alert('Nothing to ' + (fork ? 'fork' : 'rewind') + ' to'); return; }
+
+  // Close the current session — wait for async cleanup to fully finish
+  if (ws) {
+    await new Promise(resolve => {
+      const prevClose = ws.onclose;
+      ws.onclose = async (ev) => {
+        try { if (prevClose) await prevClose(ev); } catch {}
+        resolve();
+      };
+      try { ws.close(); } catch { resolve(); }
+    });
+  }
+
+  // If forking, save a new conversation and switch to its id so future Save updates the fork
+  if (fork) {
+    const firstUser = messages.find(m => m.role === 'user');
+    const title = (firstUser ? firstUser.content.slice(0, 40) : 'Forked chat') + ' (fork)';
+    const convo = {
+      id: 'voice_' + Date.now() + '_fork',
+      type: 'voice',
+      title,
+      messages,
+      voice: voiceSelect.value,
+      characterId: characterSelect.value || '',
+      systemPrompt: systemPrompt.value,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    try {
+      await fetch('/api/chat/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(convo),
+      });
+      currentVoiceConvoId = convo.id;
+      // Fork starts fresh for portrait — the new convo will need its own
+      portraitUrlForThisConvo = null;
+      agentSetTitleForThisConvo = false;
+    } catch (e) { alert('Fork save failed: ' + e.message); }
+  }
+
+  // Redraw the truncated transcript and start a new session seeded with these messages
+  transcript.innerHTML = '';
+  messages.forEach(m => addBubble(m.role, m.content));
+  pendingResumeMessages = messages;
+  await startSession();
+}
+
+async function startSession() {
+  startErr.textContent = '';
+  setStatus('connecting', 'Requesting mic access...');
+
+  // Check for secure context / mediaDevices support
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    startErr.innerHTML = 'Microphone requires a secure context (HTTPS or localhost).<br><br>' +
+      'You\'re on <b>' + location.protocol + '//' + location.host + '</b>. Browsers (especially on iOS/Android) block mic access over plain HTTP.<br><br>' +
+      'To test from your phone, the server needs HTTPS. Use <code>https://' + location.hostname + ':&lt;httpsPort&gt;/voice</code> (default 8443), or access from the same PC via <code>http://localhost:' + (location.port || '80') + '/voice</code>.';
+    setStatus('error', 'HTTPS required');
+    return;
+  }
+
+  // Require the xAI key up front (the Voice Agent can't run without it)
+  if (!(await requireApiKey('xaiApiKey', 'Voice Agent (xAI)', 'https://console.x.ai'))) {
+    startErr.textContent = 'An xAI API key is required for the Voice Agent. Add it and press Start again.';
+    setStatus('error', 'xAI key needed');
+    return;
+  }
+
+  // 1. Get mic permission
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (e) {
+    startErr.textContent = 'Microphone access denied: ' + (e.message || e.name || e);
+    setStatus('error', 'No microphone');
+    return;
+  }
+
+  setStatus('connecting', 'Requesting ephemeral token...');
+
+  // 2. Get ephemeral token from our server
+  let token;
+  try {
+    const r = await fetch('/api/voice/token', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || !data.value) {
+      startErr.textContent = 'Token error: ' + (data.error || 'unknown');
+      setStatus('error', 'Auth failed');
+      stopMic();
+      return;
+    }
+    token = data.value;
+  } catch (e) {
+    startErr.textContent = 'Failed to fetch token: ' + e.message;
+    setStatus('error', 'Network error');
+    stopMic();
+    return;
+  }
+
+  setStatus('connecting', 'Connecting to xAI realtime...');
+
+  // 3. Open WebSocket (subprotocol auth)
+  try {
+    ws = new WebSocket('wss://api.x.ai/v1/realtime', ['xai-client-secret.' + token]);
+  } catch (e) {
+    startErr.textContent = 'WebSocket error: ' + e.message;
+    setStatus('error', 'Connection failed');
+    stopMic();
+    return;
+  }
+
+  ws.onopen = async () => {
+    setStatus('live', 'Connected');
+    startScreen.style.display = 'none';
+    transcript.style.display = '';
+    controlBar.style.display = '';
+    // Scroll to the bottom now that the transcript is actually visible
+    requestAnimationFrame(() => { transcript.scrollTop = transcript.scrollHeight; });
+    topEndBtn.disabled = false;
+    sessionStorage.setItem('voice-session-active', String(Date.now()));
+    // Start cost tracking
+    try {
+      const r = await fetch('/api/cost/session-start', { method: 'POST' });
+      const data = await r.json();
+      costSessionId = data.id;
+    } catch {}
+    startCostTick();
+    // If the selected character has a pre-generated portrait, use it and skip the create tool
+    if (!portraitUrlForThisConvo) {
+      const selChar = characters.find(c => c.id === characterSelect.value);
+      if (selChar && selChar.portraitImageUrl) {
+        portraitUrlForThisConvo = selChar.portraitImageUrl;
+      }
+    }
+    updateSession();
+    // Seed prior messages if resuming a saved conversation
+    if (pendingResumeMessages && pendingResumeMessages.length) {
+      seededItemsExpected = 0;
+      for (const m of pendingResumeMessages) {
+        if (m.role !== 'user' && m.role !== 'assistant') continue;
+        ws.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: m.role,
+            content: [{ type: m.role === 'user' ? 'input_text' : 'text', text: m.content }],
+          },
+        }));
+        seededItemsExpected++;
+      }
+      pendingResumeMessages = null;
+    }
+    startMicCapture();
+    startIdleTimer();
+  };
+
+  ws.onmessage = (ev) => handleServerEvent(ev.data);
+
+  ws.onerror = (e) => {
+    console.error('WebSocket error', e);
+    setStatus('error', 'Connection error');
+  };
+
+  ws.onclose = async (ev) => {
+    setStatus('off', 'Disconnected' + (ev.reason ? ' — ' + ev.reason : ''));
+    await cleanup();
+  };
+}
+
+function updateSession() {
+  if (!ws || ws.readyState !== 1) return;
+  const includeTitleTool = !agentSetTitleForThisConvo;
+  const includePortraitTool = imagesEnabled && !portraitUrlForThisConvo;
+  const includeRenderSceneTool = imagesEnabled;
+  const baseInstructions = systemPrompt.value;
+
+  const toolHints = [];
+
+  // Response-length mode (set globally; each user message is also tagged with the current mode)
+  if (replyMode === 'short') {
+    toolHints.push('RESPONSE LENGTH MODE — SHORT: keep replies conversational and brief (1–3 sentences). Natural back-and-forth banter, no long scene descriptions, no paragraphs. Think texting or quick chat. If the user later prefixes a message with "[Be Descriptive]", switch to long descriptive mode for that reply only.');
+  } else {
+    toolHints.push('RESPONSE LENGTH MODE — DESCRIPTIVE: give rich, immersive, detailed replies (full paragraphs) with sensory descriptions, scene setting, pose, mood, and action. Like writing narrative fiction. If the user later prefixes a message with "[Be Short]", switch to brief conversational mode for that reply only.');
+  }
+
+  if (includeTitleTool) {
+    toolHints.push('Call set_conversation_title once, when the topic becomes clear, with a short descriptive title (max 6 words).');
+  }
+  const portraitSpec = portraitPrompt.value.trim();
+  // Always tell the agent what the character looks like when a description exists.
+  // This is crucial for render_scene consistency — the agent must include these traits in every image prompt.
+  if (portraitSpec) {
+    toolHints.push('Your character\'s visual appearance is defined as:\n"""\n' + portraitSpec + '\n"""\nThese appearance details are for IMAGE GENERATION ONLY — they go into render_scene prompts. Do NOT recite, narrate, or reference this description in your spoken/text replies to the user. The user already knows what you look like; repeating it in conversation is repetitive and breaks immersion. Only mention a physical detail verbally if the scene specifically calls for it (e.g. "my hair sticks to my cheek" when rain is involved) — and even then, keep it natural and sparing.\n\nIMPORTANT: Every time you call render_scene, you MUST include the character\'s identity-defining details (hair, face, body type, style/aesthetic) near the start of the `prompt` argument — the reference image alone is not enough, text drives most of the output.\n\nYou MAY (and should) adapt the description to fit the scene: omit clothing items that don\'t match (e.g. drop "leather jacket" if she\'s at the beach, drop "dress" if she\'s in bed), swap outfits if the scene implies different clothes, and add scene-specific details (wet hair if in water, smudged makeup if crying, etc.). Keep identity traits (hair color, body type, face, overall style) consistent — change only what the scene requires. Example prompt structure: "[identity traits], [scene-appropriate outfit / state], [setting, pose, lighting, mood]".');
+  }
+  if (includePortraitTool) {
+    if (portraitSpec) {
+      toolHints.push('As your first action, call create_character_portrait with the exact appearance description above (copied verbatim as the `prompt` argument). This establishes the visual reference so future render_scene calls stay consistent.');
+    } else {
+      toolHints.push('Call create_character_portrait ONCE at the start to create your visual character, so future scenes are consistent. Describe your own appearance in the prompt — prefer stylized/illustrated phrasing (anime, cel-shaded, painterly, 3D render) over photorealistic for more generative flexibility.');
+    }
+  } else {
+    toolHints.push('Your character portrait image is already generated and will be attached as the image-to-image reference automatically. Use render_scene for any scene that features your character, and remember to include the character\'s appearance details from above in the prompt text.');
+  }
+  toolHints.push('IMPORTANT: Grok Imagine has content policies. Do NOT generate images depicting minors, real identifiable people, or non-consensual content — these will be rejected. Keep image prompts within R-rated-movie boundaries; content within those bounds needs no reframing. If a scene would exceed them, reframe with minimal covering or a tighter crop rather than refusing. Only the image prompt needs reframing — conversation itself is unaffected.');
+
+  const instructions = baseInstructions + '\n\n' + toolHints.join('\n\n');
+
+  const tools = [];
+  if (includeTitleTool) {
+    tools.push({
+      type: 'function',
+      name: 'set_conversation_title',
+      description: 'Set a short descriptive title for this conversation. Call once when the topic becomes clear.',
+      parameters: {
+        type: 'object',
+        properties: { title: { type: 'string', description: 'A short descriptive title (max 6 words, no quotes, no trailing punctuation).' } },
+        required: ['title'],
+      },
+    });
+  }
+  if (includePortraitTool) {
+    tools.push({
+      type: 'function',
+      name: 'create_character_portrait',
+      description: 'Generate a visual portrait of your character. Call ONCE early in the conversation so scenes can reference it for visual consistency. Follow Grok Imagine content policies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'A detailed description of your character\'s appearance (face, hair, clothing, style). Avoid likenesses of real people or minors.' },
+          aspect_ratio: { type: 'string', enum: ['1:1','3:4','4:3','9:16','16:9'], description: 'Aspect ratio. Default 1:1 for a portrait.' },
+        },
+        required: ['prompt'],
+      },
+    });
+  }
+  if (includeRenderSceneTool) {
+    tools.push({
+      type: 'function',
+      name: 'render_scene',
+      description: 'Generate an image of the current scene, maintaining visual consistency with your character portrait (the portrait is used as an image-to-image reference). Requires create_character_portrait to be called first. Follow Grok Imagine content policies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Describe the scene clearly: setting, pose, lighting, mood. Your character is implicit (they are the subject).' },
+          aspect_ratio: { type: 'string', enum: ['1:1','3:4','4:3','9:16','16:9'], description: 'Aspect ratio. Default 3:4 or 16:9 for scenes.' },
+        },
+        required: ['prompt'],
+      },
+    });
+  } else {
+    // Tell the agent images are currently disabled
+    toolHints.push('NOTE: Image generation is disabled this session. Do NOT mention images, portraits, or rendering — respond only with voice/text.');
+  }
+
+  ws.send(JSON.stringify({
+    type: 'session.update',
+    session: {
+      voice: voiceSelect.value,
+      instructions,
+      turn_detection: turnDetectSelect.value === 'none' ? null : { type: 'server_vad' },
+      modalities: ['audio', 'text'],
+      output_modalities: ['audio', 'text'],
+      audio: {
+        input: { format: { type: 'audio/pcm', rate: SAMPLE_RATE }, transcription: { enabled: true } },
+        output: { format: { type: 'audio/pcm', rate: SAMPLE_RATE } },
+      },
+      tools,
+      tool_choice: 'auto',
+    },
+  }));
+}
+
+function startMicCapture() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+  micSource = audioCtx.createMediaStreamSource(micStream);
+  // ScriptProcessor (deprecated but well-supported). Buffer size 4096 at 24kHz ≈ 170ms.
+  micProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+  micSource.connect(micProcessor);
+  micProcessor.connect(audioCtx.destination);
+  micProcessor.onaudioprocess = (e) => {
+    if (!ws || ws.readyState !== 1 || micMuted) return;
+    const input = e.inputBuffer.getChannelData(0);
+    // Convert Float32 [-1,1] to Int16 PCM
+    const pcm16 = new Int16Array(input.length);
+    let sum = 0;
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      sum += Math.abs(s);
+    }
+    // Update VAD meter
+    updateMeter(sum / input.length);
+    // Encode to base64
+    const bytes = new Uint8Array(pcm16.buffer);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin);
+    ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
+  };
+}
+
+function updateMeter(rms) {
+  const bars = vadLevels.children;
+  const scaled = Math.min(1, rms * 10);
+  for (let i = 0; i < bars.length; i++) {
+    const target = Math.max(2, scaled * 24 * (0.4 + Math.random() * 0.6));
+    bars[i].style.height = target + 'px';
+  }
+}
+
+micBtn.addEventListener('click', () => {
+  micMuted = !micMuted;
+  micBtn.classList.toggle('recording', !micMuted);
+  micBtn.innerHTML = micMuted ? '&#128263;' : '&#127908;';
+  micHint.textContent = micMuted ? 'Mic muted. Tap to unmute.' : 'Speaking live. Tap to mute.';
+});
+
+// ── Send text message ──
+const textInput = document.getElementById('textInput');
+const sendTextBtn = document.getElementById('sendTextBtn');
+
+function modeTag() { return replyMode === 'short' ? '[Be Short]' : '[Be Descriptive]'; }
+
+function sendTextMessage() {
+  const text = textInput.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  resetIdleTimer();
+  addBubble('user', text);
+  // Prefix with the current mode tag so the agent obeys per-turn
+  const tagged = modeTag() + ' ' + text;
+  ws.send(JSON.stringify({
+    type: 'conversation.item.create',
+    item: {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: tagged }],
+    },
+  }));
+  ws.send(JSON.stringify({ type: 'response.create' }));
+  textInput.value = '';
+  scheduleAutoSave();
+}
+
+sendTextBtn.addEventListener('click', sendTextMessage);
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendTextMessage(); }
+});
+textInput.addEventListener('input', () => {
+  // Typing counts as activity — reset the idle timer
+  if (ws && ws.readyState === 1) resetIdleTimer();
+});
+
+// Playback helper: base64 PCM16 → AudioBuffer scheduled in order
+function playPcmChunk(base64) {
+  if (!playbackCtx) {
+    playbackCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    playbackQueueTime = playbackCtx.currentTime;
+  }
+  const bin = atob(base64);
+  const pcm16 = new Int16Array(bin.length / 2);
+  for (let i = 0; i < pcm16.length; i++) {
+    const lo = bin.charCodeAt(i * 2);
+    const hi = bin.charCodeAt(i * 2 + 1);
+    let val = (hi << 8) | lo;
+    if (val >= 0x8000) val -= 0x10000;
+    pcm16[i] = val;
+  }
+  const float32 = new Float32Array(pcm16.length);
+  for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 0x8000;
+  const buffer = playbackCtx.createBuffer(1, float32.length, SAMPLE_RATE);
+  buffer.copyToChannel(float32, 0);
+  const source = playbackCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(playbackCtx.destination);
+  const now = playbackCtx.currentTime;
+  const startAt = Math.max(playbackQueueTime, now);
+  source.start(startAt);
+  playbackQueueTime = startAt + buffer.duration;
+  micBtn.classList.add('speaking');
+  source.onended = () => {
+    if (playbackCtx.currentTime >= playbackQueueTime - 0.05) {
+      micBtn.classList.remove('speaking');
+    }
+  };
+}
+
+function addImageBubble(url, caption) {
+  const div = document.createElement('div');
+  div.className = 'bubble assistant image-bubble';
+
+  // Wrapper so the recycle button can be positioned over the image
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;display:inline-block';
+  const img = document.createElement('img');
+  img.src = url;
+  img.loading = 'lazy';
+  img.style.cssText = 'max-width:min(320px,100%);max-height:40vh;border-radius:12px;display:block';
+  img.onclick = () => { window.open(img.src, '_blank'); };
+  // Auto-scroll once the image has loaded (images load async; transcript.scrollHeight isn't known upfront)
+  img.onload = () => {
+    const atBottom = (transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight) < 200;
+    if (atBottom) transcript.scrollTop = transcript.scrollHeight;
+  };
+  wrap.appendChild(img);
+
+  // Recycle button (regenerate with same prompt)
+  const recycleBtn = document.createElement('button');
+  recycleBtn.className = 'img-recycle-btn';
+  recycleBtn.innerHTML = '&#8634;';
+  recycleBtn.title = 'Regenerate this image with the same prompt ($0.022)';
+  recycleBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!caption || !caption.trim()) { alert('No prompt saved for this image.'); return; }
+    regenerateImageBubble(div, img, caption);
+  };
+  wrap.appendChild(recycleBtn);
+  div.appendChild(wrap);
+
+  if (caption) {
+    const cap = document.createElement('div');
+    cap.style.cssText = 'font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word';
+    const full = String(caption);
+    cap.dataset.fullPrompt = full; // preserve full prompt even when collapsed
+    const collapsed = full.length > 120 ? full.slice(0, 120) + '…' : full;
+    cap.textContent = collapsed;
+    if (full.length > 120) {
+      cap.style.cursor = 'pointer';
+      cap.title = 'Tap to expand';
+      let expanded = false;
+      cap.onclick = (e) => {
+        e.stopPropagation();
+        expanded = !expanded;
+        cap.textContent = expanded ? full : collapsed;
+      };
+    }
+    div.appendChild(cap);
+  }
+  transcript.appendChild(div);
+  transcript.scrollTop = transcript.scrollHeight;
+  return div;
+}
+
+async function regenerateImageBubble(bubble, img, prompt) {
+  if (!imagesEnabled) { alert('Image generation is currently disabled. Toggle it on in the top bar.'); return; }
+  if (!currentVoiceConvoId) currentVoiceConvoId = 'voice_' + Date.now();
+  // Visual indicator — dim the image and show spinner-like text
+  const btn = bubble.querySelector('.img-recycle-btn');
+  const originalHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '&hellip;'; }
+  img.style.opacity = '.35';
+  try {
+    const r = await fetch('/api/voice/imagine/scene', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        convoId: currentVoiceConvoId,
+        portraitUrl: portraitUrlForThisConvo || null,
+        aspect_ratio: '3:4',
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.url) {
+      alert('Regenerate failed: ' + (data.error || 'unknown'));
+    } else {
+      img.src = data.url + '?t=' + Date.now();
+      scheduleAutoSave(200);
+    }
+  } catch (e) {
+    alert('Regenerate error: ' + e.message);
+  } finally {
+    img.style.opacity = '';
+    if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+  }
+}
+
+async function handleFunctionCall(evt) {
+  const name = evt.name;
+  const callId = evt.call_id;
+  let args = {};
+  try { args = JSON.parse(evt.arguments || '{}'); } catch {}
+
+  let output = { status: 'ok' };
+
+  if (name === 'set_conversation_title') {
+    const rawTitle = String(args.title || '').trim().replace(/^["']|["']$/g, '').slice(0, 80);
+    if (!rawTitle) {
+      output = { status: 'error', message: 'title was empty' };
+    } else {
+      // Save with this title immediately (and disable further auto-title generation by persisting it)
+      const messages = getTranscriptMessages();
+      const convo = {
+        id: currentVoiceConvoId || 'voice_' + Date.now(),
+        type: 'voice',
+        title: rawTitle,
+        messages,
+        voice: voiceSelect.value,
+        characterId: characterSelect.value || '',
+        systemPrompt: systemPrompt.value,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      if (currentVoiceConvoId) {
+        try {
+          const r = await fetch('/api/chat/conversations');
+          const all = await r.json();
+          const existing = all.find(c => c.id === currentVoiceConvoId);
+          if (existing) convo.createdAt = existing.createdAt;
+        } catch {}
+      }
+      currentVoiceConvoId = convo.id;
+      try {
+        await fetch('/api/chat/conversations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(convo),
+        });
+        addBubble('system', '💬 Title set: "' + rawTitle + '"');
+        setSaveStatus('saved', 'Saved');
+        setTimeout(() => { if (autoSaveStatus.classList.contains('saved')) setSaveStatus('', ''); }, 2000);
+        agentSetTitleForThisConvo = true;
+        // Push an updated session so Grok drops the tool from its context
+        updateSession();
+        output = { status: 'ok', saved_title: rawTitle };
+      } catch (e) {
+        output = { status: 'error', message: e.message };
+      }
+    }
+  } else if (name === 'create_character_portrait') {
+    const prompt = String(args.prompt || '').trim();
+    if (!prompt) {
+      output = { status: 'error', message: 'prompt was empty' };
+    } else if (!currentVoiceConvoId) {
+      // Ensure we have a convo id so the portrait is scoped correctly
+      currentVoiceConvoId = 'voice_' + Date.now();
+    }
+    if (prompt && !output.status) {
+      try {
+        const loading = addBubble('system', '🎨 Generating character portrait…');
+        const r = await fetch('/api/voice/imagine/portrait', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, convoId: currentVoiceConvoId, aspect_ratio: args.aspect_ratio || '1:1' }),
+        });
+        const data = await r.json();
+        loading.remove();
+        if (!r.ok || !data.url) {
+          output = { status: 'error', message: data.error || 'portrait generation failed' };
+          addBubble('system', '❌ Portrait failed: ' + (data.error || 'unknown'));
+        } else {
+          portraitUrlForThisConvo = data.url;
+          addImageBubble(data.url, 'Character portrait');
+          scheduleAutoSave(200);
+          updateSession(); // drop the portrait tool now that it's set
+          output = { status: 'ok', url: data.url };
+        }
+      } catch (e) { output = { status: 'error', message: e.message }; }
+    }
+    if (!output.status) output = { status: 'ok' };
+  } else if (name === 'render_scene') {
+    const prompt = String(args.prompt || '').trim();
+    if (!prompt) {
+      output = { status: 'error', message: 'prompt was empty' };
+    } else if (!portraitUrlForThisConvo) {
+      output = { status: 'error', message: 'No character portrait yet. Call create_character_portrait first.' };
+      addBubble('system', '⚠️ Tried to render scene without a portrait. Ask agent to create portrait first.');
+    } else {
+      // Ensure we have a convo id (first render before auto-save has created one)
+      if (!currentVoiceConvoId) currentVoiceConvoId = 'voice_' + Date.now();
+      try {
+        const loading = addBubble('system', '🎨 Rendering scene…');
+        const r = await fetch('/api/voice/imagine/scene', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, convoId: currentVoiceConvoId, portraitUrl: portraitUrlForThisConvo || null, aspect_ratio: args.aspect_ratio || '3:4' }),
+        });
+        const data = await r.json();
+        loading.remove();
+        if (!r.ok || !data.url) {
+          output = { status: 'error', message: data.error || 'scene render failed' };
+          addBubble('system', '❌ Scene render failed' + (data.retried ? ' (even after retry)' : '') + ': ' + (data.error || 'unknown'));
+        } else {
+          if (data.retried) {
+            const why = data.retryKind === 'network'
+              ? '⚠️ First attempt hit a network error — retried successfully.'
+              : '⚠️ First attempt was moderated — reframed and retried.';
+            addBubble('system', why);
+          }
+          addImageBubble(data.url, prompt);
+          scheduleAutoSave(200);
+          output = { status: 'ok', url: data.url };
+        }
+      } catch (e) { output = { status: 'error', message: e.message }; }
+    }
+  } else {
+    output = { status: 'error', message: 'unknown tool: ' + name };
+  }
+
+  // Send tool output back to Grok. Do NOT call response.create — the model is
+  // already producing its current response; forcing a new one causes duplicate/unsolicited replies.
+  if (ws && ws.readyState === 1 && callId) {
+    ws.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(output) },
+    }));
+  }
+}
+
+function handleServerEvent(raw) {
+  let evt;
+  try { evt = JSON.parse(raw); } catch { return; }
+  switch (evt.type) {
+    case 'session.created':
+    case 'session.updated':
+      break;
+    case 'input_audio_buffer.speech_started':
+      resetIdleTimer();
+      if (!userPartialEl) userPartialEl = addBubble('user', '(listening...)', true);
+      break;
+    case 'input_audio_buffer.speech_stopped':
+      // keep partial until transcript comes in
+      break;
+    case 'conversation.item.input_audio_transcription.completed': {
+      const text = evt.transcript || '';
+      if (userPartialEl) { userPartialEl.classList.remove('partial'); setBubbleText(userPartialEl, text || '(audio)'); userPartialEl = null; }
+      else addBubble('user', text);
+      scheduleAutoSave();
+      break;
+    }
+    case 'response.output_audio.delta':
+    case 'response.audio.delta':
+      if (evt.delta) playPcmChunk(evt.delta);
+      break;
+    case 'response.text.delta':
+    case 'response.output_text.delta':
+    case 'response.audio_transcript.delta':
+    case 'response.output_audio_transcript.delta': {
+      if (!assistantPartialEl) assistantPartialEl = addBubble('assistant', '', true);
+      setBubbleText(assistantPartialEl, (assistantPartialEl._textEl ? assistantPartialEl._textEl.textContent : '') + (evt.delta || ''));
+      transcript.scrollTop = transcript.scrollHeight;
+      break;
+    }
+    case 'response.text.done':
+    case 'response.output_text.done':
+    case 'response.audio_transcript.done':
+    case 'response.output_audio_transcript.done': {
+      const finalText = evt.text || evt.transcript || '';
+      if (finalText) {
+        if (!assistantPartialEl) assistantPartialEl = addBubble('assistant', finalText);
+        else setBubbleText(assistantPartialEl, finalText);
+      }
+      if (assistantPartialEl) assistantPartialEl.classList.remove('partial');
+      assistantPartialEl = null;
+      scheduleAutoSave();
+      break;
+    }
+    case 'response.output_item.done':
+    case 'conversation.item.added':
+    case 'conversation.item.created': {
+      // These events also fire as echoes when we seed prior messages during fork/resume.
+      // Skip echoes of seeded items to avoid duplicate bubbles.
+      if (seededItemsExpected > 0) { seededItemsExpected--; break; }
+      // Only create bubbles for assistant responses (not user echoes), and only when
+      // the response events haven't already handled it.
+      const item = evt.item || {};
+      if (item.role !== 'assistant') break;
+      const content = Array.isArray(item.content) ? item.content : [];
+      const textPart = content.find(p => p && (p.type === 'text' || p.type === 'audio' || p.type === 'output_audio' || p.type === 'output_text'));
+      const finalText = textPart?.transcript || textPart?.text || '';
+      if (finalText) {
+        if (!assistantPartialEl) assistantPartialEl = addBubble('assistant', finalText);
+        else setBubbleText(assistantPartialEl, finalText);
+        assistantPartialEl.classList.remove('partial');
+        assistantPartialEl = null;
+      }
+      break;
+    }
+    case 'response.function_call_arguments.done': {
+      handleFunctionCall(evt);
+      break;
+    }
+    case 'response.done':
+      if (assistantPartialEl) { assistantPartialEl.classList.remove('partial'); assistantPartialEl = null; }
+      scheduleAutoSave();
+      break;
+    case 'error':
+      const msg = evt.error?.message || evt.error || 'Unknown error';
+      console.error('xAI error', evt);
+      addBubble('system', 'Error: ' + msg);
+      break;
+    default:
+      console.log('[voice] unhandled event:', evt.type, evt);
+      break;
+  }
+}
+
+function stopMic() {
+  if (micProcessor) { try { micProcessor.disconnect(); } catch {} micProcessor = null; }
+  if (micSource) { try { micSource.disconnect(); } catch {} micSource = null; }
+  if (audioCtx) { try { audioCtx.close(); } catch {} audioCtx = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
+
+async function cleanup() {
+  stopIdleTimer();
+  stopMic();
+  stopCostTick();
+  // Finalize cost on server and show session total
+  if (costSessionId) {
+    const id = costSessionId;
+    costSessionId = null;
+    fetch('/api/cost/session-end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).then(r => r.json()).then(data => {
+      if (data && typeof data.cost === 'number') {
+        const mins = (data.durationMs || 0) / 60000;
+        costDisplay.textContent = 'Last: ' + formatCost(data.cost) + ' (' + mins.toFixed(1) + ' min)';
+        // Refresh totals if shown on start screen
+        loadTotalCost();
+      }
+    }).catch(() => {});
+  } else {
+    costDisplay.textContent = '';
+  }
+  if (playbackCtx) { try { playbackCtx.close(); } catch {} playbackCtx = null; }
+  ws = null;
+  userPartialEl = null;
+  assistantPartialEl = null;
+  topEndBtn.disabled = true;
+  setSaveStatus('', '');
+  if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+  // Final save flush — await so currentVoiceConvoId isn't nulled mid-save
+  if (getTranscriptMessages().length) {
+    try { await saveConversation(true); } catch {}
+  }
+  currentVoiceConvoId = null;
+  pendingResumeMessages = null;
+  seededItemsExpected = 0;
+  agentSetTitleForThisConvo = false;
+  portraitUrlForThisConvo = null;
+  sessionStorage.removeItem('voice-session-active');
+  // Restore start screen
+  startScreen.style.display = '';
+  transcript.style.display = 'none';
+  controlBar.style.display = 'none';
+  transcript.innerHTML = '';
+  micMuted = false;
+  micBtn.classList.remove('recording', 'speaking');
+  micBtn.innerHTML = '&#127908;';
+  // Refresh the saved list (in case save happened during session)
+  loadSavedConvos();
+}
+
+function endSession() {
+  closeSettings();
+  if (ws) { try { ws.close(); } catch {} }
+  cleanup();
+  setStatus('off', 'Session ended');
+}
+
+// ── Voice conversation save/load ──
+const autoSaveStatus = document.getElementById('autoSaveStatus');
+const savedConvos = document.getElementById('savedConvos');
+let currentVoiceConvoId = null;
+let pendingResumeMessages = null; // set when resuming; seeded after session.update
+let seededItemsExpected = 0; // echoes of seeded items to skip so we don't duplicate bubbles
+let agentSetTitleForThisConvo = false; // true once the tool has been called or resuming a titled convo
+let portraitUrlForThisConvo = null; // URL to the saved character portrait (once create_character_portrait fires)
+
+// ── Reply mode toggle (Short / Descriptive) ──
+const REPLY_MODE_KEY = 'voice-reply-mode';
+let replyMode = localStorage.getItem(REPLY_MODE_KEY) || 'short'; // 'short' | 'descriptive'
+const replyModeBtn = document.getElementById('replyModeBtn');
+function applyReplyMode() {
+  replyModeBtn.classList.remove('short', 'descriptive');
+  replyModeBtn.classList.add(replyMode);
+  replyModeBtn.textContent = replyMode === 'short' ? 'Short' : 'Descriptive';
+  replyModeBtn.title = replyMode === 'short'
+    ? 'Short replies (tap to switch to long descriptive replies)'
+    : 'Long descriptive replies (tap to switch to short conversational replies)';
+}
+applyReplyMode();
+replyModeBtn.addEventListener('click', () => {
+  replyMode = replyMode === 'short' ? 'descriptive' : 'short';
+  localStorage.setItem(REPLY_MODE_KEY, replyMode);
+  applyReplyMode();
+  if (ws && ws.readyState === 1) updateSession();
+});
+
+// ── Images on/off toggle ──
+const IMAGES_KEY = 'voice-images-enabled';
+let imagesEnabled = (function() {
+  const stored = localStorage.getItem(IMAGES_KEY);
+  return stored === null ? true : stored === 'true';
+})();
+const imgToggleBtn = document.getElementById('imgToggleBtn');
+function applyImagesState() {
+  if (imagesEnabled) {
+    imgToggleBtn.classList.remove('off');
+    imgToggleBtn.classList.add('on');
+    imgToggleBtn.innerHTML = '&#127912; On';
+    document.body.classList.remove('images-off');
+  } else {
+    imgToggleBtn.classList.remove('on');
+    imgToggleBtn.classList.add('off');
+    imgToggleBtn.innerHTML = '&#127912; Off';
+    document.body.classList.add('images-off');
+  }
+}
+applyImagesState();
+imgToggleBtn.addEventListener('click', () => {
+  imagesEnabled = !imagesEnabled;
+  localStorage.setItem(IMAGES_KEY, String(imagesEnabled));
+  applyImagesState();
+  if (ws && ws.readyState === 1) updateSession(); // re-register tools
+});
+
+// Debounced auto-save
+let autoSaveTimer = null;
+function scheduleAutoSave(delay) {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    saveConversation(true);
+  }, typeof delay === 'number' ? delay : 1500);
+}
+function setSaveStatus(cls, text) {
+  autoSaveStatus.className = 'auto-save-status ' + (cls || '');
+  autoSaveStatus.textContent = text || '';
+}
+
+function getTranscriptMessages() {
+  const messages = [];
+  transcript.querySelectorAll('.bubble').forEach(b => {
+    if (b.classList.contains('partial')) return;
+    if (b.classList.contains('system')) return;
+    const role = b.classList.contains('user') ? 'user' : 'assistant';
+    // Image bubbles: save as {role:'assistant', imageUrl, content: prompt}
+    if (b.classList.contains('image-bubble')) {
+      const img = b.querySelector('img');
+      if (img && img.src) {
+        // Strip cache-buster and origin so the path is resumable across devices
+        const url = img.src.split('?')[0].replace(location.origin, '');
+        const capEl = b.querySelector('[data-full-prompt]');
+        const promptText = capEl ? capEl.dataset.fullPrompt : '';
+        messages.push({ role: 'assistant', imageUrl: url, content: promptText });
+      }
+      return;
+    }
+    const content = (b._textEl ? b._textEl.textContent : b.textContent) || '';
+    if (content && content !== '(listening...)' && content !== '(audio)') {
+      messages.push({ role, content });
+    }
+  });
+  return dedupMessages(messages);
+}
+
+// Remove consecutive duplicates (role + content identical to previous message).
+// Real humans/LLMs don't repeat themselves exactly twice in a row.
+function dedupMessages(msgs) {
+  const out = [];
+  for (const m of msgs) {
+    // Image messages are unique per URL — never dedup against text
+    if (m.imageUrl) { out.push(m); continue; }
+    const prev = out[out.length - 1];
+    if (prev && !prev.imageUrl && prev.role === m.role && prev.content === m.content) continue;
+    out.push(m);
+  }
+  return out;
+}
+
+async function saveConversation(silent) {
+  const messages = getTranscriptMessages();
+  if (!messages.length) return;
+  setSaveStatus('saving', 'Saving…');
+
+  // Snapshot the id now — cleanup() may null it out while we await below
+  const snapshotId = currentVoiceConvoId;
+
+  let title = 'Voice chat — ' + new Date().toLocaleString();
+  const firstUser = messages.find(m => m.role === 'user');
+  if (firstUser) {
+    title = firstUser.content.slice(0, 50) + (firstUser.content.length > 50 ? '…' : '');
+  }
+
+  const convo = {
+    id: snapshotId || 'voice_' + Date.now(),
+    type: 'voice',
+    title,
+    messages,
+    voice: voiceSelect.value,
+    characterId: characterSelect.value || '',
+    systemPrompt: systemPrompt.value,
+    portraitUrl: portraitUrlForThisConvo || null,
+    updatedAt: Date.now(),
+  };
+  // Preserve createdAt and existing title (e.g., set by agent tool call or manual rename)
+  if (snapshotId) {
+    try {
+      const r = await fetch('/api/chat/conversations');
+      const all = await r.json();
+      const existing = all.find(c => c.id === snapshotId);
+      if (existing) {
+        convo.createdAt = existing.createdAt;
+        if (existing.title) convo.title = existing.title;
+      }
+    } catch {}
+  }
+  if (!convo.createdAt) convo.createdAt = Date.now();
+  // Keep currentVoiceConvoId in sync. Race with cleanup is fine — cleanup awaits saves.
+  currentVoiceConvoId = convo.id;
+
+  try {
+    await fetch('/api/chat/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(convo),
+    });
+    setSaveStatus('saved', 'Saved');
+    setTimeout(() => { if (autoSaveStatus.classList.contains('saved')) setSaveStatus('', ''); }, 2000);
+  } catch (e) {
+    setSaveStatus('', '');
+    if (!silent) alert('Save failed: ' + e.message);
+  }
+}
+
+async function loadSavedConvos() {
+  try {
+    const r = await fetch('/api/chat/conversations');
+    const all = await r.json();
+    const voiceConvos = all.filter(c => c.type === 'voice').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (!voiceConvos.length) { savedConvos.innerHTML = ''; return; }
+    const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const ago = (ts) => {
+      const s = Math.floor((Date.now() - (ts || 0)) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    };
+    savedConvos.innerHTML = '<div class="saved-convos-title">Saved Conversations</div>' +
+      voiceConvos.map(c => `
+        <div class="convo-card" data-id="${c.id}">
+          <div class="convo-card-info">
+            <div class="convo-card-title">${esc(c.title)}</div>
+            <div class="convo-card-meta">${(c.messages || []).length} messages &middot; ${ago(c.updatedAt || c.createdAt)}</div>
+          </div>
+          <button class="convo-card-del" data-edit-id="${c.id}" title="Rename">&#9998;</button>
+          <button class="convo-card-del" data-del-id="${c.id}" title="Delete">&#10005;</button>
+        </div>
+      `).join('');
+    // Wire clicks
+    savedConvos.querySelectorAll('.convo-card').forEach(el => {
+      el.onclick = (e) => {
+        if (e.target.closest('.convo-card-del')) return;
+        resumeConversation(el.dataset.id);
+      };
+    });
+    savedConvos.querySelectorAll('[data-del-id]').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.delId;
+        if (!confirm('Delete this conversation?')) return;
+        try {
+          await fetch('/api/chat/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+          loadSavedConvos();
+        } catch (err) { alert('Delete failed: ' + err.message); }
+      };
+    });
+    savedConvos.querySelectorAll('[data-edit-id]').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.editId;
+        const convo = voiceConvos.find(c => c.id === id);
+        if (!convo) return;
+        const newTitle = prompt('Rename conversation:', convo.title);
+        if (!newTitle || !newTitle.trim() || newTitle === convo.title) return;
+        try {
+          // POST with same id updates existing
+          await fetch('/api/chat/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...convo, title: newTitle.trim() }),
+          });
+          loadSavedConvos();
+        } catch (err) { alert('Rename failed: ' + err.message); }
+      };
+    });
+  } catch {}
+}
+
+async function resumeConversation(id) {
+  try {
+    const r = await fetch('/api/chat/conversations');
+    const all = await r.json();
+    const convo = all.find(c => c.id === id);
+    if (!convo) return;
+    currentVoiceConvoId = convo.id;
+    // Restore settings
+    if (convo.voice) voiceSelect.value = convo.voice;
+    if (convo.systemPrompt) systemPrompt.value = convo.systemPrompt;
+    if (convo.characterId) characterSelect.value = convo.characterId;
+    saveSettings();
+    // Clean any adjacent duplicates from older polluted saves
+    const cleanMessages = dedupMessages((convo.messages || []).filter(m => m.role === 'user' || m.role === 'assistant'));
+    // Render prior transcript
+    transcript.innerHTML = '';
+    cleanMessages.forEach(m => {
+      if (m.imageUrl) addImageBubble(m.imageUrl, m.content || '');
+      else addBubble(m.role, m.content);
+    });
+    pendingResumeMessages = cleanMessages;
+    // If convo already has a title, don't re-register the title tool
+    agentSetTitleForThisConvo = !!(convo.title && convo.title.trim());
+    // Restore portrait if one exists for this convo
+    portraitUrlForThisConvo = convo.portraitUrl || null;
+    if (portraitUrlForThisConvo) {
+      addImageBubble(portraitUrlForThisConvo, 'Character portrait');
+    }
+    // Start the session — ws.onopen will seed the context
+    await startSession();
+  } catch (e) { alert('Resume failed: ' + e.message); }
+}
+
+// Load saved conversations on page load
+loadSavedConvos();
+
+async function loadTotalCost() {
+  try {
+    const r = await fetch('/api/cost/summary');
+    const data = await r.json();
+    const el = document.getElementById('totalCost');
+    if (!el) return;
+    el.textContent = 'Total spent: $' + data.total.toFixed(2) +
+      ' (voice ' + data.voiceMinutes.toFixed(1) + ' min = $' + (data.voice||0).toFixed(2) +
+      ', TTS ' + data.ttsChars.toLocaleString() + ' chars = $' + (data.tts||0).toFixed(2) +
+      ', Imagine ' + (data.imagineCount||0) + ' imgs = $' + (data.imagine||0).toFixed(2) + ')';
+  } catch {}
+}
+loadTotalCost();
+</script>
+</body>
+</html>

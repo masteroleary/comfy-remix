@@ -1,0 +1,35 @@
+# Media content (large files, user-specific)
+Media/
+
+# Config with API keys
+config.json
+claude-conversations.json
+
+# OS files
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# Node
+node_modules/
+certs/cert.pem
+certs/key.pem
+characters.json
+chat-conversations copy.json
+chat-conversations.backup.json
+chat-conversations.json
+costs.json
+
+# Generated character portraits and scene renders
+character_images/
+voices/
+
+# Local setup/maintenance scripts and run logs (machine-specific)
+scripts/
+_fw_scratch/
+app-workflows.json
+app-replacements.json
+app-prompt-index.json
+debug-results.json
+.claude/
+Workflows/

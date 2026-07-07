@@ -1,0 +1,629 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Jobs</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;padding:0 0 calc(20px + env(safe-area-inset-bottom,0px)) 0}
+.top-bar{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;background:rgba(13,13,13,.92);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid #38383a;position:sticky;top:0;z-index:50}
+.btn{background:#2c2c2e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:active{opacity:.6}
+.jobs-list{padding:12px}
+.job-card{background:#1c1c1e;border:1px solid #38383a;border-radius:10px;margin-bottom:10px;overflow:hidden}
+.job-hdr{display:flex;align-items:flex-start;gap:10px;padding:10px 12px}
+.job-src-thumb{width:56px;height:56px;border-radius:6px;overflow:hidden;flex-shrink:0;background:#2c2c2e}
+.job-src-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.job-info{flex:1;min-width:0}
+.job-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.job-title .st{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.job-title .st.running{background:#ffd60a;animation:pulse 1.5s infinite}
+.job-title .st.complete{background:#30d158}
+.job-title .st.error{background:#ff453a}
+.job-meta{font-size:11px;color:#8e8e93;margin-top:2px}
+.job-prompt{font-size:12px;color:#636366;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job-progress{margin-top:4px}
+.job-progress-bar{height:4px;background:#2c2c2e;border-radius:2px;overflow:hidden}
+.job-progress-fill{height:100%;background:#0a84ff;border-radius:2px;transition:width .3s}
+.job-progress-text{font-size:10px;color:#8e8e93;margin-top:2px}
+.job-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-self:center}
+.job-act{background:none;border:none;font-size:18px;cursor:pointer;padding:2px;opacity:.6;-webkit-tap-highlight-color:transparent}
+.job-act:hover{opacity:1}
+.job-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:4px;padding:0 8px 8px}
+.job-res-thumb{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;cursor:pointer;background:#2c2c2e}
+.job-res-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.job-res-thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.8;pointer-events:none}
+.empty{text-align:center;padding:60px 20px;color:#636366;font-size:15px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style></head><body>
+<div class="top-bar">
+  <button class="btn" onclick="location.href='/'" style="font-size:18px;padding:8px 12px">⌂</button>
+  <h1 style="font-size:16px;font-weight:600;flex:1">Jobs</h1>
+  <button class="btn" id="clearBtn" style="background:#3a1e1e;color:#ff453a;border-color:#ff453a">Clear</button>
+</div>
+<div class="jobs-list" id="jobsList"><div class="empty">Loading...</div></div>
+
+<script>
+const COMFY_WS = 'ws://' + location.host + '/comfy-ws?clientId=jobs-' + Date.now();
+
+const JobDB = {
+  _db: null,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('comfyJobs', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('jobs')) {
+          const store = db.createObjectStore('jobs', { keyPath: 'id' });
+          store.createIndex('startTime', 'startTime');
+        }
+      };
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async getAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readonly');
+      const req = tx.objectStore('jobs').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async put(job) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readwrite');
+      tx.objectStore('jobs').put(job);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async del(id) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readwrite');
+      tx.objectStore('jobs').delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async clear() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readwrite');
+      tx.objectStore('jobs').clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+};
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+function duration(start, end) {
+  if (!end) return '...';
+  const s = Math.floor((end - start) / 1000);
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+}
+function isVideoFile(name) { return /\.(mp4|webm|mov|mkv)$/i.test(name); }
+
+// Track live progress per prompt_id AND per job_id
+const liveProgress = {};        // keyed by job.id
+const promptProgress = {};      // keyed by prompt_id — catches progress before we know the job
+let allJobs = [];
+let lastJobsHash = '';
+
+function jobsHash(jobs) {
+  return jobs.map(j => j.id + ':' + j.status + ':' + (j.promptIds || []).length + ':' + (j.results || []).length).join('|');
+}
+
+async function checkRunningJobs(jobs) {
+  const running = jobs.filter(j => j.status === 'running');
+  for (const job of running) {
+    // If job has been running for over 2 hours with no progress, mark as lost
+    if (Date.now() - job.startTime > 7200000) {
+      job.status = 'error';
+      job.endTime = job.startTime;
+      await JobDB.put(job);
+      continue;
+    }
+    // If job has no prompt_ids yet (never got queued), check if it's stale (>5 min)
+    if ((!job.promptIds || job.promptIds.length === 0) && Date.now() - job.startTime > 300000) {
+      job.status = 'error';
+      job.endTime = job.startTime;
+      await JobDB.put(job);
+      continue;
+    }
+    let completedCount = 0;
+    const outputFiles = [];
+    for (const pid of job.promptIds || []) {
+      try {
+        const r = await fetch('/api/comfy/api/history/' + pid);
+        if (!r.ok) continue;
+        const data = await r.json();
+        const entry = data[pid];
+        if (!entry) continue;
+        if (entry.status && entry.status.status_str === 'error') {
+          job.status = 'error';
+          job.endTime = Date.now();
+          await JobDB.put(job);
+          break;
+        }
+        if (entry.status && entry.status.completed) {
+          completedCount++;
+          // Extract output files from history
+          const outputs = entry.outputs || {};
+          for (const nodeOut of Object.values(outputs)) {
+            for (const [key, items] of Object.entries(nodeOut)) {
+              if (!Array.isArray(items)) continue;
+              for (const item of items) {
+                if (item.filename) {
+                  const subfolder = item.subfolder ? item.subfolder + '/' : '';
+                  outputFiles.push({ name: item.filename, subfolder });
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+    job.runsCompleted = completedCount;
+    if (completedCount >= job.runs) {
+      // Use recent-outputs to get full paths, but filter to only files from this job's prompts
+      if (outputFiles.length > 0) {
+        const expectedNames = new Set(outputFiles.map(f => f.name));
+        const resp = await fetch('/api/recent-outputs?since=' + job.startTime);
+        if (resp.ok) {
+          const files = await resp.json();
+          job.results = files.filter(f => expectedNames.has(f.name))
+            .map(f => ({ path: f.path, name: f.name, thumbPath: f.thumbPath }));
+        }
+      }
+      job.status = 'complete';
+      job.endTime = Date.now();
+      await JobDB.put(job);
+    }
+  }
+}
+
+function renderJobCard(job) {
+  const card = document.createElement('div');
+  card.className = 'job-card';
+  card.id = 'job-' + job.id;
+
+  // Source thumbnail
+  const thumbHtml = job.sourceImageUrl
+    ? '<div class="job-src-thumb"><img src="' + esc(job.sourceImageUrl) + '"></div>'
+    : '<div class="job-src-thumb" style="display:flex;align-items:center;justify-content:center;font-size:24px">📄</div>';
+
+  // Progress bar for running jobs
+  let progressHtml = '';
+  if (job.status === 'running') {
+    const prog = liveProgress[job.id] || {};
+    const pct = prog.pct || 0;
+    const nodeText = prog.node || 'Waiting...';
+    progressHtml = '<div class="job-progress">'
+      + '<div class="job-progress-bar"><div class="job-progress-fill" style="width:' + pct + '%"></div></div>'
+      + '<div class="job-progress-text">' + pct + '% — ' + esc(nodeText) + '</div>'
+      + '</div>';
+  }
+
+  // Results
+  let resultsHtml = '';
+  if (job.results && job.results.length) {
+    resultsHtml = '<div class="job-results">';
+    for (const f of job.results) {
+      const isVid = isVideoFile(f.name);
+      const thumbSrc = f.thumbPath ? '/file/' + encodeURIComponent(f.thumbPath) : (isVid ? '' : '/file/' + encodeURIComponent(f.path));
+      const params = new URLSearchParams({ path: f.path, name: f.name, type: isVid ? 'video' : 'image' });
+      const href = '/inspect?' + params.toString();
+      if (thumbSrc) {
+        resultsHtml += '<a href="' + href + '" class="job-res-thumb"><img src="' + thumbSrc + '" loading="lazy">' + (isVid ? '<div class="play">▶</div>' : '') + '</a>';
+      } else {
+        resultsHtml += '<a href="' + href + '" class="job-res-thumb" style="display:flex;align-items:center;justify-content:center;font-size:22px">🎬</a>';
+      }
+    }
+    resultsHtml += '</div>';
+  }
+
+  // Re-run button
+  const rerunHtml = job.workflowFile && job.workflowFile !== 'inherit'
+    ? '<button class="job-act" title="Re-run">♻</button>'
+    : '';
+
+  card.innerHTML = '<div class="job-hdr">'
+    + thumbHtml
+    + '<div class="job-info">'
+    + '<div class="job-title"><span class="st ' + job.status + '"></span>' + esc(job.workflow) + ' <span style="font-weight:400;color:#8e8e93">' + job.runs + 'x</span></div>'
+    + '<div class="job-meta">' + esc(job.sourceFile || '') + ' — ' + duration(job.startTime, job.endTime) + ' — ' + timeAgo(job.startTime) + '</div>'
+    + (job.prompt ? '<div class="job-prompt">' + esc(job.prompt) + '</div>' : '')
+    + progressHtml
+    + '</div>'
+    + '<div class="job-actions">' + rerunHtml + '</div>'
+    + '</div>'
+    + resultsHtml;
+
+  // Wire re-run button
+  const rerunBtn = card.querySelector('.job-act[title="Re-run"]');
+  if (rerunBtn) {
+    rerunBtn.onclick = (e) => { e.stopPropagation(); rerunJob(job); };
+  }
+
+  return card;
+}
+
+async function rerunJob(job) {
+  if (!job.workflowFile || job.workflowFile === 'inherit') {
+    alert('Cannot re-run inherited workflow jobs');
+    return;
+  }
+
+  const runCount = job.runs || 1;
+  const startTime = Date.now();
+
+  // Upload source image to ComfyUI
+  let uploadedImageName = null;
+  if (job.sourcePath) {
+    const ext = (job.sourceFile || '').split('.').pop().toLowerCase();
+    const isImage = ['png','jpg','jpeg','webp','bmp','gif'].includes(ext);
+    if (isImage) {
+      try {
+        const imgResp = await fetch('/file/' + encodeURIComponent(job.sourcePath));
+        if (imgResp.ok) {
+          const blob = await imgResp.blob();
+          const uploadName = 'app_input_' + Date.now() + '.' + ext;
+          const formData = new FormData();
+          formData.append('image', blob, uploadName);
+          formData.append('overwrite', 'true');
+          const upResp = await fetch('/api/comfy/upload/image', { method: 'POST', body: formData });
+          if (upResp.ok) {
+            const upResult = await upResp.json();
+            uploadedImageName = upResult.name || uploadName;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Create new job record
+  const newJobId = 'job-' + startTime + '-' + Math.random().toString(36).slice(2, 6);
+  const newJob = {
+    id: newJobId,
+    workflow: job.workflow,
+    workflowFile: job.workflowFile,
+    prompt: job.prompt,
+    fullPrompt: job.fullPrompt,
+    loras: job.loras,
+    frames: job.frames,
+    sourceFile: job.sourceFile,
+    sourcePath: job.sourcePath,
+    sourceImageUrl: job.sourceImageUrl,
+    status: 'running',
+    runs: runCount,
+    runsCompleted: 0,
+    startTime: startTime,
+    endTime: null,
+    promptIds: [],
+    results: [],
+  };
+  await JobDB.put(newJob);
+
+  // Queue each run
+  for (let run = 0; run < runCount; run++) {
+    // Build overrides
+    const overrides = {};
+    if (job.fullPrompt) overrides.prompt = job.fullPrompt;
+    if (job.loras) overrides.loras = job.loras;
+    if (job.frames) overrides.frames = parseInt(job.frames);
+
+    // Get workflow prompt from server
+    let wfPrompt;
+    try {
+      const resp = await fetch('/api/workflow-prompt?name=' + encodeURIComponent(job.workflowFile), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(overrides)
+      });
+      const wfData = await resp.json();
+      if (wfData.error) throw new Error(wfData.error);
+      wfPrompt = wfData.prompt || wfData; // {prompt, workflow} shape
+      window.rerunWorkflowGraph = wfData.workflow || null;
+    } catch (e) {
+      newJob.status = 'error';
+      newJob.endTime = Date.now();
+      await JobDB.put(newJob);
+      alert('Failed to load workflow: ' + e.message);
+      refreshFromDB();
+      return;
+    }
+
+    // Set MAIN IMAGE
+    if (uploadedImageName) {
+      for (const [id, node] of Object.entries(wfPrompt)) {
+        const title = (node._meta && node._meta.title || '').toUpperCase();
+        if (title.includes('MAIN IMAGE') && node.inputs) {
+          node.inputs.image = uploadedImageName;
+        }
+      }
+    }
+
+    // Randomize seeds
+    for (const [id, node] of Object.entries(wfPrompt)) {
+      if (node.inputs) {
+        for (const key of Object.keys(node.inputs)) {
+          if (key.includes('seed') && typeof node.inputs[key] === 'number') {
+            node.inputs[key] = Math.floor(Math.random() * 2147483647);
+          }
+        }
+      }
+      delete node.is_changed;
+    }
+
+    // Store node map for progress
+    const nodeMap = {};
+    Object.entries(wfPrompt).forEach(([id, n]) => {
+      nodeMap[id] = (n._meta && n._meta.title) || n.class_type || id;
+    });
+    newJob.nodeMap = nodeMap;
+    newJob.totalNodes = Object.keys(wfPrompt).length;
+
+    // Queue to ComfyUI
+    try {
+      const clientId = 'rerun-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      const qResp = await fetch('/api/comfy/api/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ prompt: wfPrompt, client_id: clientId },
+          window.rerunWorkflowGraph ? { extra_data: { extra_pnginfo: { workflow: window.rerunWorkflowGraph } } } : {}))
+      });
+      const qResult = await qResp.json();
+      if (qResult.error) throw new Error(qResult.error.message || JSON.stringify(qResult.error));
+      if (qResult.node_errors && Object.keys(qResult.node_errors).length > 0) {
+        throw new Error('ComfyUI rejected ' + Object.keys(qResult.node_errors).length + ' node(s): '
+          + Object.entries(qResult.node_errors).map(([nid, ne]) => '[' + nid + '] ' + (ne.errors || []).map(e => e.message).join('; ')).join(' | '));
+      }
+      newJob.promptIds.push(qResult.prompt_id);
+      await JobDB.put(newJob);
+    } catch (e) {
+      newJob.status = 'error';
+      newJob.endTime = Date.now();
+      await JobDB.put(newJob);
+      alert('Failed to queue: ' + e.message);
+      refreshFromDB();
+      return;
+    }
+  }
+
+  refreshFromDB();
+}
+
+async function renderJobs() {
+  const list = document.getElementById('jobsList');
+  let jobs;
+  try { jobs = await JobDB.getAll(); }
+  catch { list.innerHTML = '<div class="empty">Failed to load jobs</div>'; return; }
+
+  // Purge jobs older than 24 hours
+  const cutoff = Date.now() - 86400000;
+  const expired = jobs.filter(j => j.startTime < cutoff);
+  for (const j of expired) { try { await JobDB.del(j.id); } catch {} }
+  jobs = jobs.filter(j => j.startTime >= cutoff);
+
+  await checkRunningJobs(jobs);
+  jobs.sort((a, b) => b.startTime - a.startTime);
+  allJobs = jobs;
+  lastJobsHash = jobsHash(jobs);
+
+  if (!jobs.length) {
+    list.innerHTML = '<div class="empty">No jobs in the last 24 hours</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  for (const job of jobs) {
+    list.appendChild(renderJobCard(job));
+  }
+
+  // Always connect WebSocket to catch progress events
+  if (!wsConnected) connectWs();
+}
+
+// ── BroadcastChannel: primary progress source (from meta page) ──
+const jobChannel = new BroadcastChannel('comfy-jobs');
+jobChannel.onmessage = (evt) => {
+  const msg = evt.data;
+  if (!msg || !msg.promptId) return;
+  const pid = msg.promptId;
+
+  // Find the job this prompt belongs to
+  let job = allJobs.find(j => j.promptIds && j.promptIds.includes(pid));
+  if (!job) {
+    // Might be a new job not yet loaded — trigger DB refresh
+    refreshFromDB();
+    return;
+  }
+
+  switch (msg.type) {
+    case 'executing':
+      if (!liveProgress[job.id]) liveProgress[job.id] = { pct: 0, node: '' };
+      liveProgress[job.id].node = msg.node || '';
+      if (msg.pct !== null && msg.pct !== undefined) liveProgress[job.id].pct = msg.pct;
+      updateJobProgress(job);
+      break;
+    case 'progress':
+      if (!liveProgress[job.id]) liveProgress[job.id] = { pct: 0, node: '' };
+      liveProgress[job.id].pct = msg.pct || 0;
+      updateJobProgress(job);
+      break;
+    case 'done':
+      delete liveProgress[job.id];
+      setTimeout(refreshFromDB, 1500);
+      break;
+  }
+};
+
+// ── Live WebSocket progress (fallback when meta page is not open) ──
+let ws = null;
+let wsConnected = false;
+
+function connectWs() {
+  if (ws) return;
+  try { ws = new WebSocket(COMFY_WS); } catch { return; }
+  ws.onopen = () => { wsConnected = true; };
+  ws.onclose = () => {
+    ws = null; wsConnected = false;
+    // Reconnect if still have running jobs
+    if (allJobs.some(j => j.status === 'running')) {
+      setTimeout(connectWs, 3000);
+    }
+  };
+  ws.onerror = () => {};
+  ws.onmessage = (evt) => {
+    if (typeof evt.data !== 'string') return;
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+    const d = msg.data || {};
+    const pid = d.prompt_id;
+    if (!pid) return;
+
+    // Always track progress by prompt_id (even if we don't know the job yet)
+    const isNewPrompt = !promptProgress[pid];
+    if (!promptProgress[pid]) promptProgress[pid] = { pct: 0, node: '', done: false };
+
+    // Find the job this prompt belongs to (refresh from allJobs which gets updated)
+    let job = allJobs.find(j => j.promptIds && j.promptIds.includes(pid));
+
+    // If we don't know this prompt yet, trigger a DB refresh to find the job
+    if (!job && isNewPrompt) {
+      refreshFromDB().then(() => {
+        job = allJobs.find(j => j.promptIds && j.promptIds.includes(pid));
+        if (job) {
+          liveProgress[job.id] = { pct: promptProgress[pid].pct, node: promptProgress[pid].node };
+          updateJobProgress(job);
+        }
+      });
+    }
+
+    switch (msg.type) {
+      case 'executing': {
+        if (d.node === null) {
+          promptProgress[pid].done = true;
+          break;
+        }
+        const nodeName = job ? (job.nodeMap || {})[d.node] || d.node : d.node;
+        promptProgress[pid].node = nodeName;
+        if (job) {
+          liveProgress[job.id] = { pct: promptProgress[pid].pct, node: nodeName };
+          updateJobProgress(job);
+        }
+        break;
+      }
+      case 'progress': {
+        if (d.max > 0) {
+          promptProgress[pid].pct = Math.round(d.value / d.max * 100);
+        }
+        if (job) {
+          liveProgress[job.id] = { pct: promptProgress[pid].pct, node: promptProgress[pid].node };
+          updateJobProgress(job);
+        }
+        break;
+      }
+      case 'execution_success': {
+        promptProgress[pid].done = true;
+        if (job) {
+          delete liveProgress[job.id];
+          // Re-render after a delay to pick up output files and next run's prompt_id
+          setTimeout(refreshFromDB, 2000);
+        }
+        break;
+      }
+      case 'execution_error': {
+        promptProgress[pid].done = true;
+        if (job) {
+          delete liveProgress[job.id];
+          job.status = 'error';
+          job.endTime = Date.now();
+          JobDB.put(job).then(() => refreshFromDB());
+        }
+        break;
+      }
+    }
+  };
+}
+
+function updateJobProgress(job) {
+  const el = document.getElementById('job-' + job.id);
+  if (!el) return;
+  const prog = liveProgress[job.id] || {};
+  const progWrap = el.querySelector('.job-progress');
+  if (progWrap) {
+    progWrap.querySelector('.job-progress-fill').style.width = (prog.pct || 0) + '%';
+    progWrap.querySelector('.job-progress-text').textContent = (prog.pct || 0) + '% \u2014 ' + (prog.node || 'Waiting...');
+  }
+}
+
+// Re-read jobs from IndexedDB to pick up new prompt_ids added by the meta page
+async function refreshFromDB() {
+  try {
+    const freshJobs = await JobDB.getAll();
+    const cutoff = Date.now() - 86400000;
+    allJobs = freshJobs.filter(j => j.startTime >= cutoff);
+    allJobs.sort((a, b) => b.startTime - a.startTime);
+
+    // Apply any orphaned prompt progress to newly discovered prompt_ids
+    for (const job of allJobs) {
+      if (job.status !== 'running') continue;
+      for (const pid of job.promptIds || []) {
+        if (promptProgress[pid] && !promptProgress[pid].done) {
+          liveProgress[job.id] = { pct: promptProgress[pid].pct, node: promptProgress[pid].node };
+          updateJobProgress(job);
+        }
+      }
+    }
+
+    // Check if any running jobs have all prompts completed in history
+    await checkRunningJobs(allJobs);
+
+    // Only re-render DOM if job states actually changed
+    const newHash = jobsHash(allJobs);
+    if (newHash !== lastJobsHash) {
+      lastJobsHash = newHash;
+      const list = document.getElementById('jobsList');
+      if (!allJobs.length) {
+        list.innerHTML = '<div class="empty">No jobs in the last 24 hours</div>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const job of allJobs) list.appendChild(renderJobCard(job));
+    }
+    if (allJobs.some(j => j.status === 'running') && !wsConnected) connectWs();
+  } catch {}
+}
+
+document.getElementById('clearBtn').onclick = async () => {
+  if (!confirm('Clear all job history?')) return;
+  await JobDB.clear();
+  allJobs = [];
+  renderJobs();
+};
+
+renderJobs();
+
+// Periodic refresh from DB to pick up new prompt_ids and detect completion
+setInterval(() => {
+  if (document.visibilityState === 'visible' && allJobs.some(j => j.status === 'running')) {
+    refreshFromDB();
+  }
+}, 5000);
+</script>
+</body></html>

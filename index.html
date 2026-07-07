@@ -1,0 +1,1990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ComfyRemix</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+html{height:100%;background:var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;min-height:100%;padding-bottom:calc(16px + var(--safe-b))}
+
+/* ── HEADER ── */
+.hdr{
+  position:sticky;top:0;z-index:50;
+  background:rgba(13,13,13,.92);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:calc(10px + var(--safe-t)) calc(12px + var(--safe-r)) 10px calc(12px + var(--safe-l));
+}
+.hdr-path{margin-bottom:6px;overflow:hidden}
+.hdr-row1{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.hdr-row2{display:flex;gap:8px}
+.home-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  background:var(--surface2);border:none;color:var(--accent);
+  padding:7px 0;border-radius:var(--r-sm);font-size:16px;cursor:pointer;
+}
+.home-btn:active{opacity:.6}
+
+.back-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
+  background:var(--surface2);border:none;color:var(--accent);
+  padding:7px 0;border-radius:var(--r-sm);font-size:15px;font-weight:500;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;
+}
+.back-btn:active{opacity:.6}
+.back-btn[disabled]{display:none}
+
+.path-wrap{flex:1;min-width:0}
+.path-txt{font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.path-txt b{color:var(--text)}
+
+
+/* ── HOME LANDING ── */
+.home-landing{padding:24px 16px;display:flex;flex-direction:column;gap:10px}
+.home-folder{
+  display:flex;align-items:center;gap:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 18px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .1s;
+}
+.home-folder:active{transform:scale(.97)}
+.home-folder-icon{font-size:28px;line-height:1}
+.home-folder-text{font-size:15px;font-weight:600;color:var(--text)}
+.home-folder-sub{font-size:12px;color:var(--text2);margin-top:2px}
+
+.search-inp{
+  flex:1;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);padding:8px 12px;border-radius:var(--r-sm);
+  font-size:16px;outline:none;-webkit-appearance:none;
+}
+.search-inp:focus{border-color:var(--accent)}
+.search-inp::placeholder{color:var(--text3)}
+.search-inp::-webkit-search-cancel-button{display:none}
+.search-wrap{position:relative;flex:1;display:flex}
+.search-wrap .search-inp{width:100%;padding-right:34px}
+.search-clear{
+  display:none;position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;
+  padding:6px 9px;-webkit-tap-highlight-color:transparent;
+}
+.search-clear:active{opacity:.5}
+
+.sort-btn{
+  flex-shrink:0;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);padding:8px 11px;border-radius:var(--r-sm);
+  font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;
+}
+.sort-btn:active{opacity:.6}
+
+/* ── FILTER BAR ── */
+.filter-bar{
+  display:flex;gap:6px;
+  padding:8px calc(12px + var(--safe-l)) 4px calc(12px + var(--safe-l));
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.filter-bar::-webkit-scrollbar{display:none}
+
+.filter-chip{
+  flex-shrink:0;display:flex;align-items:center;gap:5px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);padding:5px 12px;border-radius:20px;
+  font-size:13px;font-weight:500;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:all .15s;
+}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.filter-chip:active{opacity:.7}
+
+/* ── STATS ── */
+.stats{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:6px calc(14px + var(--safe-l)) 4px calc(14px + var(--safe-l));
+  font-size:12px;color:var(--text3);
+}
+
+/* ── GRID ── */
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:2px;
+  padding:2px calc(2px + var(--safe-l)) 2px calc(2px + var(--safe-l));
+}
+@media(min-width:480px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr);gap:3px}}
+@media(min-width:960px){.grid{grid-template-columns:repeat(5,1fr)}}
+@media(min-width:1200px){.grid{grid-template-columns:repeat(6,1fr)}}
+@media(orientation:landscape) and (max-height:500px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+/* ── CARD ── */
+.card{
+  background:var(--surface);border-radius:var(--r);overflow:hidden;
+  cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent;
+  transition:transform .1s;user-select:none;
+}
+.card:active{transform:scale(.95)}
+
+.card-thumb{
+  position:relative;aspect-ratio:1/1;
+  background:var(--surface2);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.card .ms-cb{display:none;position:absolute;top:6px;left:6px;z-index:5;width:20px;height:20px;cursor:pointer;accent-color:#0a84ff}
+.multi-select-on .card .ms-cb{display:block}
+.card.ms-checked{outline:2px solid #0a84ff;outline-offset:-2px}
+#multiSelectBtn.active{background:#0a84ff;color:#fff}
+.card-thumb img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .25s}
+.card-thumb img.vis{opacity:1}
+
+.card-icon{font-size:36px;line-height:1;pointer-events:none}
+
+.play-overlay{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.25);pointer-events:none;
+}
+.play-circle{
+  width:42px;height:42px;background:rgba(0,0,0,.65);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+}
+.play-circle svg{width:18px;height:18px;fill:#fff;margin-left:3px}
+
+.ext-badge{
+  position:absolute;top:5px;right:5px;
+  background:rgba(0,0,0,.72);border-radius:4px;
+  padding:2px 5px;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+}
+
+.card-info-text{flex:1;min-width:0}
+.meta-badge{
+  flex-shrink:0;background:none;border:none;
+  padding:4px;color:var(--text3);cursor:pointer;
+  display:flex;align-items:center;
+  -webkit-tap-highlight-color:transparent;
+}
+.meta-badge:hover{color:var(--accent)}
+.meta-badge svg{width:14px;height:14px;fill:currentColor}
+
+/* Long-press action menu */
+.card-actions{
+  position:absolute;top:5px;left:5px;
+  display:flex;flex-direction:column;gap:4px;
+  opacity:0;pointer-events:none;transition:opacity .15s;
+}
+.card.actions-open .card-actions{opacity:1;pointer-events:auto}
+
+.act-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:50%;border:none;
+  font-size:15px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  box-shadow:0 1px 4px rgba(0,0,0,.6);
+}
+.act-fav{background:rgba(30,20,0,.85);color:var(--amber)}
+.act-del{background:rgba(30,0,0,.85);color:var(--red)}
+.act-btn:active{transform:scale(.9)}
+
+.card-info{padding:5px 8px 7px;display:flex;align-items:center}
+.card-name{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.card-meta{font-size:10px;color:var(--text3);margin-top:1px}
+
+/* ── FOLDER ROW ── */
+.folder-row{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:8px calc(4px + var(--safe-l));
+}
+.folder-chip{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface);border-radius:var(--r-sm);
+  padding:6px 12px 6px 8px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:transform .1s;
+  user-select:none;border:1px solid var(--border);
+}
+.folder-chip:active{transform:scale(.95)}
+.folder-chip .folder-emoji{font-size:18px;line-height:1}
+.folder-chip .folder-label{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.folder-chip .ms-cb{display:none;width:16px;height:16px;cursor:pointer;accent-color:#0a84ff;flex-shrink:0}
+.multi-select-on .folder-chip .ms-cb{display:block}
+.folder-chip.ms-checked{outline:2px solid #0a84ff;outline-offset:-2px}
+
+/* folder thumb gradient (legacy cards, keep for non-folder-row contexts) */
+.card-folder .card-thumb{background:linear-gradient(135deg,#1a1400,#2e2200)}
+.card-video-noThumb .card-thumb{background:linear-gradient(135deg,#150505,#260f0f)}
+.card-audio .card-thumb{background:linear-gradient(135deg,#0e0515,#1a0d2e)}
+
+/* ── PAGINATION ── */
+.pager{
+  display:flex;justify-content:center;align-items:center;
+  gap:5px;padding:18px calc(12px + var(--safe-l));flex-wrap:wrap;
+}
+.pg-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  min-width:40px;height:40px;border-radius:8px;font-size:14px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  padding:0 10px;-webkit-tap-highlight-color:transparent;
+}
+.pg-btn:active{opacity:.6}
+.pg-btn.cur{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.pg-btn[disabled]{opacity:.3;cursor:default}
+.pg-dots{color:var(--text3);padding:0 4px;line-height:40px;font-size:14px}
+
+/* ── STATES ── */
+.loading{display:flex;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text2);font-size:15px}
+.spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.empty{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-icon{font-size:52px;margin-bottom:12px}
+.empty-msg{font-size:15px}
+
+.err-msg{text-align:center;padding:40px;color:var(--red);font-size:14px}
+
+/* ── MODAL ── */
+.modal{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.97);
+  flex-direction:column;align-items:center;justify-content:center;
+}
+.modal.open{display:flex}
+
+.modal-close{
+  position:absolute;top:calc(14px + var(--safe-t));right:calc(14px + var(--safe-r));
+  background:rgba(255,255,255,.12);border:none;color:#fff;
+  width:34px;height:34px;border-radius:50%;font-size:18px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;z-index:10;
+}
+.modal-close:active{opacity:.6}
+
+.modal-nav{
+  position:absolute;bottom:calc(8px + var(--safe-b));
+  background:rgba(255,255,255,.1);border:none;color:#fff;
+  width:64px;height:40px;border-radius:8px;font-size:26px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;z-index:10;
+}
+.modal-nav:active{opacity:.6}
+.modal-nav[disabled]{opacity:.15;cursor:default}
+#modalPrev{left:calc(6px + var(--safe-l))}
+#modalNext{right:calc(6px + var(--safe-r))}
+#modalMute{left:50%;transform:translateX(-50%);font-size:20px}
+
+.modal-body{
+  width:100%;max-width:100%;
+  padding:54px 12px;
+  display:flex;align-items:center;justify-content:center;
+}
+.modal-body img{
+  max-width:100%;max-height:calc(100vh - 108px);
+  object-fit:contain;border-radius:4px;display:block;
+}
+.modal-body video{
+  max-width:100%;max-height:calc(100vh - 108px);
+  width:100%;border-radius:4px;display:block;
+}
+.modal-audio-wrap{display:flex;flex-direction:column;align-items:center;gap:20px}
+.modal-audio-wrap audio{width:300px;max-width:90vw}
+
+.modal-label{
+  position:absolute;bottom:calc(56px + var(--safe-b));left:0;right:0;
+  text-align:center;color:rgba(255,255,255,.6);font-size:12px;
+  padding:0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.modal-actions{
+  position:absolute;top:calc(14px + var(--safe-t));left:calc(14px + var(--safe-l));
+  display:flex;gap:8px;z-index:10;
+}
+.modal-act-btn{
+  background:rgba(255,255,255,.12);border:none;
+  padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:5px;
+}
+.modal-act-btn:active{opacity:.6}
+.m-fav{color:var(--amber)}
+.m-del{color:var(--red)}
+
+/* ── CONFIRM DIALOG ── */
+.confirm-overlay{
+  display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.7);align-items:flex-end;justify-content:center;
+  padding-bottom:var(--safe-b);
+}
+.confirm-overlay.open{display:flex}
+.confirm-sheet{
+  width:100%;max-width:480px;background:var(--surface);
+  border-radius:var(--r) var(--r) 0 0;padding:20px 20px calc(16px + var(--safe-b));
+}
+.confirm-title{font-size:17px;font-weight:600;margin-bottom:6px}
+.confirm-msg{font-size:14px;color:var(--text2);margin-bottom:18px;word-break:break-all}
+.confirm-btns{display:flex;gap:10px}
+.confirm-btns button{
+  flex:1;padding:13px;border-radius:var(--r-sm);border:none;
+  font-size:15px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.confirm-btns button:active{opacity:.7}
+.btn-cancel{background:var(--surface2);color:var(--text)}
+.btn-ok{background:var(--red);color:#fff}
+.btn-ok.btn-fav{background:var(--amber);color:#000}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:calc(20px + var(--safe-b));left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surface3);color:var(--text);
+  padding:10px 18px;border-radius:20px;font-size:14px;font-weight:500;
+  white-space:nowrap;opacity:0;transition:all .25s;z-index:400;pointer-events:none;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── CLAUDE PANEL ── */
+.blur-on .card-thumb img{filter:blur(20px);transform:scale(1.1)}
+.blur-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  background:var(--surface2);border:none;color:var(--text2);
+  height:36px;border-radius:var(--r-sm);font-size:18px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.blur-btn:active{opacity:.6}
+.blur-btn.active{background:var(--accent);color:#fff}
+.claude-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  background:var(--surface2);border:none;color:var(--purple);
+  height:36px;border-radius:var(--r-sm);font-size:18px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.search-group-hdr{
+  margin:14px 0 8px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--accent);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  cursor:pointer;word-break:break-all;-webkit-tap-highlight-color:transparent;
+}
+.search-group-hdr:active{opacity:.6}
+.set-field{margin-bottom:10px}
+.set-field label{display:block;font-size:13px;color:var(--text);margin-bottom:4px}
+.set-row{display:flex;gap:6px}
+.set-row input{
+  flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--surface3);
+  border-radius:var(--r-sm);padding:9px 11px;font-size:14px;font-family:inherit;min-width:0;
+}
+.set-row input:focus{outline:none;border-color:var(--accent)}
+.set-clr{
+  background:var(--surface2);border:1px solid var(--surface3);color:var(--text2);
+  border-radius:var(--r-sm);padding:0 12px;font-size:13px;cursor:pointer;
+}
+.set-clr:active{opacity:.6}
+.claude-btn:active{opacity:.6}
+.claude-btn.active{background:var(--purple);color:#fff}
+
+.claude-panel{
+  display:none;position:fixed;inset:0;z-index:150;
+  flex-direction:column;background:var(--bg);overflow:hidden;
+}
+.claude-panel.open{display:flex}
+
+.claude-hdr{
+  display:flex;align-items:center;gap:10px;
+  padding:calc(10px + var(--safe-t)) 14px 10px;
+  background:rgba(13,13,13,.95);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);
+}
+.claude-hdr-title{flex:1;font-size:16px;font-weight:600;color:var(--purple)}
+.claude-close-btn{
+  background:var(--surface2);border:none;color:var(--text);
+  width:34px;height:34px;border-radius:50%;font-size:16px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+
+.claude-messages{
+  flex:1;overflow-y:auto;padding:12px 14px;
+  display:flex;flex-direction:column;gap:10px;
+  -webkit-overflow-scrolling:touch;
+}
+
+.claude-msg{
+  max-width:92%;padding:10px 14px;border-radius:var(--r);
+  font-size:14px;line-height:1.5;word-break:break-word;
+  white-space:pre-wrap;
+}
+.claude-msg.user{
+  align-self:flex-end;background:var(--accent);color:#fff;
+  border-bottom-right-radius:4px;
+}
+.claude-msg.assistant{
+  align-self:flex-start;background:var(--surface2);color:var(--text);
+  border-bottom-left-radius:4px;
+}
+.claude-msg.system-msg{
+  align-self:center;background:transparent;color:var(--text3);
+  font-size:12px;text-align:center;padding:4px 8px;
+}
+.claude-msg.tool-msg{
+  align-self:flex-start;background:var(--surface);color:var(--text2);
+  font-size:12px;border:1px solid var(--border);border-bottom-left-radius:4px;
+  max-height:120px;overflow-y:auto;
+}
+.claude-msg code{
+  background:rgba(255,255,255,.08);padding:1px 4px;border-radius:3px;font-size:13px;
+}
+.claude-msg pre{
+  background:rgba(0,0,0,.3);padding:8px 10px;border-radius:6px;
+  overflow-x:auto;margin:6px 0;font-size:12px;
+}
+.claude-msg pre code{background:none;padding:0}
+
+.claude-typing{
+  align-self:flex-start;color:var(--text3);font-size:13px;
+  padding:6px 14px;display:none;
+}
+.claude-typing.vis{display:block}
+
+/* Conversation list view */
+.claude-convos{
+  flex:1;overflow-y:auto;padding:12px 14px;
+  -webkit-overflow-scrolling:touch;
+}
+.claude-new-chat{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px;margin-bottom:8px;
+  background:var(--purple);color:#fff;border-radius:var(--r);
+  cursor:pointer;font-size:15px;font-weight:600;
+  border:none;width:100%;text-align:left;
+}
+.claude-new-chat:active{opacity:.8}
+.claude-convo-item{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;margin-bottom:4px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);cursor:pointer;
+}
+.claude-convo-item:active{background:var(--surface2)}
+.claude-convo-info{flex:1;min-width:0}
+.claude-convo-title{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.claude-convo-meta{font-size:11px;color:var(--text3);margin-top:2px}
+.claude-convo-del{
+  flex-shrink:0;background:none;border:none;color:var(--text3);
+  font-size:16px;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);
+}
+.claude-convo-del:hover{color:var(--red);background:var(--surface2)}
+.claude-back-btn{
+  background:var(--surface2);border:none;color:var(--text);
+  width:34px;height:34px;border-radius:50%;font-size:14px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+
+.claude-input-row{
+  display:flex;gap:8px;
+  padding:10px 14px calc(10px + var(--safe-b));
+  background:rgba(13,13,13,.95);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-top:1px solid var(--border);
+}
+.claude-input{
+  flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);padding:10px 14px;border-radius:var(--r);
+  font-size:15px;outline:none;resize:none;
+  font-family:inherit;min-height:42px;max-height:120px;
+  -webkit-appearance:none;
+}
+.claude-input:focus{border-color:var(--purple)}
+.claude-input::placeholder{color:var(--text3)}
+
+.claude-send-btn{
+  flex-shrink:0;background:var(--purple);border:none;color:#fff;
+  width:42px;height:42px;border-radius:var(--r);font-size:18px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.claude-send-btn:active{opacity:.7}
+.claude-send-btn:disabled{opacity:.4;cursor:default}
+.claude-stop-btn{
+  flex-shrink:0;background:var(--red);border:none;color:#fff;
+  width:42px;height:42px;border-radius:var(--r);font-size:16px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  display:none;
+}
+.claude-stop-btn.vis{display:flex}
+.ptr-indicator{text-align:center;height:0;overflow:hidden;transition:height .2s;color:var(--text3);font-size:13px;display:flex;align-items:center;justify-content:center}
+.ptr-indicator.pulling{transition:none}
+.ptr-indicator .ptr-spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--text3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="ptr-indicator" id="ptrIndicator"><span>↓ Pull to refresh</span></div>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-path">
+    <div class="path-wrap"><div class="path-txt" id="pathTxt">Loading…</div></div>
+  </div>
+  <div class="hdr-row1">
+    <button class="back-btn" id="backBtn" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      Back
+    </button>
+    <button class="home-btn" id="homeBtn" title="Home">⌂</button>
+    <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
+    <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
+  </div>
+  <div class="hdr-row2" id="searchRow">
+    <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false"><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
+    <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🏷</button>
+    <button class="sort-btn" id="sortBtn">Date ↓</button>
+  </div>
+  <div class="hdr-row2" id="bulkBar" style="display:none">
+    <span id="bulkCount" style="color:#8e8e93;font-size:13px;white-space:nowrap">0 selected</span>
+    <button class="filter-chip" id="bulkSelAll" style="margin-left:auto;font-size:11px">Select All</button>
+    <button class="filter-chip" id="bulkSelFiles" style="font-size:11px">Select Files</button>
+    <button class="filter-chip" id="bulkDelBtn" style="font-size:11px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
+    <button class="filter-chip" id="bulkCancelBtn" style="font-size:11px">Cancel</button>
+  </div>
+</div>
+
+<!-- Filter chips -->
+<div class="filter-bar" id="filterBar">
+  <button class="filter-chip active" data-type="all">All</button>
+  <button class="filter-chip" data-type="folder">📁 Folders</button>
+  <button class="filter-chip" data-type="video">🎬 Videos</button>
+  <button class="filter-chip" data-type="image">🖼 Images</button>
+  <button class="filter-chip" data-type="audio">🎵 Audio</button>
+</div>
+
+<!-- Multi-select toggle -->
+<div class="filter-bar" id="selectRow">
+  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">☐ Select</button>
+</div>
+
+<!-- Stats -->
+<div class="stats"><span id="statsTxt"></span><span id="pageInfoTxt"></span></div>
+
+<!-- Pagination (top) -->
+<div class="pager" id="pagerTop"></div>
+
+<!-- Grid -->
+<div id="gridWrap"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+
+<!-- Pagination (bottom) -->
+<div class="pager" id="pager"></div>
+
+<!-- Media modal -->
+<div class="modal" id="modal">
+  <div class="modal-actions">
+    <button class="modal-act-btn m-fav" id="mFavBtn">⭐ Favorite</button>
+    <button class="modal-act-btn m-del" id="mDelBtn">🗑 Delete</button>
+  </div>
+  <button class="modal-close" id="modalClose">✕</button>
+  <button class="modal-nav" id="modalPrev" disabled>‹</button>
+  <button class="modal-nav" id="modalMute" style="display:none">🔇</button>
+  <button class="modal-nav" id="modalNext" disabled>›</button>
+  <div class="modal-body" id="modalBody"></div>
+  <div class="modal-label" id="modalLabel"></div>
+</div>
+
+<!-- Confirm dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-sheet">
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-msg" id="confirmMsg"></div>
+    <div class="confirm-btns">
+      <button class="btn-cancel" id="confirmCancel">Cancel</button>
+      <button class="btn-ok" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="confirm-overlay" id="settingsOverlay" style="align-items:center">
+  <div class="confirm-sheet" style="border-radius:var(--r);max-height:88vh;overflow:auto">
+    <div style="display:flex;align-items:center;margin-bottom:14px">
+      <div class="confirm-title" style="margin:0">Settings</div>
+      <button id="settingsCloseBtn" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">API Keys</div>
+    <div class="set-field" data-key="anthropicApiKey"><label>Claude (Anthropic)</label>
+      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+    <div class="set-field" data-key="xaiApiKey"><label>Grok (xAI)</label>
+      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+    <div class="set-field" data-key="civitaiApiKey"><label>Civitai</label>
+      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+
+    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Service URLs</div>
+    <div class="set-field" data-url="comfyUrl"><label>ComfyUI API</label>
+      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
+    <div class="set-field" data-url="ollamaUrl"><label>Ollama</label>
+      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:11434"></div></div>
+    <div class="set-field" data-url="voxtralUrl"><label>Voxtral</label>
+      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
+
+    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Paths</div>
+    <div class="set-field" data-path="comfyDir"><label>ComfyUI install folder <span id="comfyDirState" style="font-weight:400"></span></label>
+      <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Drives the workflow list, run controls, and the Claude assistant.</div></div>
+    <div class="set-field" data-path="comfyOutput"><label>ComfyUI output folder <span id="comfyOutputState" style="font-weight:400"></span></label>
+      <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\output"><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
+
+    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Read-only <span style="text-transform:none;letter-spacing:0">— edit config.json + restart to change</span></div>
+    <div id="settingsInfo" style="font-size:12px;color:var(--text2);line-height:1.7;word-break:break-all"></div>
+
+    <div class="confirm-btns" style="margin-top:18px">
+      <button class="btn-cancel" id="settingsCancel">Cancel</button>
+      <button class="btn-ok" id="settingsSave" style="background:var(--accent)">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status / Setup -->
+<div class="confirm-overlay" id="statusOverlay" style="align-items:center">
+  <div class="confirm-sheet" style="border-radius:var(--r);max-height:88vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="confirm-title" style="margin:0;font-size:15px">Status / Setup</div>
+      <button class="filter-chip" id="statusRefresh" style="font-size:11px">↻ Refresh</button>
+      <button id="statusClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div id="statusList" style="flex:1;overflow:auto"></div>
+    <div class="confirm-btns" style="margin-top:12px">
+      <button class="btn-cancel" id="statusOpenSettings">⚙ Open Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt word directory -->
+<div class="confirm-overlay" id="wordsOverlay" style="align-items:center">
+  <div class="confirm-sheet" style="border-radius:var(--r);max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="confirm-title" style="margin:0;font-size:15px">Prompt words</div>
+      <span id="wordsCount" style="font-size:11px;color:var(--text3)"></span>
+      <button id="wordsClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input id="wordsFilter" type="search" placeholder="Filter…" autocomplete="off" style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
+      <button class="sort-btn" id="wordsSortBtn" style="white-space:nowrap">Times ↓</button>
+    </div>
+    <div id="wordsList" style="flex:1;overflow:auto;border:1px solid var(--surface3);border-radius:var(--r-sm);min-height:240px"></div>
+  </div>
+</div>
+
+<!-- Folder picker (server-side browse) -->
+<div class="confirm-overlay" id="dirPicker" style="align-items:center;z-index:310">
+  <div class="confirm-sheet" style="border-radius:var(--r);max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="confirm-title" style="margin:0;font-size:15px">Select folder</div>
+      <button id="dirPickerClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <button id="dirUpBtn" class="set-clr" title="Up one level" style="padding:6px 12px">↑</button>
+      <div id="dirCurrent" style="flex:1;font-size:12px;color:var(--text2);word-break:break-all"></div>
+    </div>
+    <div id="dirList" style="flex:1;overflow:auto;border:1px solid var(--surface3);border-radius:var(--r-sm);min-height:200px;max-height:45vh"></div>
+    <div class="confirm-btns" style="margin-top:12px">
+      <button class="btn-cancel" id="dirPickerCancel">Cancel</button>
+      <button class="btn-ok" id="dirPickerSelect" style="background:var(--accent)">Select this folder</button>
+    </div>
+  </div>
+</div>
+
+<!-- Claude Panel -->
+<div class="claude-panel" id="claudePanel">
+  <!-- Conversation list view -->
+  <div id="claudeListView">
+    <div class="claude-hdr">
+      <span class="claude-hdr-title">Claude Code</span>
+      <button class="claude-close-btn" id="claudeCloseBtn">✕</button>
+    </div>
+    <div id="claudeKeyBanner" style="display:none;margin:10px 12px;padding:10px 12px;background:#2a2320;border:1px solid #5c4a1e;border-radius:8px;font-size:13px;color:#e0c06c;line-height:1.4">
+      Claude runs via the CLI. If it can't authenticate, add an Anthropic API key.
+      <button id="claudeAddKeyBtn" style="margin-left:4px;background:#0a84ff;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-weight:600;cursor:pointer">Add key</button>
+    </div>
+    <div class="claude-convos" id="claudeConvos"></div>
+  </div>
+  <!-- Chat view -->
+  <div id="claudeChatView" style="display:none;flex:1;flex-direction:column">
+    <div class="claude-hdr">
+      <button class="claude-back-btn" id="claudeBackBtn">←</button>
+      <span class="claude-hdr-title" id="claudeChatTitle">New Chat</span>
+      <button class="claude-close-btn" id="claudeCloseBtn2">✕</button>
+    </div>
+    <div class="claude-messages" id="claudeMsgs"></div>
+    <div class="claude-typing" id="claudeTyping">Claude is thinking...</div>
+    <div class="claude-input-row">
+      <textarea class="claude-input" id="claudeInput" placeholder="Ask Claude anything..." rows="1"></textarea>
+      <button class="claude-send-btn" id="claudeSendBtn">➤</button>
+      <button class="claude-stop-btn" id="claudeStopBtn">■</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  dir: null, parent: null, favDir: null,
+  page: 1, limit: 48, total: 0, pages: 0,
+  search: '', sort: 'date', asc: false, type: 'all',
+  items: [],        // current page items
+  mediaItems: [],   // media-only items for modal nav
+  multiSelect: false,
+  modalIdx: -1,
+  videoMuted: true, // default-mute videos in modal
+  navStack: [],     // [{dir,page,search,type}]
+  activeCard: null, // card with open action menu
+};
+
+// ── DOM refs ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const gridWrap   = $('gridWrap');
+const pager      = $('pager');
+const backBtn    = $('backBtn');
+const homeBtn    = $('homeBtn');
+const pathTxt    = $('pathTxt');
+const blurToggle = $('blurToggle');
+const searchInp  = $('searchInp');
+// Chromium ignores autocomplete="off" and keys saved-entry suggestions off the
+// input's name — a random name per page load means nothing ever matches.
+searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
+const sortBtn    = $('sortBtn');
+const filterBar  = $('filterBar');
+const statsTxt   = $('statsTxt');
+const pageInfoTxt= $('pageInfoTxt');
+const modal      = $('modal');
+const modalBody  = $('modalBody');
+const modalLabel = $('modalLabel');
+const modalClose = $('modalClose');
+const modalPrev  = $('modalPrev');
+const modalNext  = $('modalNext');
+const modalMute  = $('modalMute');
+const mFavBtn    = $('mFavBtn');
+const mDelBtn    = $('mDelBtn');
+const confirmOverlay = $('confirmOverlay');
+const confirmTitle   = $('confirmTitle');
+const confirmMsg     = $('confirmMsg');
+const confirmCancel  = $('confirmCancel');
+const confirmOk      = $('confirmOk');
+const toastEl    = $('toast');
+const multiSelectBtn = $('multiSelectBtn');
+const bulkBar    = $('bulkBar');
+const bulkCount  = $('bulkCount');
+const bulkSelAll = $('bulkSelAll');
+const bulkSelFiles = $('bulkSelFiles');
+const bulkDelBtn = $('bulkDelBtn');
+const bulkCancelBtn = $('bulkCancelBtn');
+
+// ── Multi-select ─────────────────────────────────────────────────────────
+function toggleMultiSelect(on) {
+  S.multiSelect = on !== undefined ? on : !S.multiSelect;
+  document.body.classList.toggle('multi-select-on', S.multiSelect);
+  multiSelectBtn.classList.toggle('active', S.multiSelect);
+  multiSelectBtn.textContent = S.multiSelect ? '☑ Select' : '☐ Select';
+  $('searchRow').style.display = S.multiSelect ? 'none' : 'flex';
+  bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
+  if (!S.multiSelect) {
+    document.querySelectorAll('.ms-cb').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.ms-checked').forEach(c => c.classList.remove('ms-checked'));
+  }
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.ms-cb:checked');
+  bulkCount.textContent = checked.length + ' selected';
+}
+
+multiSelectBtn.onclick = () => toggleMultiSelect();
+bulkCancelBtn.onclick = () => toggleMultiSelect(false);
+
+bulkSelAll.onclick = () => {
+  const cbs = document.querySelectorAll('.ms-cb');
+  const allChecked = Array.from(cbs).every(cb => cb.checked);
+  cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card') || cb.closest('.folder-chip'); if (el) el.classList.toggle('ms-checked', !allChecked); });
+  updateBulkBar();
+};
+
+// Select only files (cards) on the current page — not folders
+bulkSelFiles.onclick = () => {
+  const cbs = document.querySelectorAll('.card .ms-cb');
+  const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
+  cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card'); if (el) el.classList.toggle('ms-checked', !allChecked); });
+  updateBulkBar();
+};
+
+bulkDelBtn.onclick = async () => {
+  const checked = document.querySelectorAll('.ms-cb:checked');
+  if (!checked.length) return;
+  confirm(
+    'Delete Selected',
+    'Permanently delete ' + checked.length + ' item(s)? This cannot be undone.',
+    '🗑 Delete ' + checked.length,
+    '',
+    async () => {
+      const paths = Array.from(checked).map(cb => cb.dataset.path);
+      try {
+        const r = await fetch('/api/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths }),
+        }).then(r => r.json());
+        const ok = (r.results || []).filter(x => x.ok).length;
+        showToast('🗑 Deleted ' + ok + ' item(s)');
+        toggleMultiSelect(false);
+        refreshCurrentPage();
+      } catch (err) {
+        showToast('Error: ' + err.message);
+      }
+    }
+  );
+};
+
+// ── Lazy image observer ───────────────────────────────────────────────────
+const imgObs = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const img = e.target;
+    if (!img.dataset.src) continue;
+    img.src = img.dataset.src;
+    delete img.dataset.src;
+    img.onload  = () => img.classList.add('vis');
+    img.onerror = () => { img.classList.add('vis'); img.style.opacity = '.2'; };
+    imgObs.unobserve(img);
+  }
+}, { rootMargin: '300px' });
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const enc = p => encodeURIComponent(p);
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, dur = 2200) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(() => toastEl.classList.remove('show'), dur);
+}
+
+function confirm(title, msg, okLabel, okClass, onOk) {
+  confirmTitle.textContent = title;
+  confirmMsg.textContent = msg;
+  confirmOk.textContent = okLabel;
+  confirmOk.className = 'btn-ok ' + (okClass || '');
+  confirmOverlay.classList.add('open');
+  const cleanup = () => confirmOverlay.classList.remove('open');
+  confirmCancel.onclick = cleanup;
+  confirmOk.onclick = () => { cleanup(); onOk(); };
+}
+
+// ── Sort cycling ──────────────────────────────────────────────────────────
+const SORTS = [
+  {label:'Name ↑',sort:'name',asc:true},
+  {label:'Name ↓',sort:'name',asc:false},
+  {label:'Size ↑',sort:'size',asc:true},
+  {label:'Size ↓',sort:'size',asc:false},
+  {label:'Date ↑',sort:'date',asc:true},
+  {label:'Date ↓',sort:'date',asc:false},
+];
+// Blur toggle (default: on)
+document.body.classList.add('blur-on');
+blurToggle.onclick = () => {
+  document.body.classList.toggle('blur-on');
+  blurToggle.classList.toggle('active');
+  blurToggle.textContent = document.body.classList.contains('blur-on') ? '🔒' : '👁';
+};
+
+let sortIdx = 5; // Date ↓
+sortBtn.onclick = () => {
+  sortIdx = (sortIdx + 1) % SORTS.length;
+  const o = SORTS[sortIdx];
+  sortBtn.textContent = o.label;
+  S.sort = o.sort; S.asc = o.asc;
+  loadDir(S.dir, 1, false);
+};
+
+// ── Filter chips ──────────────────────────────────────────────────────────
+filterBar.addEventListener('click', e => {
+  const chip = e.target.closest('.filter-chip');
+  if (!chip) return;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  S.type = chip.dataset.type;
+  loadDir(S.dir, 1, false);
+});
+
+// ── Search ────────────────────────────────────────────────────────────────
+let searchTimer;
+searchInp.addEventListener('input', () => {
+  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadDir(S.dir, 1, false), 380);
+});
+$('searchClear').onclick = () => {
+  searchInp.value = '';
+  $('searchClear').style.display = 'none';
+  clearTimeout(searchTimer);
+  loadDir(S.dir, 1, false);
+};
+
+// ── Load directory ────────────────────────────────────────────────────────
+async function loadDir(dir, page = 1, pushStack = true) {
+  // Dismiss any open card action menu
+  closeCardMenu();
+  if (S.multiSelect) toggleMultiSelect(false);
+
+  gridWrap.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+  pager.innerHTML = '';
+  $('pagerTop').innerHTML = '';
+  statsTxt.textContent = '';
+  pageInfoTxt.textContent = '';
+
+  if (pushStack && S.dir && S.dir !== dir) {
+    S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
+  }
+
+  S.dir = dir; S.page = page; S.search = searchInp.value.trim();
+  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+
+  try {
+    const q = new URLSearchParams({
+      dir: dir || '',
+      page, limit: S.search ? 200 : S.limit, // searching: max page so Select All covers more
+      search: S.search,
+      sort: S.sort,
+      asc: S.asc,
+      type: S.type,
+    });
+    const data = await fetch('/api/list?' + q).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+
+    S.total = data.total; S.pages = data.pages; S.items = data.items;
+    S.parent = data.parent; S.favDir = data.favoritesDir;
+
+    renderHeader(data);
+    renderGrid(data.items);
+    renderPager(data);
+  } catch (err) {
+    gridWrap.innerHTML = `<div class="err-msg">⚠ ${esc(err.message)}</div>`;
+  }
+}
+
+function showHomeLanding() {
+  searchInp.value = '';
+  S.navStack = [];
+  S.dir = '';
+  pathTxt.innerHTML = '<b>Home</b>';
+  backBtn.disabled = true;
+  statsTxt.textContent = '';
+  pageInfoTxt.textContent = '';
+  pager.innerHTML = '';
+  $('pagerTop').innerHTML = '';
+  // Hide folder row if present
+  const fr = document.querySelector('.folder-row');
+  if (fr) fr.innerHTML = '';
+
+  gridWrap.innerHTML = '<div class="home-landing">'
+    + '<div class="home-folder" id="hlStatus"><div class="home-folder-icon">🩺</div><div><div class="home-folder-text">Status / Setup</div><div class="home-folder-sub">Which services are set up, running, and healthy</div></div></div>'
+    + '<div class="home-folder" id="hlArchive"><div class="home-folder-icon">📂</div><div><div class="home-folder-text">Archive Media</div><div class="home-folder-sub">Browse saved media files</div></div></div>'
+    + '<div class="home-folder" id="hlComfy"><div class="home-folder-icon">🎨</div><div><div class="home-folder-text">ComfyUI Output</div><div class="home-folder-sub">Browse generated output files</div></div></div>'
+    + '<div class="home-folder" id="hlFav"><div class="home-folder-icon">⭐</div><div><div class="home-folder-text">Favorites</div><div class="home-folder-sub">Saved favorites</div></div></div>'
+    + '<div class="home-folder" id="hlJobs"><div class="home-folder-icon">⚡</div><div><div class="home-folder-text">Jobs</div><div class="home-folder-sub">Running and completed jobs</div></div></div>'
+    + '<div class="home-folder" id="hlClaude"><div class="home-folder-icon">🤖</div><div><div class="home-folder-text">Claude Code</div><div class="home-folder-sub">AI assistant for ComfyUI & workflows</div></div></div>'
+    + '<div class="home-folder" id="hlChatLocal"><div class="home-folder-icon">🏠</div><div><div class="home-folder-text">Chat — Local</div><div class="home-folder-sub">Ollama LLM + Voxtral TTS (fully local)</div></div></div>'
+    + '<div class="home-folder" id="hlChatGrok"><div class="home-folder-icon">☁️</div><div><div class="home-folder-text">Chat — Grok</div><div class="home-folder-sub">Ollama LLM + Grok cloud TTS</div></div></div>'
+    + '<div class="home-folder" id="hlVoice"><div class="home-folder-icon">🎙️</div><div><div class="home-folder-text">Voice Agent</div><div class="home-folder-sub">Real-time speech-to-speech with Grok (xAI)</div></div></div>'
+    + '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>'
+    + '</div>';
+
+  // Show total spent
+  fetch('/api/cost/summary').then(r => r.json()).then(d => {
+    const el = $('homeCost');
+    if (!el) return;
+    el.textContent = 'xAI spent: $' + d.total.toFixed(2)
+      + ' (' + d.voiceMinutes.toFixed(1) + ' voice min, '
+      + d.ttsChars.toLocaleString() + ' TTS chars, '
+      + (d.imagineCount||0) + ' images)';
+  }).catch(() => {});
+
+  $('hlArchive').onclick = () => loadDir('', 1, false);
+  $('hlComfy').onclick = () => { if (S.comfyOutputDir) loadDir(S.comfyOutputDir, 1, false); };
+  $('hlFav').onclick = () => { if (S.favDir) loadDir(S.favDir, 1, false); };
+  $('hlJobs').onclick = () => { location.href = '/jobs'; };
+  $('hlClaude').onclick = openClaudePanel;
+  $('hlStatus').onclick = openStatusPanel;
+  $('hlChatLocal').onclick = () => { location.href = '/chat/local'; };
+  $('hlChatGrok').onclick = () => { location.href = '/chat/grok'; };
+  $('hlVoice').onclick = async () => {
+    // Voice page requires HTTPS for mic access — switch to the configured HTTPS port
+    if (location.protocol === 'https:') { location.href = '/voice'; return; }
+    let httpsPort = 8443;
+    try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
+    location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
+  };
+}
+
+function renderHeader(data) {
+  // Show path relative to media root
+  const rootNorm = (data.root || '').replace(/\\/g, '/').replace(/\/$/, '');
+  const dirNorm = (data.dir || '').replace(/\\/g, '/');
+  const rel = dirNorm.startsWith(rootNorm) ? dirNorm.slice(rootNorm.length).replace(/^\//, '') : dirNorm;
+  const parts = rel.split('/').filter(Boolean);
+  const disp = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : parts.join('/') || 'Home';
+  pathTxt.innerHTML = `<b>${esc(disp)}</b>`;
+
+  backBtn.disabled = !S.navStack.length && !data.parent;
+  backBtn.onclick = () => {
+    if (S.navStack.length) {
+      const prev = S.navStack.pop();
+      searchInp.value = prev.search || '';
+      // restore type chip
+      document.querySelectorAll('.filter-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.type === (prev.type || 'all'));
+      });
+      S.type = prev.type || 'all';
+      loadDir(prev.dir, prev.page, false);
+    } else if (data.parent) {
+      searchInp.value = '';
+      loadDir(data.parent, 1, false);
+    }
+  };
+
+  homeBtn.onclick = () => showHomeLanding();
+
+  if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
+
+  statsTxt.textContent = data.total + ' item' + (data.total !== 1 ? 's' : '');
+  if (data.pages > 1) pageInfoTxt.textContent = `Page ${data.page} / ${data.pages}`;
+}
+
+// ── Grid rendering ────────────────────────────────────────────────────────
+function renderGrid(items) {
+  if (!items.length) {
+    gridWrap.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div></div>`;
+    return;
+  }
+
+  const folders = items.filter(i => i.isDir);
+  const files = items.filter(i => !i.isDir);
+  S.mediaItems = files.filter(i => i.isVideo || i.isImage || i.isAudio);
+
+  gridWrap.innerHTML = '';
+
+  // Folder chips row
+  if (folders.length) {
+    const row = document.createElement('div');
+    row.className = 'folder-row';
+    folders.forEach(item => {
+      const chip = document.createElement('div');
+      chip.className = 'folder-chip';
+      chip.innerHTML = `<input type="checkbox" class="ms-cb" data-path="${esc(item.path)}"><span class="folder-emoji">📁</span><span class="folder-label">${esc(item.name)}</span>`;
+      const cb = chip.querySelector('.ms-cb');
+      cb.addEventListener('click', e => { e.stopPropagation(); chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); });
+      chip.onclick = (e) => {
+        if (e.target.classList.contains('ms-cb')) return;
+        if (S.multiSelect) { cb.checked = !cb.checked; chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); return; }
+        loadDir(item.path, 1);
+      };
+      row.appendChild(chip);
+    });
+    gridWrap.appendChild(row);
+  }
+
+  // Media grid — when searching, group results under clickable folder-path headers
+  if (files.length) {
+    const grouped = S.search && files.some(f => f.parentDir);
+    if (grouped) {
+      const groups = new Map();
+      files.forEach((f, i) => {
+        const k = f.parentDir || '';
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push([f, i]); // keep original index for the media viewer
+      });
+      const cur = (S.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+      for (const [gdir, entries] of groups) {
+        const hdr = document.createElement('div');
+        hdr.className = 'search-group-hdr';
+        let rel = gdir.replace(/\\/g, '/');
+        if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)';
+        hdr.innerHTML = '📁 ' + esc(rel) + ' <span style="color:var(--text3);font-weight:400">(' + entries.length + ')</span>';
+        hdr.title = 'Open this folder';
+        hdr.onclick = () => { searchInp.value = ''; loadDir(gdir, 1); };
+        gridWrap.appendChild(hdr);
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        entries.forEach(([item, i]) => grid.appendChild(makeCard(item, i)));
+        gridWrap.appendChild(grid);
+      }
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      files.forEach((item, i) => grid.appendChild(makeCard(item, i)));
+      gridWrap.appendChild(grid);
+    }
+  }
+}
+
+function makeCard(item, idx) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  if (item.isDir) card.classList.add('card-folder');
+  else if (item.isVideo && !item.thumb) card.classList.add('card-video-noThumb');
+  else if (item.isAudio) card.classList.add('card-audio');
+
+  const ext = item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : '';
+  let extColor = item.isVideo ? 'var(--video)' : item.isImage ? 'var(--image)' : item.isAudio ? 'var(--audio)' : 'var(--text3)';
+
+  let thumbHtml = '';
+  if (item.isDir) {
+    thumbHtml = `<div class="card-thumb"><div class="card-icon">📁</div></div>`;
+  } else if (item.isVideo) {
+    const tsrc = item.thumb ? `/thumb/${enc(item.path)}` : null;
+    thumbHtml = `
+      <div class="card-thumb">
+        ${tsrc ? `<img data-src="${esc(tsrc)}" alt="">` : `<div class="card-icon">🎬</div>`}
+        <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
+        ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
+      </div>`;
+  } else if (item.isImage) {
+    thumbHtml = `
+      <div class="card-thumb">
+        <img data-src="/file/${enc(item.path)}" alt="">
+        ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
+      </div>`;
+  } else if (item.isAudio) {
+    thumbHtml = `<div class="card-thumb"><div class="card-icon">🎵</div>${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}</div>`;
+  } else {
+    thumbHtml = `<div class="card-thumb"><div class="card-icon">📄</div></div>`;
+  }
+
+  // Action buttons (non-folder)
+  const actionsHtml = !item.isDir ? `
+    <div class="card-actions">
+      <button class="act-btn act-fav" title="Favorite">⭐</button>
+      <button class="act-btn act-del" title="Delete">🗑</button>
+    </div>` : '';
+
+  card.innerHTML = `
+    <input type="checkbox" class="ms-cb" data-path="${esc(item.path)}">
+    ${thumbHtml}
+    ${actionsHtml}
+    <div class="card-info">
+      <div class="card-info-text">
+        <div class="card-name">${esc(item.name)}</div>
+        ${item.size ? `<div class="card-meta">${item.size}</div>` : ''}
+      </div>
+      ${(item.isImage || item.isVideo) ? `<div class="meta-badge" data-metapath="${esc(item.path)}" title="View workflow"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></div>` : ''}
+    </div>`;
+
+  // Lazy load images
+  const img = card.querySelector('img[data-src]');
+  if (img) imgObs.observe(img);
+
+  // Card-info bar click → open metadata page
+  const cardInfo = card.querySelector('.card-info');
+  if (cardInfo && (item.isImage || item.isVideo)) {
+    cardInfo.addEventListener('click', e => {
+      e.stopPropagation();
+      openMetadataPage(item);
+    });
+    cardInfo.style.cursor = 'pointer';
+  }
+
+  // Multi-select checkbox
+  const msCb = card.querySelector('.ms-cb');
+  if (msCb) {
+    msCb.addEventListener('change', e => {
+      e.stopPropagation();
+      card.classList.toggle('ms-checked', msCb.checked);
+      updateBulkBar();
+    });
+  }
+
+  // Tap → open (or toggle checkbox in multi-select mode)
+  card.addEventListener('click', e => {
+    if (e.target.closest('.card-actions') || e.target.closest('.card-info') || e.target.classList.contains('ms-cb')) return;
+    if (S.multiSelect) {
+      if (msCb) { msCb.checked = !msCb.checked; card.classList.toggle('ms-checked', msCb.checked); updateBulkBar(); }
+      return;
+    }
+    if (card.classList.contains('actions-open')) { closeCardMenu(); return; }
+    if (item.isDir) { searchInp.value = ''; loadDir(item.path); return; }
+    if (item.isVideo || item.isImage || item.isAudio) {
+      const mi = S.mediaItems.findIndex(m => m.path === item.path);
+      S.modalIdx = mi;
+      openModal(S.mediaItems[mi]);
+    }
+  });
+
+  // Long-press → action menu
+  if (!item.isDir) {
+    let pressTimer;
+    card.addEventListener('touchstart', () => {
+      pressTimer = setTimeout(() => { closeCardMenu(); card.classList.add('actions-open'); S.activeCard = card; }, 500);
+    }, { passive: true });
+    card.addEventListener('touchend', () => clearTimeout(pressTimer), { passive: true });
+    card.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true });
+
+    const favBtnEl = card.querySelector('.act-fav');
+    const delBtnEl = card.querySelector('.act-del');
+    if (favBtnEl) favBtnEl.onclick = e => { e.stopPropagation(); closeCardMenu(); doFavorite(item, card); };
+    if (delBtnEl) delBtnEl.onclick = e => { e.stopPropagation(); closeCardMenu(); doDelete(item, card); };
+  }
+
+  return card;
+}
+
+function closeCardMenu() {
+  if (S.activeCard) { S.activeCard.classList.remove('actions-open'); S.activeCard = null; }
+}
+document.addEventListener('touchstart', e => {
+  if (S.activeCard && !S.activeCard.contains(e.target)) closeCardMenu();
+}, { passive: true });
+
+// ── Pagination ────────────────────────────────────────────────────────────
+function renderPager(data) {
+  const pagerTop = $('pagerTop');
+  if (data.pages <= 1) { pager.innerHTML = ''; pagerTop.innerHTML = ''; return; }
+  pager.innerHTML = '';
+  const { page, pages } = data;
+
+  const addBtn = (label, p, disabled, active) => {
+    const b = document.createElement('button');
+    b.className = 'pg-btn' + (active ? ' cur' : '');
+    b.textContent = label;
+    b.disabled = disabled;
+    if (!disabled) b.onclick = () => { window.scrollTo(0, 0); loadDir(S.dir, p, false); };
+    pager.appendChild(b);
+  };
+  const addDots = () => {
+    const s = document.createElement('span'); s.className = 'pg-dots'; s.textContent = '…'; pager.appendChild(s);
+  };
+
+  addBtn('‹', page - 1, page === 1, false);
+
+  const pageNums = new Set([1, pages]);
+  for (let p = Math.max(2, page - 2); p <= Math.min(pages - 1, page + 2); p++) pageNums.add(p);
+  const sorted = [...pageNums].sort((a, b) => a - b);
+
+  let prev = 0;
+  for (const p of sorted) {
+    if (p - prev > 1) addDots();
+    addBtn(String(p), p, false, p === page);
+    prev = p;
+  }
+
+  addBtn('›', page + 1, page === pages, false);
+
+  // Clone to top pager
+  pagerTop.innerHTML = '';
+  pager.querySelectorAll('button, span').forEach(el => {
+    const clone = el.cloneNode(true);
+    if (clone.onclick === undefined && el.onclick) {
+      // re-bind click from original
+    }
+    pagerTop.appendChild(clone);
+  });
+  pagerTop.querySelectorAll('button').forEach((btn, i) => {
+    const orig = pager.querySelectorAll('button')[i];
+    if (orig && !orig.disabled) {
+      btn.onclick = orig.onclick;
+    }
+  });
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────
+function openModal(item) {
+  if (!item) return;
+  stopMedia();
+  modalBody.innerHTML = '';
+  modalLabel.textContent = item.name;
+
+  if (item.isVideo) {
+    const v = document.createElement('video');
+    v.src = `/file/${enc(item.path)}`;
+    v.controls = true; v.playsinline = true; v.autoplay = true; v.loop = true;
+    v.muted = S.videoMuted;
+    modalBody.appendChild(v);
+    modalMute.style.display = '';
+    modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
+  } else {
+    modalMute.style.display = 'none';
+  }
+  if (item.isImage) {
+    const img = document.createElement('img');
+    img.src = `/file/${enc(item.path)}`; img.alt = item.name;
+    modalBody.appendChild(img);
+  } else if (item.isAudio) {
+    const wrap = document.createElement('div'); wrap.className = 'modal-audio-wrap';
+    wrap.innerHTML = '<div style="font-size:64px">🎵</div>';
+    const a = document.createElement('audio');
+    a.src = `/file/${enc(item.path)}`; a.controls = true; a.autoplay = true;
+    wrap.appendChild(a); modalBody.appendChild(wrap);
+  }
+
+  const hasPrev = S.modalIdx > 0;
+  const hasNext = S.modalIdx < S.mediaItems.length - 1;
+  modalPrev.disabled = !hasPrev;
+  modalNext.disabled = !hasNext;
+
+  mFavBtn.onclick = () => doFavorite(item, null, true);
+  mDelBtn.onclick = () => doDelete(item, null, true);
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  stopMedia();
+  modal.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function stopMedia() {
+  const m = modalBody.querySelector('video,audio');
+  if (m) { m.pause(); m.src = ''; }
+}
+
+modalClose.onclick = closeModal;
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+modalPrev.onclick = () => { if (S.modalIdx > 0) { S.modalIdx--; openModal(S.mediaItems[S.modalIdx]); } };
+modalNext.onclick = () => { if (S.modalIdx < S.mediaItems.length - 1) { S.modalIdx++; openModal(S.mediaItems[S.modalIdx]); } };
+modalMute.onclick = () => {
+  S.videoMuted = !S.videoMuted;
+  const v = modalBody.querySelector('video');
+  if (v) v.muted = S.videoMuted;
+  modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
+};
+
+// Swipe in modal
+let tx0 = 0;
+modal.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
+modal.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - tx0;
+  if (Math.abs(dx) > 55) { if (dx > 0) modalPrev.click(); else modalNext.click(); }
+}, { passive: true });
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (!modal.classList.contains('open')) return;
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'ArrowLeft') modalPrev.click();
+  if (e.key === 'ArrowRight') modalNext.click();
+});
+
+// ── Favorite ──────────────────────────────────────────────────────────────
+async function doFavorite(item, cardEl, fromModal = false) {
+  confirm(
+    'Add to Favorites',
+    `Move "${item.name}" to the Favorites folder?`,
+    '⭐ Move',
+    'btn-fav',
+    async () => {
+      try {
+        const r = await fetch('/api/favorite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: item.path }),
+        }).then(r => r.json());
+        if (r.error) throw new Error(r.error);
+        showToast('⭐ Moved to Favorites');
+        if (fromModal) closeModal();
+        // Remove card from grid
+        if (cardEl) cardEl.remove();
+        else refreshCurrentPage();
+      } catch (err) {
+        showToast('Error: ' + err.message);
+      }
+    }
+  );
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────
+async function doDelete(item, cardEl, fromModal = false) {
+  confirm(
+    'Delete File',
+    `Permanently delete "${item.name}"? This cannot be undone.`,
+    '🗑 Delete',
+    '',
+    async () => {
+      try {
+        const r = await fetch('/api/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: item.path }),
+        }).then(r => r.json());
+        if (r.error) throw new Error(r.error);
+        showToast('🗑 Deleted');
+        if (fromModal) closeModal();
+        if (cardEl) cardEl.remove();
+        else refreshCurrentPage();
+      } catch (err) {
+        showToast('Error: ' + err.message);
+      }
+    }
+  );
+}
+
+function refreshCurrentPage() {
+  loadDir(S.dir, S.page, false);
+}
+
+// ── Metadata Viewer ──────────────────────────────────────────────────────
+function openMetadataPage(item) {
+  const params = new URLSearchParams({
+    path: item.path,
+    name: item.name,
+    type: item.isVideo ? 'video' : item.isImage ? 'image' : 'audio',
+  });
+  location.href = '/inspect?' + params.toString() + '&_=' + Date.now();
+}
+
+// ── Claude Panel ─────────────────────────────────────────────────────────
+function openClaudePanel() {
+  claudePanel.classList.add('open');
+  showClaudeList();
+  checkClaudeKey();
+}
+const claudePanel  = $('claudePanel');
+const claudeCloseBtn = $('claudeCloseBtn');
+const claudeCloseBtn2 = $('claudeCloseBtn2');
+const claudeListView = $('claudeListView');
+const claudeChatView = $('claudeChatView');
+const claudeConvos = $('claudeConvos');
+const claudeBackBtn = $('claudeBackBtn');
+const claudeChatTitle = $('claudeChatTitle');
+const claudeMsgs   = $('claudeMsgs');
+const claudeTyping = $('claudeTyping');
+const claudeInput  = $('claudeInput');
+const claudeSendBtn = $('claudeSendBtn');
+const claudeStopBtn = $('claudeStopBtn');
+let claudeRunning = false;
+let currentSessionId = null;
+
+function closeClaudePanel() {
+  claudePanel.classList.remove('open');
+}
+
+function showClaudeList() {
+  claudeListView.style.display = '';
+  claudeChatView.style.display = 'none';
+  loadConversations();
+}
+
+function showClaudeChat(sessionId, title) {
+  currentSessionId = sessionId;
+  claudeListView.style.display = 'none';
+  claudeChatView.style.display = 'flex';
+  claudeChatTitle.textContent = title || 'New Chat';
+  if (!sessionId) {
+    claudeMsgs.innerHTML = '';
+  }
+  claudeInput.focus();
+}
+
+function timeAgo(dateStr) {
+  const s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+async function loadConversations() {
+  try {
+    const convos = await fetch('/api/claude/conversations').then(r => r.json());
+    // Sort by most recent
+    convos.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    claudeConvos.innerHTML = '';
+    // New chat button
+    const newBtn = document.createElement('button');
+    newBtn.className = 'claude-new-chat';
+    newBtn.textContent = '+ New Chat';
+    newBtn.onclick = () => showClaudeChat(null, 'New Chat');
+    claudeConvos.appendChild(newBtn);
+    // Conversation items
+    for (const c of convos) {
+      const item = document.createElement('div');
+      item.className = 'claude-convo-item';
+      item.innerHTML = `
+        <div class="claude-convo-info">
+          <div class="claude-convo-title">${esc(c.title)}</div>
+          <div class="claude-convo-meta">${timeAgo(c.updatedAt)} · ${c.messageCount || 1} msg${(c.messageCount || 1) !== 1 ? 's' : ''}</div>
+        </div>
+        <button class="claude-convo-del" title="Delete">✕</button>`;
+      item.querySelector('.claude-convo-info').onclick = () => {
+        claudeMsgs.innerHTML = '';
+        showClaudeChat(c.id, c.title);
+      };
+      item.querySelector('.claude-convo-del').onclick = async (e) => {
+        e.stopPropagation();
+        await fetch('/api/claude/conversations', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: c.id }),
+        });
+        item.remove();
+      };
+      claudeConvos.appendChild(item);
+    }
+  } catch (err) {
+    claudeConvos.innerHTML = `<div style="color:var(--text3);text-align:center;padding:20px">Error loading conversations</div>`;
+  }
+}
+
+claudeCloseBtn.onclick = closeClaudePanel;
+claudeCloseBtn2.onclick = closeClaudePanel;
+claudeBackBtn.onclick = () => {
+  if (claudeRunning) return; // don't leave while running
+  showClaudeList();
+};
+
+function addClaudeMsg(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'claude-msg ' + cls;
+  if (cls === 'assistant') {
+    div.innerHTML = formatClaudeText(text);
+  } else {
+    div.textContent = text;
+  }
+  claudeMsgs.appendChild(div);
+  claudeMsgs.scrollTop = claudeMsgs.scrollHeight;
+  return div;
+}
+
+function formatClaudeText(text) {
+  let html = esc(text);
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  return html;
+}
+
+function setClaudeBusy(busy) {
+  claudeRunning = busy;
+  claudeTyping.classList.toggle('vis', busy);
+  claudeSendBtn.style.display = busy ? 'none' : 'flex';
+  claudeStopBtn.classList.toggle('vis', busy);
+  claudeSendBtn.disabled = busy;
+}
+
+async function sendClaude() {
+  const prompt = claudeInput.value.trim();
+  if (!prompt || claudeRunning) return;
+
+  addClaudeMsg(prompt, 'user');
+  claudeInput.value = '';
+  claudeInput.style.height = 'auto';
+  setClaudeBusy(true);
+
+  let assistantDiv = null;
+  let assistantText = '';
+
+  try {
+    const resp = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, sessionId: currentSessionId }),
+    });
+
+    if (resp.status === 409) {
+      const data = await resp.json();
+      addClaudeMsg(data.error, 'system-msg');
+      setClaudeBusy(false);
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split('\n');
+      sseBuffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6);
+
+        try {
+          const evt = JSON.parse(jsonStr);
+
+          // stream-json format: {"type":"assistant","message":{"content":[...]}}
+          if (evt.type === 'assistant' && evt.message) {
+            // Each assistant event is a new turn — start fresh bubble
+            assistantDiv = null;
+            assistantText = '';
+            const content = evt.message.content || [];
+            for (const block of content) {
+              if (block.type === 'text' && block.text) {
+                assistantText += block.text;
+                if (!assistantDiv) {
+                  assistantDiv = addClaudeMsg(assistantText, 'assistant');
+                } else {
+                  assistantDiv.innerHTML = formatClaudeText(assistantText);
+                  claudeMsgs.scrollTop = claudeMsgs.scrollHeight;
+                }
+              } else if (block.type === 'tool_use') {
+                addClaudeMsg('Tool: ' + (block.name || ''), 'tool-msg');
+              } else if (block.type === 'tool_result') {
+                // Show truncated tool output
+                const txt = typeof block.content === 'string'
+                  ? block.content.substring(0, 300)
+                  : JSON.stringify(block.content).substring(0, 300);
+                if (txt) addClaudeMsg(txt, 'tool-msg');
+              }
+            }
+          } else if (evt.type === 'result') {
+            // Final result — show if we missed the assistant text
+            if (evt.result && !assistantText) {
+              assistantText = evt.result;
+              assistantDiv = addClaudeMsg(assistantText, 'assistant');
+            }
+            if (evt.total_cost_usd !== undefined) {
+              addClaudeMsg('Cost: $' + evt.total_cost_usd.toFixed(4), 'system-msg');
+            }
+          } else if (evt.type === 'system') {
+            if (evt.session_id) currentSessionId = evt.session_id;
+            if (evt.subtype !== 'init') {
+              addClaudeMsg(evt.message || JSON.stringify(evt), 'system-msg');
+            }
+          } else if (evt.type === 'error') {
+            addClaudeMsg(evt.message || JSON.stringify(evt), 'system-msg');
+          } else if (evt.type === 'done') {
+            if (evt.sessionId) currentSessionId = evt.sessionId;
+            // Update chat title if this was a new chat
+            if (claudeChatTitle.textContent === 'New Chat' && currentSessionId) {
+              claudeChatTitle.textContent = prompt.substring(0, 60);
+            }
+          }
+        } catch (parseErr) {
+          if (jsonStr.trim()) {
+            assistantText += jsonStr;
+            if (!assistantDiv) {
+              assistantDiv = addClaudeMsg(assistantText, 'assistant');
+            } else {
+              assistantDiv.innerHTML = formatClaudeText(assistantText);
+            }
+          }
+        }
+      }
+    }
+
+    if (!assistantDiv && !assistantText) {
+      addClaudeMsg('(No response)', 'system-msg');
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      addClaudeMsg('Connection error: ' + err.message, 'system-msg');
+    }
+  }
+
+  setClaudeBusy(false);
+}
+
+claudeSendBtn.onclick = sendClaude;
+claudeInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendClaude();
+  }
+});
+
+claudeInput.addEventListener('input', () => {
+  claudeInput.style.height = 'auto';
+  claudeInput.style.height = Math.min(claudeInput.scrollHeight, 120) + 'px';
+});
+
+claudeStopBtn.onclick = async () => {
+  try {
+    await fetch('/api/claude/stop', { method: 'POST' });
+    addClaudeMsg('Stopped', 'system-msg');
+  } catch {}
+  setClaudeBusy(false);
+};
+
+// Escape closes Claude panel or goes back to list
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && claudePanel.classList.contains('open') && !modal.classList.contains('open')) {
+    if (claudeChatView.style.display !== 'none' && !claudeRunning) {
+      showClaudeList();
+    } else {
+      closeClaudePanel();
+    }
+  }
+});
+
+// ── Pull to Refresh ──────────────────────────────────────────────────────
+(function() {
+  const ptr = $('ptrIndicator');
+  let startY = 0, pulling = false, triggered = false;
+  const threshold = 80;
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0 && !document.body.style.overflow) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+      triggered = false;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0 && window.scrollY === 0) {
+      const h = Math.min(dy * 0.5, threshold);
+      ptr.style.height = h + 'px';
+      ptr.classList.add('pulling');
+      ptr.innerHTML = dy > threshold ? '<span>↑ Release to refresh</span>' : '<span>↓ Pull to refresh</span>';
+      if (dy > threshold) triggered = true;
+    } else {
+      ptr.style.height = '0';
+      ptr.classList.remove('pulling');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    ptr.classList.remove('pulling');
+    if (triggered) {
+      ptr.style.height = '40px';
+      ptr.innerHTML = '<span class="ptr-spinner"></span>';
+      refreshCurrentPage();
+      setTimeout(() => { ptr.style.height = '0'; }, 1000);
+    } else {
+      ptr.style.height = '0';
+    }
+  }, { passive: true });
+})();
+
+// ── Init ──────────────────────────────────────────────────────────────────
+const initDir = new URLSearchParams(location.search).get('dir') || null;
+if (initDir) {
+  loadDir(initDir, 1, false);
+} else {
+  // Fetch dir info to get comfyOutputDir, then show home landing
+  fetch('/api/list?dir=&limit=1').then(r => r.json()).then(data => {
+    if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
+    if (data.favoritesDir) S.favDir = data.favoritesDir;
+    showHomeLanding();
+  }).catch(() => loadDir('', 1, false));
+}
+// requireApiKey() is provided by /key-prompt.js (shared across pages).
+
+// Claude: surface a non-blocking banner when no Anthropic key is set (the CLI may
+// still work via a global login, so this informs rather than gates).
+async function checkClaudeKey(){
+  const banner=$('claudeKeyBanner');
+  try{
+    const s=await fetch('/api/settings').then(r=>r.json());
+    banner.style.display = (s.keys && s.keys.anthropicApiKey && s.keys.anthropicApiKey.set) ? 'none' : 'block';
+  }catch{ banner.style.display='none'; }
+}
+$('claudeAddKeyBtn').onclick = async () => {
+  if (await requireApiKey('anthropicApiKey','Claude (Anthropic)','https://console.anthropic.com/settings/keys')) $('claudeKeyBanner').style.display='none';
+};
+
+// ── Status / Setup ──────────────────────────────────────────────────────────
+function openStatusPanel() {
+  const ov = $('statusOverlay');
+  ov.classList.add('open');
+  loadStatus();
+}
+function loadStatus() {
+  const list = $('statusList');
+  list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">Checking services…</div>';
+  fetch('/api/status').then(r => r.json()).then(d => {
+    list.innerHTML = '';
+    (d.services || []).forEach(s => {
+      const color = s.running ? 'var(--green)' : (s.configured ? 'var(--amber)' : 'var(--red)');
+      const state = s.running ? 'OK' : (s.configured ? 'Not running' : 'Not set up');
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:10px;padding:11px 4px;border-bottom:1px solid var(--surface2);align-items:flex-start';
+      row.innerHTML = '<span style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:4px;background:' + color + '"></span>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:14px;font-weight:600;color:var(--text)">' + esc(s.name)
+        + ' <span style="font-weight:400;font-size:11px;color:' + color + '">' + state + '</span></div>'
+        + '<div style="font-size:12px;color:var(--text2);word-break:break-word">' + esc(s.detail) + '</div>'
+        + '<div style="font-size:11px;color:var(--text3)">Needed for: ' + esc(s.affects) + '</div>'
+        + '</div>';
+      list.appendChild(row);
+    });
+  }).catch(e => { list.innerHTML = '<div style="padding:16px;color:var(--red);font-size:12px">' + esc(e.message) + '</div>'; });
+}
+$('statusClose').onclick = () => $('statusOverlay').classList.remove('open');
+$('statusOverlay').addEventListener('click', e => { if (e.target === $('statusOverlay')) $('statusOverlay').classList.remove('open'); });
+$('statusRefresh').onclick = loadStatus;
+$('statusOpenSettings').onclick = () => { $('statusOverlay').classList.remove('open'); $('settingsBtn').click(); };
+
+// ── Prompt word directory ──────────────────────────────────────────────────
+(function(){
+  const overlay = $('wordsOverlay');
+  let words = [];           // [{t, n}]
+  let byCount = true;       // default sort: times found
+  const close = () => overlay.classList.remove('open');
+
+  function render(){
+    const filter = $('wordsFilter').value.trim().toLowerCase();
+    let list = filter ? words.filter(w => w.t.includes(filter)) : words;
+    list = list.slice().sort(byCount
+      ? (a,b) => b.n - a.n || a.t.localeCompare(b.t)
+      : (a,b) => a.t.localeCompare(b.t));
+    $('wordsSortBtn').textContent = byCount ? 'Times ↓' : 'A-Z';
+    const el = $('wordsList');
+    el.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    list.slice(0, 800).forEach(w => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--surface2)';
+      row.innerHTML = '<span style="flex:1;word-break:break-all">' + esc(w.t) + '</span><span style="color:var(--text3);flex:none">' + w.n + '</span>';
+      row.onclick = () => {
+        close();
+        searchInp.value = w.t;
+        loadDir(S.dir, 1, false);
+      };
+      frag.appendChild(row);
+    });
+    el.appendChild(frag);
+    if (!list.length) el.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">No matches</div>';
+    $('wordsCount').textContent = list.length + ' phrases';
+  }
+
+  $('wordsBtn').onclick = () => {
+    overlay.classList.add('open');
+    $('wordsList').innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">Loading…</div>';
+    fetch('/api/prompt-words').then(r => r.json()).then(d => {
+      words = d.words || [];
+      render();
+    }).catch(e => { $('wordsList').innerHTML = '<div style="padding:16px;color:var(--red);font-size:12px">' + esc(e.message) + '</div>'; });
+  };
+  $('wordsClose').onclick = close;
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('wordsSortBtn').onclick = () => { byCount = !byCount; render(); };
+  $('wordsFilter').addEventListener('input', render);
+})();
+
+// ── Settings ───────────────────────────────────────────────────────────────
+(function(){
+  const overlay = $('settingsOverlay');
+  const escHtml = s => { const d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; };
+  const close = () => overlay.classList.remove('open');
+
+  function open(){
+    fetch('/api/settings').then(r=>r.json()).then(s=>{
+      document.querySelectorAll('.set-field[data-key]').forEach(f=>{
+        const info = (s.keys||{})[f.dataset.key] || {};
+        const inp = f.querySelector('input');
+        inp.value=''; inp.dataset.dirty=''; inp.dataset.clear='';
+        inp.placeholder = info.set ? info.hint : 'not set';
+      });
+      document.querySelectorAll('.set-field[data-url]').forEach(f=>{
+        f.querySelector('input').value = (s.urls||{})[f.dataset.url] || '';
+      });
+      document.querySelectorAll('.set-field[data-path]').forEach(f=>{
+        const p = (s.paths||{})[f.dataset.path] || {};
+        f.querySelector('input').value = p.value || '';
+        const state = $(f.dataset.path + 'State');
+        if (state) {
+          state.textContent = !p.value ? '' : p.exists
+            ? (f.dataset.path === 'comfyDir' && p.hasWorkflows === false ? '⚠ no workflows dir inside' : '✓')
+            : '✗ missing';
+          state.style.color = p.exists && p.hasWorkflows !== false ? 'var(--green)' : 'var(--amber)';
+        }
+      });
+      const i = s.info || {};
+      $('settingsInfo').innerHTML = [
+        ['HTTP port', i.port], ['HTTPS port', i.httpsPort], ['Media dir', i.mediaDir]
+      ].map(([a,b])=>'<div><b style="color:var(--text)">'+a+':</b> '+escHtml(b)+'</div>').join('');
+      overlay.classList.add('open');
+    }).catch(e=>showToast('Settings load failed: '+e.message));
+  }
+
+  $('settingsBtn').onclick = open;
+  $('settingsCloseBtn').onclick = close;
+  $('settingsCancel').onclick = close;
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+
+  document.querySelectorAll('.set-field[data-key] input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ inp.dataset.dirty='1'; inp.dataset.clear=''; });
+  });
+  document.querySelectorAll('.set-field[data-key] .set-clr').forEach(btn=>{
+    btn.onclick = ()=>{ const inp=btn.closest('.set-row').querySelector('input'); inp.value=''; inp.placeholder='(will clear on save)'; inp.dataset.clear='1'; inp.dataset.dirty=''; };
+  });
+
+  $('settingsSave').onclick = async ()=>{
+    const payload = {};
+    document.querySelectorAll('.set-field[data-key]').forEach(f=>{
+      const inp = f.querySelector('input');
+      if (inp.dataset.clear==='1') payload[f.dataset.key] = null;             // clear
+      else if (inp.dataset.dirty==='1' && inp.value.trim()!=='') payload[f.dataset.key] = inp.value.trim();
+      // blank + untouched -> omit (leave key unchanged)
+    });
+    document.querySelectorAll('.set-field[data-url]').forEach(f=>{
+      const v = f.querySelector('input').value.trim();
+      if (v !== '') payload[f.dataset.url] = v;
+    });
+    document.querySelectorAll('.set-field[data-path]').forEach(f=>{
+      const v = f.querySelector('input').value.trim();
+      if (v !== '') payload[f.dataset.path] = v;
+    });
+    try {
+      const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      const d = await r.json();
+      if (d.ok) { showToast(d.warning ? '⚠ Saved — ' + d.warning : '✓ Settings saved', d.warning ? 5000 : 2200); close(); }
+      else showToast('Save failed: ' + (d.error || r.status));
+    } catch(e){ showToast('Error: ' + e.message); }
+  };
+
+  // ── Folder picker (browses server-side dirs via /api/browse-dirs) ──
+  const picker = $('dirPicker');
+  let pickerTarget = null;   // the input the selection lands in
+  let pickerPath = '';
+  function pickerClose(){ picker.classList.remove('open'); }
+  async function pickerLoad(p){
+    try {
+      const r = await fetch('/api/browse-dirs?path=' + encodeURIComponent(p));
+      const d = await r.json();
+      if (d.error) { if (p !== '') { pickerLoad(''); } else { showToast('Cannot open: ' + d.error); } return; }
+      pickerPath = d.path;
+      $('dirCurrent').textContent = d.path || 'Drives';
+      $('dirUpBtn').disabled = d.parent === null;
+      $('dirUpBtn').dataset.parent = d.parent === null ? '' : d.parent;
+      $('dirPickerSelect').style.visibility = d.path ? 'visible' : 'hidden';
+      const list = $('dirList');
+      list.innerHTML = '';
+      if (!d.dirs.length) list.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text3)">No subfolders</div>';
+      d.dirs.forEach(name=>{
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:9px 12px;font-size:13px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--surface2)';
+        row.textContent = '📁 ' + name;
+        row.onclick = ()=> pickerLoad(d.path ? (d.path.replace(/[\\\/]+$/,'') + '\\' + name) : name);
+        list.appendChild(row);
+      });
+    } catch(e){ showToast('Browse error: ' + e.message); }
+  }
+  document.querySelectorAll('.set-browse').forEach(btn=>{
+    btn.onclick = ()=>{
+      pickerTarget = btn.closest('.set-row').querySelector('input');
+      picker.classList.add('open');
+      pickerLoad(pickerTarget.value.trim() || '');
+    };
+  });
+  $('dirUpBtn').onclick = function(){ pickerLoad(this.dataset.parent || ''); };
+  $('dirPickerClose').onclick = pickerClose;
+  $('dirPickerCancel').onclick = pickerClose;
+  picker.addEventListener('click', e=>{ if(e.target===picker) pickerClose(); });
+  $('dirPickerSelect').onclick = ()=>{
+    if (pickerTarget && pickerPath) pickerTarget.value = pickerPath;
+    pickerClose();
+  };
+})();
+</script>
+</body>
+</html>

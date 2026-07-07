@@ -1,0 +1,14 @@
+{
+  "name": "comfy-remix",
+  "version": "1.0.0",
+  "description": "Local media browser and curator for AI-generated content with Claude Code integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js 8080",
+    "restart": "node restart.js"
+  },
+  "keywords": ["media-browser", "comfyui", "claude-code"],
+  "license": "MIT",
+  "private": true
+}

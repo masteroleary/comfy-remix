@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workflow</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:16px}
+.top-bar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.top-bar h1{font-size:16px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-back{background:#2c2c2e;color:#f2f2f7}.btn-back:hover{background:#3a3a3c}
+.btn-run{background:#30d158;color:#000}.btn-run:hover{background:#28b84c}.btn-run:active{transform:scale(.97)}.btn-run:disabled{opacity:.5;cursor:not-allowed}
+.btn-copy{background:#2c2c2e;color:#f2f2f7}.btn-copy:hover{background:#3a3a3c}
+.btn-cancel{background:#ff453a;color:#fff}.btn-cancel:hover{background:#d63030}
+.status{font-size:13px;color:#8e8e93;margin-left:8px}
+.media-wrap{margin:16px 0;max-width:800px}
+.media-wrap img,.media-wrap video{width:100%;border-radius:10px;display:block}
+.meta-section{margin:16px 0}
+.meta-section h2{font-size:14px;color:#8e8e93;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.meta-section pre{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7}
+.node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.node-card{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px}
+.node-type{font-size:13px;font-weight:600;color:#0a84ff;margin-bottom:4px}
+.node-title{font-size:11px;color:#8e8e93;margin-bottom:6px}
+.node-input{font-size:11px;color:#b0b0b5;line-height:1.5}
+.node-input .key{color:#bf5af2}.node-input .val{color:#f2f2f7}
+.loading{text-align:center;color:#8e8e93;padding:40px;font-size:14px}
+.summary-section{margin:12px 0}
+.summary-label{font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.summary-val{font-size:13px;color:#f2f2f7;margin-bottom:10px;line-height:1.5;word-break:break-word}
+.summary-val .tag{display:inline-block;background:#2c2c2e;border:1px solid #38383a;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:12px}
+.accordion{border:1px solid #38383a;border-radius:8px;margin:12px 0;overflow:hidden}
+.accordion-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1c1c1e;cursor:pointer;user-select:none}
+.accordion-hdr h2{font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin:0}
+.accordion-arrow{color:#8e8e93;transition:transform .2s;font-size:12px}
+.accordion.open .accordion-arrow{transform:rotate(90deg)}
+.accordion-body{display:none;padding:12px 14px;background:#0d0d0d}
+.accordion.open .accordion-body{display:block}
+.exec-panel{margin:12px 0;display:none}.exec-panel.vis{display:block}
+.progress-wrap{background:#1c1c1e;border-radius:6px;height:8px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:#0a84ff;border-radius:6px;width:0%;transition:width .3s}
+.progress-fill.done{background:#30d158}.progress-fill.err{background:#ff453a}
+.exec-log{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px;font-size:11px;font-family:monospace;max-height:200px;overflow-y:auto;color:#b0b0b5;margin-top:8px;white-space:pre-wrap}
+.exec-log .log-done{color:#30d158}.exec-log .log-err{color:#ff453a}
+.tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid #38383a}
+.tab{padding:10px 20px;background:none;border:none;color:#8e8e93;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:#f2f2f7;border-bottom-color:#0a84ff}.tab:hover{color:#f2f2f7}
+.tab-content{display:none}.tab-content.active{display:block}
+.run-controls{display:flex;gap:8px;align-items:center;margin:12px 0}
+.nodes-section h2{font-size:16px;margin-bottom:8px}
+.node-search{width:100%;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px;font-size:13px;margin-bottom:10px}
+.node-search:focus{outline:none;border-color:#0a84ff}
+.node-card.editable{cursor:pointer}.node-card.editable .node-hdr:hover{color:#0a84ff}
+.node-card.editing{border-color:#0a84ff}
+.node-card.edited{border-color:#30d158}
+.node-card.hidden{display:none}
+.node-edit-form{margin-top:8px;padding-top:8px;border-top:1px solid #38383a}
+.edit-label{display:block;font-size:11px;color:#8e8e93;margin-top:8px;margin-bottom:2px}
+.edit-input{width:100%;background:#0d0d0d;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:8px;font-size:13px;font-family:inherit}
+.edit-input:focus{outline:none;border-color:#0a84ff}
+textarea.edit-input{resize:vertical;line-height:1.4}
+.edit-actions{display:flex;gap:8px;margin-top:8px}
+.btn-apply{background:#1b3a1b;color:#34c759;border-color:#34c759}
+.btn-edit-cancel{background:#2c2c2e;color:#8e8e93;border-color:#48484a}
+.lora-row{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1c1c1e;border:1px solid #38383a;border-radius:8px;margin-bottom:4px}
+.lora-row label{flex:1;font-size:12px;color:#f2f2f7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.lora-row input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#0a84ff}
+.lora-row input[type=number]{width:60px;background:#0d0d0d;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:4px 6px;font-size:12px;text-align:center}
+.lora-row.off label{color:#636366;text-decoration:line-through}
+</style></head><body>
+<div class="top-bar" style="flex-direction:column;gap:4px">
+  <h1 style="width:100%;font-size:13px;color:#8e8e93;font-weight:400" id="fileNameHdr"></h1>
+  <div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap">
+    <button class="btn btn-back" onclick="location.href='/'" style="font-size:18px;padding:8px 12px" title="Home">⌂</button>
+    <button class="btn btn-back" onclick="history.back()">← Back</button>
+    <button class="btn" id="favBtn" style="background:#2d2a1e;color:#ffd60a;border-color:#ffd60a">⭐ Fav</button>
+    <button class="btn" id="delBtn" style="background:#3a1e1e;color:#ff453a;border-color:#ff453a">🗑 Del</button>
+    <span class="status" id="status">Loading metadata...</span>
+  </div>
+</div>
+<div class="tabs">
+  <button class="tab active" data-tab="workflow">Workflow</button>
+  <button class="tab" data-tab="preview">Preview</button>
+</div>
+<div class="tab-content active" id="tab-workflow">
+  <div id="runSection" style="display:none">
+    <div class="run-controls">
+      <select id="workflowSelect" style="background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:600;cursor:pointer;min-width:120px">
+        <option value="inherit">Inherit</option>
+      </select>
+      <button class="btn" id="manageWfBtn" title="Manage workflows" style="padding:10px 12px">⚙</button>
+      <select id="runCountSelect" style="background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:600;cursor:pointer">
+        <option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="5">5x</option><option value="10">10x</option><option value="20">20x</option>
+      </select>
+      <select id="framesSelect" style="display:none;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:600;cursor:pointer">
+        <option value="inherit">Frms: Inherit</option>
+        <option value="49">Frms: 49</option>
+        <option value="121">Frms: 121</option>
+      </select>
+      <button class="btn btn-run" id="runBtn">▶ Run</button>
+      <button class="btn btn-cancel" id="cancelBtn" style="display:none">■ Cancel</button>
+      <span id="runProgress" style="font-size:13px;color:#8e8e93"></span>
+    </div>
+    <div id="promptSection" style="display:none;margin:8px 0">
+      <textarea id="promptInput" rows="4" placeholder="Prompt text..." style="width:100%;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      <button class="btn" id="copyImgPromptBtn" style="display:none;margin-top:4px;font-size:12px;padding:6px 12px" title="Replace the workflow prompt with the prompt embedded in this image">📷 Use image's prompt</button>
+    </div>
+    <div id="genSection" style="display:none;margin:8px 0;display:none">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <label id="seedField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Seed
+          <span style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="seedInput" placeholder="random" min="0" step="1" style="width:150px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+            <button class="btn" id="seedPinBtn" title="Pin seed (reuse this exact seed every run)" style="padding:8px 10px;opacity:.45">📌</button>
+            <button class="btn" id="seedRandomBtn" title="Randomize (new seed every run)" style="padding:8px 10px">🎲</button>
+          </span>
+        </label>
+        <label id="stepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Steps
+          <input type="number" id="stepsInput" min="1" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+      </div>
+    </div>
+    <div id="presetSection" style="display:none;margin:8px 0">
+      <div style="font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Realism / Style Presets <span style="text-transform:none;letter-spacing:0">— each checked preset runs separately (Presets × Runs)</span></div>
+      <div id="presetList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+    <div id="loraSection" style="display:none;margin:8px 0">
+      <div style="font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">LoRAs</div>
+      <div id="loraList"></div>
+    </div>
+    <details id="replaceSection" style="margin:8px 0;background:#1c1c1e;border:1px solid #38383a;border-radius:8px">
+      <summary style="cursor:pointer;padding:9px 12px;font-size:12px;user-select:none">
+        <span style="text-transform:uppercase;letter-spacing:.5px;color:#8e8e93">Prompt Replacements</span><span id="replaceSummary" style="color:#8e8e93"></span>
+      </summary>
+      <div style="padding:2px 12px 12px">
+        <div style="font-size:11px;color:#8e8e93;margin-bottom:8px">Enabled rules are applied to the prompt right before each run (case-insensitive, all matches). Edited words turn the ✕ into ✓ — tap to save.</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#8e8e93;margin-bottom:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="replaceAllToggle" style="width:16px;height:16px;flex:none;accent-color:#0a84ff"> Toggle all on/off
+        </label>
+        <div id="replaceList"></div>
+        <button class="btn" id="addReplaceBtn" style="margin-top:6px;font-size:12px;padding:6px 12px">+ Add replacement</button>
+      </div>
+    </details>
+    <div class="exec-panel" id="execPanel">
+      <div class="progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="exec-log" id="execLog"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" id="saveLogBtn" onclick="saveLog()">Save Log</button></div>
+    </div>
+    <div id="outputBrowser" style="display:none;margin-top:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <h3 style="font-size:14px;color:#8e8e93;margin:0">Generated Files</h3>
+        <div id="outputBulkActions" style="display:none;margin-left:auto;display:flex;gap:6px">
+          <button class="btn" id="outputSaveSelBtn" title="Move selected to Favorites" style="font-size:11px;padding:4px 10px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
+          <button class="btn" id="outputDelSelBtn" style="font-size:11px;padding:4px 10px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
+        </div>
+      </div>
+      <div id="outputGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px"></div>
+    </div>
+  </div>
+  <div id="metaContent"><div class="loading">Loading metadata...</div></div>
+</div>
+<div class="tab-content" id="tab-preview">
+  <div class="media-wrap">
+    
+  </div>
+</div>
+<div id="manageOverlay" style="display:none;position:fixed;inset:0;z-index:110;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:16px">
+  <div style="background:#1c1c1e;border:1px solid #48484a;border-radius:12px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid #333">
+      <h3 style="margin:0;font-size:16px;color:#f2f2f7">Manage Workflows</h3>
+      <span style="font-size:12px;color:#8e8e93">Tick to expose in the app; set which node is prompt / steps / seed.</span>
+      <button id="manageClose" style="margin-left:auto;background:none;border:none;color:#f2f2f7;font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <div id="manageList" style="overflow:auto;padding:8px 12px;flex:1"><div class="loading" style="padding:20px;color:#8e8e93">Loading…</div></div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #333">
+      <span id="manageStatus" style="font-size:12px;color:#8e8e93;align-self:center"></span>
+      <button class="btn" id="manageSave" style="margin-left:auto;background:#2d5a1e;color:#a8e06c;padding:8px 16px">Save</button>
+    </div>
+  </div>
+</div>
+<div id="outputOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.95);display:none;flex-direction:column;align-items:center;justify-content:center">
+  <button id="overlayClose" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#f2f2f7;font-size:28px;cursor:pointer;z-index:101;padding:8px">✕</button>
+  <button id="overlayPrev" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:none;color:#f2f2f7;font-size:36px;cursor:pointer;border-radius:50%;width:48px;height:48px;z-index:101">‹</button>
+  <button id="overlayNext" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);border:none;color:#f2f2f7;font-size:36px;cursor:pointer;border-radius:50%;width:48px;height:48px;z-index:101">›</button>
+  <div id="overlayMedia" style="flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0;padding:60px 64px"></div>
+  <div id="overlayInfo" style="padding:8px 16px 16px;text-align:center;color:#8e8e93;font-size:13px"></div>
+</div>
+<script>
+// Bootstrap from query params — this page is a static file; the server no longer interpolates.
+const __params = new URLSearchParams(location.search);
+const __bootPath = __params.get("path") || "";
+const __bootName = __params.get("name") || (__bootPath.split(/[\/]/).pop() || "");
+const __bootIsVideo = (__params.get("type") || "image") === "video";
+document.title = "Workflow - " + __bootName;
+document.getElementById("fileNameHdr").textContent = __bootName;
+{
+  const mw = document.querySelector(".media-wrap");
+  if (mw) {
+    const u = "/file/" + encodeURIComponent(__bootPath);
+    mw.innerHTML = __bootIsVideo
+      ? "<video src=\"" + u + "\" controls playsinline muted></video>"
+      : "<img src=\"" + u + "\">";
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  };
+});
+
+// ── IndexedDB Job Tracker ──
+const JobDB = {
+  _db: null,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('comfyJobs', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('jobs')) {
+          const store = db.createObjectStore('jobs', { keyPath: 'id' });
+          store.createIndex('startTime', 'startTime');
+        }
+      };
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async put(job) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readwrite');
+      tx.objectStore('jobs').put(job);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async get(id) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('jobs', 'readonly');
+      const req = tx.objectStore('jobs').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+};
+
+// Broadcast channel for cross-page job progress
+const jobChannel = new BroadcastChannel('comfy-jobs');
+
+const metaContent = document.getElementById('metaContent');
+const runBtn = document.getElementById('runBtn');
+const status = document.getElementById('status');
+const workflowSelect = document.getElementById('workflowSelect');
+const runCountSelect = document.getElementById('runCountSelect');
+let promptData = null;
+let currentImagePath = __bootPath;
+let currentFileName = __bootName;
+
+// Restore last selections from localStorage
+const savedWorkflow = localStorage.getItem('archiveWorkflowSelect');
+const savedRunCount = localStorage.getItem('archiveRunCount');
+if (savedRunCount) runCountSelect.value = savedRunCount;
+
+// Persist selections
+runCountSelect.addEventListener('change', () => localStorage.setItem('archiveRunCount', runCountSelect.value));
+
+const promptInput = document.getElementById('promptInput');
+const promptSection = document.getElementById('promptSection');
+const loraSection = document.getElementById('loraSection');
+const loraList = document.getElementById('loraList');
+const framesSelect = document.getElementById('framesSelect');
+let currentLoras = [];
+
+// Seed / steps / preset controls (populated per APP workflow config)
+const genSection = document.getElementById('genSection');
+const seedField = document.getElementById('seedField');
+const seedInput = document.getElementById('seedInput');
+const seedRandomBtn = document.getElementById('seedRandomBtn');
+const stepsField = document.getElementById('stepsField');
+const stepsInput = document.getElementById('stepsInput');
+const presetSection = document.getElementById('presetSection');
+const presetList = document.getElementById('presetList');
+let currentPresets = []; // [{ title, on }]
+let hasSeedControl = false, hasStepsControl = false;
+
+// ── Seed pin mode ──
+// Explicit toggle: 📌 ON = reuse the exact seed in the box every run;
+// OFF = randomize every run (whatever is in the box is ignored).
+const seedPinBtn = document.getElementById('seedPinBtn');
+let seedPinMode = false;
+let lastUsedSeed = null; // last randomized seed actually submitted
+function isSeedPinned() {
+  return hasSeedControl && seedPinMode && seedInput.value.trim() !== '' && parseInt(seedInput.value, 10) >= 0;
+}
+function reflectSeedPin() {
+  seedPinBtn.style.opacity = seedPinMode ? '1' : '.45';
+  seedPinBtn.style.background = seedPinMode ? '#0a84ff' : '';
+  seedInput.style.borderColor = isSeedPinned() ? '#0a84ff' : '#48484a';
+  seedInput.title = seedPinMode ? 'Pinned — this exact seed is used every run' : 'Ignored while unpinned — runs use random seeds';
+}
+seedPinBtn.onclick = () => {
+  seedPinMode = !seedPinMode;
+  if (seedPinMode && seedInput.value.trim() === '') {
+    // Pin needs a value: reuse the last run's seed if we have one, else roll one now
+    seedInput.value = lastUsedSeed !== null ? String(lastUsedSeed) : String(Math.floor(Math.random() * 2147483647));
+  }
+  persistGen(); reflectSeedPin();
+};
+seedRandomBtn.onclick = () => { seedPinMode = false; seedInput.value = ''; persistGen(); reflectSeedPin(); };
+seedInput.addEventListener('input', () => { persistGen(); reflectSeedPin(); });
+stepsInput.addEventListener('input', persistGen);
+function persistGen() {
+  const name = workflowSelect.value;
+  if (name === 'inherit') return;
+  localStorage.setItem('archiveSeed_' + name, seedInput.value);
+  localStorage.setItem('archiveSeedPin_' + name, seedPinMode ? '1' : '');
+  localStorage.setItem('archiveSteps_' + name, stepsInput.value);
+}
+
+function renderPresets() {
+  presetList.innerHTML = '';
+  currentPresets.forEach((p) => {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:6px;background:#1c1c1e;border:1px solid ' + (p.on ? '#a1309b' : '#48484a') + ';border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = p.on;
+    cb.onchange = () => { p.on = cb.checked; renderPresets(); savePresets(); };
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(p.title));
+    presetList.appendChild(label);
+  });
+}
+function savePresets() {
+  const name = workflowSelect.value;
+  if (name !== 'inherit') localStorage.setItem('archivePresets_' + name, JSON.stringify(currentPresets.map(p => ({ title: p.title, on: p.on }))));
+}
+
+// Restore and persist frames selection
+const savedFrames = localStorage.getItem('archiveFrames');
+if (savedFrames) framesSelect.value = savedFrames;
+framesSelect.addEventListener('change', () => localStorage.setItem('archiveFrames', framesSelect.value));
+
+function loadWorkflowConfig(name) {
+  if (name === 'inherit') {
+    promptSection.style.display = 'none';
+    loraSection.style.display = 'none';
+    framesSelect.style.display = 'none';
+    genSection.style.display = 'none';
+    presetSection.style.display = 'none';
+    currentLoras = [];
+    currentPresets = [];
+    hasSeedControl = hasStepsControl = false;
+    return;
+  }
+  fetch('/api/workflow-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
+    // Check if workflow file changed since last cache
+    const savedMtime = localStorage.getItem('archiveMtime_' + name);
+    const fileChanged = !savedMtime || String(cfg.mtime) !== savedMtime;
+    if (fileChanged) {
+      // Clear stale cached state so fresh workflow values are used
+      localStorage.removeItem('archivePrompt_' + name);
+      localStorage.removeItem('archiveLoras_' + name);
+      localStorage.setItem('archiveMtime_' + name, String(cfg.mtime));
+    }
+
+    // Show prompt textarea with last-used or default prompt
+    const savedPrompt = localStorage.getItem('archivePrompt_' + name);
+    promptInput.value = savedPrompt !== null ? savedPrompt : cfg.prompt;
+    promptSection.style.display = '';
+    updateCopyPromptBtn();
+
+    // Show lora controls if any
+    if (cfg.loras && cfg.loras.length > 0) {
+      const savedLoras = localStorage.getItem('archiveLoras_' + name);
+      let loraState = null;
+      if (savedLoras) { try { loraState = JSON.parse(savedLoras); } catch {} }
+
+      currentLoras = cfg.loras.map(l => {
+        const saved = loraState && loraState.find(s => s.slot === l.slot);
+        return saved ? { ...l, on: saved.on, strength: saved.strength } : { ...l };
+      });
+      renderLoras();
+      loraSection.style.display = '';
+    } else {
+      currentLoras = [];
+      loraSection.style.display = 'none';
+    }
+
+    // Show frames selector if workflow has a Frames node
+    if (cfg.frames !== null && cfg.frames !== undefined) {
+      framesSelect.style.display = '';
+    } else {
+      framesSelect.style.display = 'none';
+    }
+
+    if (fileChanged) {
+      localStorage.removeItem('archiveSeed_' + name);
+      localStorage.removeItem('archiveSeedPin_' + name);
+      localStorage.removeItem('archiveSteps_' + name);
+      localStorage.removeItem('archivePresets_' + name);
+    }
+
+    // Seed control
+    hasSeedControl = cfg.seed !== null && cfg.seed !== undefined;
+    if (hasSeedControl) {
+      const savedSeed = localStorage.getItem('archiveSeed_' + name);
+      // Workflow default of -1 means "randomize" -> show blank (random)
+      seedInput.value = savedSeed !== null ? savedSeed : (Number(cfg.seed) >= 0 ? String(cfg.seed) : '');
+      seedPinMode = localStorage.getItem('archiveSeedPin_' + name) === '1';
+      seedField.style.display = 'flex';
+      reflectSeedPin();
+    } else { seedField.style.display = 'none'; seedPinMode = false; }
+
+    // Steps control
+    hasStepsControl = cfg.steps !== null && cfg.steps !== undefined;
+    if (hasStepsControl) {
+      const savedSteps = localStorage.getItem('archiveSteps_' + name);
+      stepsInput.value = savedSteps !== null ? savedSteps : String(cfg.steps);
+      stepsField.style.display = 'flex';
+    } else { stepsField.style.display = 'none'; }
+    genSection.style.display = (hasSeedControl || hasStepsControl) ? 'block' : 'none';
+
+    // Preset checkboxes
+    if (cfg.presets && cfg.presets.length > 0) {
+      const savedPresets = localStorage.getItem('archivePresets_' + name);
+      let presetState = null;
+      if (savedPresets) { try { presetState = JSON.parse(savedPresets); } catch {} }
+      currentPresets = cfg.presets.map(p => {
+        const saved = presetState && presetState.find(s => s.title === p.title);
+        return saved ? { title: p.title, on: saved.on } : { title: p.title, on: !!p.on };
+      });
+      renderPresets();
+      presetSection.style.display = '';
+    } else {
+      currentPresets = [];
+      presetSection.style.display = 'none';
+    }
+  }).catch(() => {});
+}
+
+function renderLoras() {
+  loraList.innerHTML = '';
+  currentLoras.forEach((l, idx) => {
+    const row = document.createElement('div');
+    row.className = 'lora-row' + (l.on ? '' : ' off');
+    const shortName = l.lora.replace(/\.safetensors$/, '');
+    row.innerHTML = '<input type="checkbox"' + (l.on ? ' checked' : '') + '>'
+      + '<label title="' + l.lora + '">' + shortName + '</label>'
+      + '<input type="number" value="' + l.strength + '" step="0.1" min="0" max="10">';
+    const cb = row.querySelector('input[type=checkbox]');
+    const numInp = row.querySelector('input[type=number]');
+    cb.onchange = () => { l.on = cb.checked; row.className = 'lora-row' + (l.on ? '' : ' off'); saveLoras(); };
+    numInp.onchange = () => { l.strength = parseFloat(numInp.value) || 0; saveLoras(); };
+    loraList.appendChild(row);
+  });
+}
+
+function saveLoras() {
+  const name = workflowSelect.value;
+  if (name !== 'inherit') {
+    localStorage.setItem('archiveLoras_' + name, JSON.stringify(currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }))));
+  }
+}
+
+// Save prompt on input
+promptInput.addEventListener('input', () => {
+  const name = workflowSelect.value;
+  if (name !== 'inherit') localStorage.setItem('archivePrompt_' + name, promptInput.value);
+});
+
+// ── "Use image's prompt" ──
+// Pull the positive prompt out of the image's embedded API prompt so it can be
+// copied into whatever APP workflow is selected (which loads its own saved
+// prompt by default and may not match this image).
+function extractImagePrompt() {
+  const wp = window.workingPrompt;
+  if (!wp) return '';
+  const tiers = [[], [], []]; // 0: MAIN PROMPT, 1: positive-prompt titled, 2: any prompt-ish text
+  for (const node of Object.values(wp)) {
+    if (!node || !node.inputs) continue;
+    const title = (node._meta && node._meta.title) || '';
+    const cls = node.class_type || '';
+    if (/negative|neg\b/i.test(title)) continue;
+    // longest string input on this node
+    let text = '';
+    for (const v of Object.values(node.inputs)) {
+      if (typeof v === 'string' && v.length > text.length) text = v;
+    }
+    if (!text.trim()) continue;
+    if (/MAIN/i.test(title) && /PROMPT/i.test(title)) tiers[0].push(text);
+    else if (/positive/i.test(title) && /prompt/i.test(title)) tiers[1].push(text);
+    else if (text.length > 20 && /CLIPTextEncode|TextBox|wildcards|String|concat/i.test(cls)) tiers[2].push(text);
+  }
+  for (const tier of tiers) {
+    if (tier.length) return tier.sort((a, b) => b.length - a.length)[0];
+  }
+  return '';
+}
+const copyImgPromptBtn = document.getElementById('copyImgPromptBtn');
+function updateCopyPromptBtn() {
+  const show = workflowSelect.value !== 'inherit'
+    && promptSection.style.display !== 'none'
+    && !!extractImagePrompt();
+  copyImgPromptBtn.style.display = show ? '' : 'none';
+}
+copyImgPromptBtn.onclick = () => {
+  const text = extractImagePrompt();
+  if (!text) return;
+  promptInput.value = text;
+  const name = workflowSelect.value;
+  if (name !== 'inherit') localStorage.setItem('archivePrompt_' + name, text);
+  copyImgPromptBtn.textContent = '✓ Copied from image';
+  setTimeout(() => { copyImgPromptBtn.textContent = "📷 Use image's prompt"; }, 1600);
+};
+
+workflowSelect.addEventListener('change', () => {
+  localStorage.setItem('archiveWorkflowSelect', workflowSelect.value);
+  loadWorkflowConfig(workflowSelect.value);
+});
+
+// Load available (app-enabled) workflows into the dropdown
+function refreshWorkflowDropdown(selectName) {
+  return fetch('/api/workflows').then(r => r.json()).then(wfs => {
+    const prev = selectName || workflowSelect.value;
+    workflowSelect.querySelectorAll('option:not([value="inherit"])').forEach(o => o.remove());
+    wfs.forEach(wf => {
+      const opt = document.createElement('option');
+      opt.value = wf.name;
+      opt.textContent = wf.label;
+      workflowSelect.appendChild(opt);
+    });
+    if (prev && workflowSelect.querySelector('option[value="' + prev.replace(/"/g,'\\"') + '"]')) {
+      workflowSelect.value = prev;
+    } else if (savedWorkflow && workflowSelect.querySelector('option[value="' + savedWorkflow.replace(/"/g,'\\"') + '"]')) {
+      workflowSelect.value = savedWorkflow;
+    }
+    if (workflowSelect.value !== 'inherit') loadWorkflowConfig(workflowSelect.value);
+  }).catch(() => {});
+}
+refreshWorkflowDropdown();
+
+// ── Manage Workflows modal ──
+function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+const manageOverlay = document.getElementById('manageOverlay');
+const manageList = document.getElementById('manageList');
+const manageStatus = document.getElementById('manageStatus');
+let manageItems = [];
+
+document.getElementById('manageWfBtn').onclick = openManage;
+document.getElementById('manageClose').onclick = () => { manageOverlay.style.display = 'none'; };
+manageOverlay.onclick = (e) => { if (e.target === manageOverlay) manageOverlay.style.display = 'none'; };
+
+function openManage() {
+  manageOverlay.style.display = 'flex';
+  manageStatus.textContent = '';
+  manageList.innerHTML = '<div style="padding:20px;color:#8e8e93">Loading…</div>';
+  fetch('/api/workflows/all').then(r => r.json()).then(items => {
+    manageItems = items.map(it => ({ ...it, mapping: it.mapping || {} }));
+    renderManage();
+  }).catch(e => { manageList.innerHTML = '<div style="padding:20px;color:#e06c6c">Error: ' + e.message + '</div>'; });
+}
+
+function nodeOptions(list, selected, detected) {
+  let html = '<option value="">(auto' + (detected != null ? ': #' + detected : '') + ')</option>';
+  (list || []).forEach(c => {
+    const lbl = '[' + c.id + '] ' + c.type + (c.title ? ' — ' + c.title : '') + (c.sample ? ' — ' + c.sample : '');
+    html += '<option value="' + c.id + '"' + (String(selected) === String(c.id) ? ' selected' : '') + '>' + esc(lbl) + '</option>';
+  });
+  return html;
+}
+
+function renderManage() {
+  const inp = 'background:#111;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:5px 8px;font-size:12px';
+  manageList.innerHTML = '';
+  manageItems.forEach((it, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'border:1px solid #333;border-radius:8px;padding:10px;margin-bottom:8px';
+    const map = it.mapping || {};
+    let html = '<div style="display:flex;align-items:center;gap:8px">'
+      + '<input type="checkbox" data-i="' + idx + '" class="mw-en"' + (it.enabled ? ' checked' : '') + '>'
+      + '<input type="text" class="mw-label" data-i="' + idx + '" value="' + esc(it.label || '') + '" placeholder="label" style="' + inp + ';width:180px">'
+      + '<span style="font-size:11px;color:#8e8e93;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.name) + '</span>'
+      + (it.hasPresets ? '<span style="font-size:10px;color:#a1309b;border:1px solid #a1309b;border-radius:4px;padding:1px 5px">presets</span>' : '')
+      + '</div>';
+    if (it.enabled) {
+      const d = it.detected || {};
+      html += '<div class="mw-maps" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;padding-left:26px">';
+      if (it.candidates) {
+        html += '<label style="font-size:11px;color:#8e8e93">Prompt<br><select class="mw-map" data-i="' + idx + '" data-k="promptNodeId" style="' + inp + ';max-width:230px">' + nodeOptions(it.candidates.prompt, map.promptNodeId, d.promptNodeId) + '</select></label>';
+        html += '<label style="font-size:11px;color:#8e8e93">Steps<br><select class="mw-map" data-i="' + idx + '" data-k="stepsNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.steps, map.stepsNodeId, d.stepsNodeId) + '</select></label>';
+        html += '<label style="font-size:11px;color:#8e8e93">Seed<br><select class="mw-map" data-i="' + idx + '" data-k="seedNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.seed, map.seedNodeId, d.seedNodeId) + '</select></label>';
+      } else {
+        html += '<span style="font-size:11px;color:#8e8e93">Loading node candidates…</span>';
+      }
+      html += '</div>';
+    }
+    row.innerHTML = html;
+    manageList.appendChild(row);
+  });
+
+  manageList.querySelectorAll('.mw-en').forEach(cb => cb.onchange = async () => {
+    const i = +cb.dataset.i; manageItems[i].enabled = cb.checked;
+    if (cb.checked && !manageItems[i].candidates) {
+      try {
+        const r = await fetch('/api/workflow-nodes?name=' + encodeURIComponent(manageItems[i].name));
+        const data = await r.json();
+        manageItems[i].candidates = data.candidates; manageItems[i].detected = data.detected; manageItems[i].hasPresets = data.hasPresets;
+      } catch {}
+    }
+    renderManage();
+  });
+  manageList.querySelectorAll('.mw-label').forEach(t => t.oninput = () => { manageItems[+t.dataset.i].label = t.value; });
+  manageList.querySelectorAll('.mw-map').forEach(s => s.onchange = () => {
+    const it = manageItems[+s.dataset.i];
+    it.mapping = it.mapping || {};
+    if (s.value === '') delete it.mapping[s.dataset.k];
+    else it.mapping[s.dataset.k] = parseInt(s.value);
+  });
+}
+
+document.getElementById('manageSave').onclick = async () => {
+  manageStatus.textContent = 'Saving…';
+  const payload = { enabled: [], labels: {}, mappings: {} };
+  manageItems.forEach(it => {
+    if (it.enabled) payload.enabled.push(it.name);
+    if (it.label && it.label !== it.name) payload.labels[it.name] = it.label;
+    if (it.mapping && Object.keys(it.mapping).length) payload.mappings[it.name] = it.mapping;
+  });
+  try {
+    const r = await fetch('/api/workflows/manage', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if (!r.ok) { manageStatus.textContent = 'Save failed (' + r.status + ')'; return; }
+    manageStatus.textContent = 'Saved';
+    await refreshWorkflowDropdown();
+    setTimeout(() => { manageOverlay.style.display = 'none'; }, 500);
+  } catch (e) { manageStatus.textContent = 'Error: ' + e.message; }
+};
+
+// Extract prompt/lora/frames config from an embedded visual workflow and populate the UI
+function applyEmbeddedConfig(wf) {
+  const nodes = wf.nodes || [];
+  let embeddedPrompt = '';
+  let embeddedLoras = [];
+  let embeddedFrames = null;
+  let hasLoraLoader = false;
+
+  for (const node of nodes) {
+    const title = (node.title || '').toUpperCase();
+    // Extract MAIN PROMPT
+    if (title.includes('MAIN') && title.includes('PROMPT')) {
+      const wv = node.widgets_values || [];
+      if (typeof wv[0] === 'string') embeddedPrompt = wv[0];
+    }
+    // Extract Frames
+    if (title === 'FRAMES' && node.type === 'mxSlider') {
+      const wv = node.widgets_values || [];
+      embeddedFrames = typeof wv[0] === 'number' ? wv[0] : null;
+    }
+    // Extract loras from first Power Lora Loader
+    if ((node.type || '').includes('Power Lora Loader') && !hasLoraLoader) {
+      hasLoraLoader = true;
+      const wv = node.widgets_values || [];
+      for (let i = 0; i < wv.length; i++) {
+        const v = wv[i];
+        if (v && typeof v === 'object' && v.lora) {
+          embeddedLoras.push({ slot: i, on: !!v.on, strength: v.strength || 1, lora: v.lora });
+        }
+      }
+    }
+  }
+
+  // Only apply if this looks like an APP VIDEO workflow (has lora loaders or frames)
+  if (!hasLoraLoader && embeddedFrames === null) return;
+
+  // Auto-select APP VIDEO in the dropdown
+  const videoOpt = workflowSelect.querySelector('option[value*="VIDEO"]');
+  if (videoOpt) {
+    workflowSelect.value = videoOpt.value;
+    localStorage.setItem('archiveWorkflowSelect', videoOpt.value);
+  }
+
+  // Populate prompt
+  if (embeddedPrompt) {
+    promptInput.value = embeddedPrompt;
+    promptSection.style.display = '';
+  }
+
+  // Populate loras
+  if (embeddedLoras.length > 0) {
+    currentLoras = embeddedLoras;
+    renderLoras();
+    loraSection.style.display = '';
+  }
+
+  // Populate frames
+  if (embeddedFrames !== null) {
+    framesSelect.style.display = '';
+    // Match to closest option or leave as inherit
+    if (embeddedFrames <= 49) framesSelect.value = '49';
+    else if (embeddedFrames <= 121) framesSelect.value = '121';
+    else framesSelect.value = 'inherit';
+  }
+}
+
+const metaUrl = '/api/metadata?path=' + encodeURIComponent(currentImagePath);
+status.textContent = 'Fetching: ' + metaUrl.substring(0, 80) + '...';
+
+fetch(metaUrl)
+  .then(r => {
+    status.textContent = 'HTTP ' + r.status + ', parsing JSON...';
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + r.statusText);
+    return r.json();
+  })
+  .then(data => {
+    if (data.error) {
+      metaContent.innerHTML = '<div class="loading">Server error: ' + data.error + '</div>';
+      status.textContent = 'Error: ' + data.error;
+      return;
+    }
+    if (!data.prompt && !data.workflow) {
+      metaContent.innerHTML = '<div class="loading">No workflow metadata found in this file.</div>';
+      status.textContent = 'No metadata';
+      return;
+    }
+    promptData = data.prompt;
+    // Make a working copy for edits
+    window.workingPrompt = JSON.parse(JSON.stringify(data.prompt));
+    // Keep the embedded visual (litegraph) workflow so we can pass it as extra_pnginfo
+    // when submitting. Graph-introspecting nodes (e.g. WidgetToString) read
+    // extra_pnginfo["workflow"] and crash with 'NoneType' object is not subscriptable if it's missing.
+    window.workingWorkflow = data.workflow || null;
+    status.textContent = 'Rendering...';
+    if (data.prompt) { document.getElementById('runSection').style.display = ''; }
+
+    // If embedded workflow contains APP VIDEO config, populate the UI from it
+    if (data.workflow && data.workflow.nodes) {
+      applyEmbeddedConfig(data.workflow);
+    }
+    // Image prompt is now available — offer to copy it into the selected workflow
+    updateCopyPromptBtn();
+
+    let html = '';
+    try {
+    if (data.prompt && typeof data.prompt === 'object') {
+      const models = [];
+      const loras = [];
+      const entries = Object.entries(data.prompt);
+
+      for (const [id, node] of entries) {
+        const cls = (node.class_type || '').toLowerCase();
+        const inputs = node.inputs || {};
+        if (cls.includes('checkpointloader') || cls.includes('unetloader') || cls.includes('diffusionmodel')) {
+          const name = inputs.ckpt_name || inputs.unet_name || inputs.model_name || '';
+          if (name && typeof name === 'string') models.push(name);
+        }
+        if (cls.includes('lora')) {
+          const name = inputs.lora_name || '';
+          if (name && typeof name === 'string') loras.push(name);
+        }
+      }
+
+      // Summary section
+      html += '<div class="summary-section">';
+      if (models.length) {
+        html += '<div class="summary-label">Model</div><div class="summary-val">';
+        models.forEach(m => { html += '<span class="tag">' + m.replace(/</g,'&lt;') + '</span>'; });
+        html += '</div>';
+      }
+      if (loras.length) {
+        html += '<div class="summary-label">LoRAs</div><div class="summary-val">';
+        loras.forEach(m => { html += '<span class="tag">' + m.replace(/</g,'&lt;') + '</span>'; });
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Nodes section as collapsed accordion
+      html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Nodes (' + entries.length + ')</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body">';
+      html += '<input type="text" class="node-search" id="nodeSearch" placeholder="Search nodes...">';
+      html += '<div class="node-grid" id="nodeGrid">';
+      entries.sort((a,b) => {
+        const aTitle = ((a[1]._meta && a[1]._meta.title) || '').toUpperCase();
+        const bTitle = ((b[1]._meta && b[1]._meta.title) || '').toUpperCase();
+        const aMain = aTitle.startsWith('MAIN') ? 0 : 1;
+        const bMain = bTitle.startsWith('MAIN') ? 0 : 1;
+        if (aMain !== bMain) return aMain - bMain;
+        return parseInt(a[0]) - parseInt(b[0]);
+      });
+      for (const [id, node] of entries) {
+        const title = (node._meta && node._meta.title) || '';
+        const cls = node.class_type || '?';
+        const editableInputs = [];
+        let inputsHtml = '';
+        if (node.inputs) {
+          for (const [k, v] of Object.entries(node.inputs)) {
+            if (Array.isArray(v)) continue;
+            let display = typeof v === 'string' ? v : JSON.stringify(v);
+            if (display.length > 120) display = display.substring(0, 120) + '...';
+            inputsHtml += '<div class="node-input"><span class="key">' + k + ':</span> <span class="val">' + display.replace(/</g,'&lt;') + '</span></div>';
+            if (typeof v === 'string' || typeof v === 'number') {
+              editableInputs.push({ key: k, val: v, type: typeof v });
+            }
+          }
+        }
+        const hasEditable = editableInputs.length > 0;
+        const inputVals = editableInputs.map(i => typeof i.val === 'string' ? i.val : '').join(' ');
+        const searchText = (cls + ' ' + title + ' ' + id + ' ' + inputVals).replace(/"/g,'&quot;').replace(/</g,'').toLowerCase();
+        html += '<div class="node-card' + (hasEditable ? ' editable' : '') + '" data-node-id="' + id + '" data-search="' + searchText + '">';
+        html += '<div class="node-hdr">';
+        html += '<div class="node-type">[' + id + '] ' + cls.replace(/</g,'&lt;') + '</div>';
+        if (title) html += '<div class="node-title">' + title.replace(/</g,'&lt;') + '</div>';
+        html += '</div>';
+        html += inputsHtml;
+        // Edit form (hidden)
+        if (hasEditable) {
+          html += '<div class="node-edit-form" style="display:none">';
+          editableInputs.forEach(inp => {
+            const escaped = typeof inp.val === 'string' ? inp.val.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : inp.val;
+            html += '<label class="edit-label">' + inp.key + '</label>';
+            if (inp.type === 'string' && String(inp.val).length > 50) {
+              html += '<textarea class="edit-input" data-key="' + inp.key + '" rows="6">' + escaped + '</textarea>';
+            } else if (inp.type === 'number') {
+              html += '<input type="number" class="edit-input" data-key="' + inp.key + '" value="' + inp.val + '" step="any">';
+            } else {
+              html += '<input type="text" class="edit-input" data-key="' + inp.key + '" value="' + escaped + '">';
+            }
+          });
+          html += '<div class="edit-actions"><button class="btn btn-apply" onclick="applyNodeEdit(this)">Apply</button><button class="btn btn-edit-cancel" onclick="cancelNodeEdit(this)">Cancel</button></div>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div></div>';
+    }
+    // Raw JSON accordions (closed)
+    if (data.prompt) {
+      html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Raw Prompt JSON</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body"><pre style="background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7">' + JSON.stringify(data.prompt, null, 2).replace(/</g,'&lt;') + '</pre></div></div>';
+    }
+    if (data.workflow) {
+      html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Raw Workflow JSON</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body"><pre style="background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:500px;overflow-y:auto;color:#f2f2f7">' + JSON.stringify(data.workflow, null, 2).replace(/</g,'&lt;') + '</pre></div></div>';
+    }
+    } catch(renderErr) {
+      html = '<div class="loading">Render error: ' + renderErr.message + '<br><pre>' + renderErr.stack + '</pre></div>';
+    }
+    metaContent.innerHTML = html;
+    status.textContent = '';
+    initNodes();
+  })
+  .catch(err => {
+    metaContent.innerHTML = '<div class="loading">Fetch failed: ' + err.message + '<br><br><b>URL:</b> ' + metaUrl + '<br><b>Tip:</b> <a href="' + metaUrl + '" style="color:#0a84ff">Open API directly</a></div>';
+    status.textContent = 'Error: ' + err.message;
+  });
+
+function initNodes() {
+  const search = document.getElementById('nodeSearch');
+  const grid = document.getElementById('nodeGrid');
+  if (!search || !grid) return;
+
+  // Search filter
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase().trim();
+    grid.querySelectorAll('.node-card').forEach(card => {
+      card.classList.toggle('hidden', q && !card.dataset.search.includes(q));
+    });
+  });
+
+  // Click to toggle edit form
+  grid.querySelectorAll('.node-card.editable').forEach(card => {
+    card.querySelector('.node-hdr').addEventListener('click', () => {
+      const form = card.querySelector('.node-edit-form');
+      const isOpen = form.style.display !== 'none';
+      // Close all others
+      grid.querySelectorAll('.node-edit-form').forEach(f => { f.style.display = 'none'; });
+      grid.querySelectorAll('.node-card').forEach(c => c.classList.remove('editing'));
+      if (!isOpen) {
+        form.style.display = '';
+        card.classList.add('editing');
+        const firstInput = form.querySelector('.edit-input');
+        if (firstInput) firstInput.focus();
+      }
+    });
+  });
+}
+
+function applyNodeEdit(btn) {
+  const form = btn.closest('.node-edit-form');
+  const card = btn.closest('.node-card');
+  const nodeId = card.dataset.nodeId;
+  form.querySelectorAll('.edit-input').forEach(inp => {
+    const key = inp.dataset.key;
+    let val = inp.value;
+    if (inp.type === 'number') {
+      val = Number(val);
+      // Preserve integer type if original was integer
+      if (Number.isInteger(val)) val = Math.round(val);
+    }
+    if (window.workingPrompt[nodeId] && window.workingPrompt[nodeId].inputs) {
+      window.workingPrompt[nodeId].inputs[key] = val;
+    }
+  });
+  form.style.display = 'none';
+  card.classList.remove('editing');
+  card.classList.add('edited');
+  // Update displayed values
+  const inputs = card.querySelectorAll('.node-input');
+  const wp = window.workingPrompt[nodeId].inputs;
+  inputs.forEach(div => {
+    const keyEl = div.querySelector('.key');
+    if (keyEl) {
+      const k = keyEl.textContent.replace(':', '').trim();
+      if (wp[k] !== undefined && !Array.isArray(wp[k])) {
+        const valEl = div.querySelector('.val');
+        let d = typeof wp[k] === 'string' ? wp[k] : JSON.stringify(wp[k]);
+        if (d.length > 120) d = d.substring(0, 120) + '...';
+        valEl.textContent = d;
+      }
+    }
+  });
+}
+
+function cancelNodeEdit(btn) {
+  const form = btn.closest('.node-edit-form');
+  const card = btn.closest('.node-card');
+  form.style.display = 'none';
+  card.classList.remove('editing');
+  // Reset form values from workingPrompt
+  const nodeId = card.dataset.nodeId;
+  const wp = window.workingPrompt[nodeId].inputs;
+  form.querySelectorAll('.edit-input').forEach(inp => {
+    const key = inp.dataset.key;
+    if (wp[key] !== undefined) inp.value = wp[key];
+  });
+}
+
+const execPanel = document.getElementById('execPanel');
+const progressFill = document.getElementById('progressFill');
+const execLog = document.getElementById('execLog');
+const cancelBtn = document.getElementById('cancelBtn');
+let ws = null;
+let currentPromptId = null;
+
+function log(msg, cls) {
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = msg + '\n';
+  execLog.appendChild(span);
+  execLog.scrollTop = execLog.scrollHeight;
+}
+
+// Get prompt to run - either inherited or from selected APP workflow
+// ── Prompt Replacements ──
+// Global, reusable find→replace rules with toggles, applied to the prompt right
+// before a run. Persisted across all media/workflows.
+let currentReplacements = [];
+// Instant paint from the local cache, then the server copy (shared across
+// devices) wins. One-time migration: push a legacy local-only list up.
+try { currentReplacements = JSON.parse(localStorage.getItem('archiveReplacements') || '[]'); } catch {}
+fetch('/api/replacements').then(r => r.json()).then(d => {
+  const serverList = Array.isArray(d.replacements) ? d.replacements : [];
+  if (serverList.length === 0 && currentReplacements.length > 0) {
+    saveReplacements(); // migrate local -> server
+  } else {
+    currentReplacements = serverList;
+    localStorage.setItem('archiveReplacements', JSON.stringify(currentReplacements));
+    renderReplacements();
+    updateReplaceSummary();
+  }
+}).catch(() => {});
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function activeReplacements(){ return currentReplacements.filter(r => r.on && r.from && r.from.trim()); }
+function saveReplacements(){
+  localStorage.setItem('archiveReplacements', JSON.stringify(currentReplacements)); // local cache
+  fetch('/api/replacements', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replacements: currentReplacements }) }).catch(() => {});
+  updateReplaceSummary();
+}
+function updateReplaceSummary(){
+  const el = document.getElementById('replaceSummary'); if (!el) return;
+  const n = activeReplacements().length, total = currentReplacements.length;
+  el.textContent = n ? ' — ' + n + ' active' : (total ? ' — ' + total + ' off' : '');
+}
+function syncAllToggle(){
+  const all = document.getElementById('replaceAllToggle'); if (!all) return;
+  const onCount = currentReplacements.filter(r => r.on).length;
+  all.checked = currentReplacements.length > 0 && onCount === currentReplacements.length;
+  all.indeterminate = onCount > 0 && onCount < currentReplacements.length;
+}
+function renderReplacements(){
+  const list = document.getElementById('replaceList'); if (!list) return;
+  list.innerHTML = '';
+  currentReplacements.forEach((r, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+    const inpCss = 'width:100%;box-sizing:border-box;background:#111;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:6px 24px 6px 8px;font-size:12px';
+    const wrapCss = 'position:relative;flex:1;min-width:0';
+    const clrCss = 'position:absolute;right:1px;top:50%;transform:translateY(-50%);background:none;border:none;color:#8e8e93;font-size:12px;cursor:pointer;padding:3px 6px';
+    row.innerHTML = '<input type="checkbox" class="repl-on"' + (r.on ? ' checked' : '') + ' style="width:16px;height:16px;flex:none;accent-color:#0a84ff">'
+      + '<span style="' + wrapCss + '"><input type="text" placeholder="find" value="' + escAttr(r.from) + '" style="' + inpCss + '"><button tabindex="-1" title="Clear" style="' + clrCss + '">✕</button></span>'
+      + '<button class="btn" title="Swap words" style="flex:none;padding:5px 8px;font-size:14px;background:#2c2c2e;color:#0a84ff">⇄</button>'
+      + '<span style="' + wrapCss + '"><input type="text" placeholder="replace with" value="' + escAttr(r.to) + '" style="' + inpCss + '"><button tabindex="-1" title="Clear" style="' + clrCss + '">✕</button></span>'
+      + '<button class="btn" title="Delete" style="flex:none;width:32px;padding:6px 0;font-size:12px;background:#3a1e1e;color:#e06c6c">✕</button>';
+    const cb = row.querySelector('input[type=checkbox]');
+    const texts = row.querySelectorAll('input[type=text]');
+    const clears = row.querySelectorAll('span button');
+    const btns = row.querySelectorAll(':scope > button');
+    const swapBtn = btns[0], actBtn = btns[1];
+
+    let dirty = false;
+    function setDirty(d){
+      dirty = d;
+      actBtn.textContent = d ? '✓' : '✕';
+      actBtn.title = d ? 'Save' : 'Delete';
+      actBtn.style.background = d ? '#2d5a1e' : '#3a1e1e';
+      actBtn.style.color = d ? '#a8e06c' : '#e06c6c';
+    }
+    const checkDirty = () => setDirty(texts[0].value !== (r.from || '') || texts[1].value !== (r.to || ''));
+    function commit(){
+      r.from = texts[0].value;
+      r.to = texts[1].value;
+      saveReplacements();
+      setDirty(false);
+    }
+
+    cb.onchange = () => { r.on = cb.checked; saveReplacements(); syncAllToggle(); };
+    texts.forEach(t => {
+      t.oninput = checkDirty;
+      t.onkeydown = e => { if (e.key === 'Enter' && dirty) commit(); };
+    });
+    clears.forEach((c, i) => { c.onclick = () => { texts[i].value = ''; texts[i].focus(); checkDirty(); }; });
+    // Swap the two words (uses current input text, saves immediately)
+    swapBtn.onclick = () => {
+      const a = texts[0].value; texts[0].value = texts[1].value; texts[1].value = a;
+      commit();
+    };
+    actBtn.onclick = () => {
+      if (dirty) { commit(); return; }
+      currentReplacements.splice(idx, 1); renderReplacements(); saveReplacements(); syncAllToggle();
+    };
+    list.appendChild(row);
+  });
+  syncAllToggle();
+}
+document.getElementById('replaceAllToggle').onchange = function(){
+  const on = this.checked;
+  currentReplacements.forEach(r => { r.on = on; });
+  saveReplacements();
+  // update row checkboxes in place (no re-render, so unsaved word edits survive)
+  document.querySelectorAll('#replaceList .repl-on').forEach(cb => { cb.checked = on; });
+  syncAllToggle();
+};
+document.getElementById('addReplaceBtn').onclick = () => {
+  currentReplacements.push({ from: '', to: '', on: true });
+  renderReplacements();
+  saveReplacements();
+  const inputs = document.querySelectorAll('#replaceList input[type=text]');
+  if (inputs.length) inputs[inputs.length - 2].focus();
+};
+renderReplacements();
+updateReplaceSummary();
+
+// Apply enabled replacements to a prompt string (case-insensitive, all occurrences).
+function applyReplacements(text){
+  if (typeof text !== 'string') return text;
+  let out = text;
+  for (const r of activeReplacements()) out = out.replace(new RegExp(escRe(r.from), 'gi'), r.to);
+  return out;
+}
+// For inherited runs, apply to the prompt text embedded in the API prompt's string
+// inputs — skip model/sampler/file/numeric-ish keys so only prompt text is touched.
+const REPL_SKIP_KEY = /_name$|name$|filename|ckpt|lora|vae|sampler|scheduler|model|path|url|format|extension|seed|width|height|steps|cfg/i;
+function applyReplacementsToNodes(prompt){
+  if (!activeReplacements().length) return prompt;
+  for (const node of Object.values(prompt)) {
+    if (!node || !node.inputs) continue;
+    for (const key of Object.keys(node.inputs)) {
+      if (typeof node.inputs[key] !== 'string') continue;
+      if (REPL_SKIP_KEY.test(key)) continue;
+      node.inputs[key] = applyReplacements(node.inputs[key]);
+    }
+  }
+  return prompt;
+}
+
+async function getRunPrompt(presetTitle) {
+  const sel = workflowSelect.value;
+  if (sel === 'inherit') {
+    const p = applyReplacementsToNodes(JSON.parse(JSON.stringify(window.workingPrompt)));
+    if (activeReplacements().length) log('Applied ' + activeReplacements().length + ' prompt replacement(s)');
+    return p;
+  }
+  // Build overrides from UI
+  const overrides = {};
+  if (promptInput.value.trim()) {
+    overrides.prompt = applyReplacements(promptInput.value);
+    if (activeReplacements().length && overrides.prompt !== promptInput.value) log('Applied prompt replacement(s)');
+  }
+  if (currentLoras.length > 0) overrides.loras = currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+  if (framesSelect.value !== 'inherit') overrides.frames = parseInt(framesSelect.value);
+  if (hasStepsControl && stepsInput.value.trim()) overrides.steps = parseInt(stepsInput.value);
+  if (isSeedPinned()) overrides.seed = parseInt(seedInput.value, 10);
+  if (presetTitle) overrides.preset = presetTitle;
+
+  // Load APP workflow prompt from server with overrides
+  const resp = await fetch('/api/workflow-prompt?name=' + encodeURIComponent(sel), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(overrides)
+  });
+  if (!resp.ok) throw new Error('Failed to load workflow: HTTP ' + resp.status);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  const wfPrompt = data.prompt || data; // {prompt, workflow} shape (older shape fallback)
+  // Keep the override-applied visual graph — submitted as extra_pnginfo so
+  // graph-introspecting nodes (WidgetToString etc.) work for APP runs too.
+  window.appWorkflowGraph = data.workflow || null;
+
+  // If the workflow has a MAIN IMAGE node and we have an image path, replace it
+  const ext = currentFileName.split('.').pop().toLowerCase();
+  const isImage = ['png','jpg','jpeg','webp','bmp','gif'].includes(ext);
+  if (isImage) {
+    for (const [id, node] of Object.entries(wfPrompt)) {
+      const title = (node._meta && node._meta.title || '').toUpperCase();
+      if (title.includes('MAIN IMAGE') && node.inputs) {
+        node.inputs.image = currentFileName;
+        log('Set MAIN IMAGE node [' + id + '] to: ' + currentFileName);
+      }
+    }
+  }
+  return wfPrompt;
+}
+
+// Upload current image to ComfyUI input folder for use as MAIN IMAGE
+async function uploadImageToComfy(imagePath) {
+  // Fetch the image from our server
+  const imgResp = await fetch('/file/' + encodeURIComponent(imagePath));
+  if (!imgResp.ok) { log('Upload fetch failed: HTTP ' + imgResp.status, 'log-err'); return null; }
+  const blob = await imgResp.blob();
+  // Use a unique filename to avoid stale cache issues in ComfyUI's input folder
+  const origName = imagePath.split(/[\\/]/).pop();
+  const ext = origName.includes('.') ? origName.split('.').pop() : 'png';
+  const uploadName = 'app_input_' + Date.now() + '.' + ext;
+  const formData = new FormData();
+  formData.append('image', blob, uploadName);
+  formData.append('overwrite', 'true');
+  const uploadResp = await fetch('/api/comfy/upload/image', { method: 'POST', body: formData });
+  if (!uploadResp.ok) { log('Upload POST failed: HTTP ' + uploadResp.status, 'log-err'); return null; }
+  const result = await uploadResp.json();
+  log('ComfyUI upload result: ' + JSON.stringify(result));
+  return result.name || uploadName;
+}
+
+const allOutputFiles = [];
+
+runBtn.onclick = async () => {
+  if (!promptData && workflowSelect.value === 'inherit') return;
+  const runCount = parseInt(runCountSelect.value) || 1;
+  const runProgress = document.getElementById('runProgress');
+
+  // Each checked preset runs separately (they're mutually exclusive). No presets -> one pass with the workflow default.
+  const selectedPresets = (presetSection.style.display !== 'none' && currentPresets.some(p => p.on))
+    ? currentPresets.filter(p => p.on).map(p => p.title) : [null];
+  // Pinning is explicit now (📌 toggle) — a value in the box alone doesn't pin.
+  // Pinned requires a real seed (>= 0); anything else randomizes every run, which
+  // also avoids ComfyUI serving the whole graph from cache (identical inputs).
+  const seedPinned = isSeedPinned();
+  const totalRuns = selectedPresets.length * runCount;
+  let runIndex = 0;
+
+  const runStartTime = Date.now();
+  // Snapshot existing output files so we only show truly new ones.
+  // NOTE: runStartTime is the *client* clock (phone), which can be skewed vs the
+  // server's file mtimes — so scans below reuse this same 24h window and rely on
+  // the set-diff, never on the client clock, to decide what's "new".
+  let preExistingFiles = new Set();
+  let snapshotOk = false;
+  try {
+    const preResp = await fetch('/api/recent-outputs?since=' + (runStartTime - 86400000));
+    if (preResp.ok) {
+      const preFiles = await preResp.json();
+      preFiles.forEach(f => preExistingFiles.add(f.path));
+      snapshotOk = true;
+    }
+  } catch {}
+  runBtn.disabled = true;
+  execPanel.classList.add('vis');
+  execLog.innerHTML = '';
+  document.getElementById('outputBrowser').style.display = 'none';
+  document.getElementById('outputGrid').innerHTML = '';
+  allOutputFiles.length = 0;
+  overlayItems = [];
+  const shownOutputPaths = new Set();
+
+  // Scan ComfyUI outputs and append any that appeared since the last check.
+  // Called after each run so thumbnails show up live instead of all at the end.
+  async function scanNewOutputs() {
+    try {
+      // Same 24h window as the snapshot: "new" = in window but not in the snapshot.
+      // Clock-skew-proof. If the snapshot failed, fall back to the client clock.
+      const since = snapshotOk ? (runStartTime - 86400000) : runStartTime;
+      const resp = await fetch('/api/recent-outputs?since=' + since);
+      if (!resp.ok) return 0;
+      const allRecent = await resp.json();
+      const fresh = allRecent.filter(f => !preExistingFiles.has(f.path) && !shownOutputPaths.has(f.path));
+      if (fresh.length) {
+        // recent-outputs is already oldest-first, so append order tracks completion
+        fresh.forEach(f => shownOutputPaths.add(f.path));
+        appendOutputFiles(fresh);
+        jobRecord.results = overlayItems.map(f => ({ path: f.path, name: f.name, thumbPath: f.thumbPath }));
+        JobDB.put(jobRecord).catch(() => {});
+      }
+      return fresh.length;
+    } catch { return 0; }
+  }
+
+  // If using an APP workflow with MAIN IMAGE, upload the image first
+  let uploadedImageName = null;
+  if (workflowSelect.value !== 'inherit') {
+    const ext = currentFileName.split('.').pop().toLowerCase();
+    const isImage = ['png','jpg','jpeg','webp','bmp','gif'].includes(ext);
+    if (isImage) {
+      status.textContent = 'Uploading image to ComfyUI...';
+      log('Uploading image for MAIN IMAGE...');
+      uploadedImageName = await uploadImageToComfy(currentImagePath);
+      if (uploadedImageName) log('Uploaded as: ' + uploadedImageName);
+      else log('Upload failed, continuing anyway', 'log-err');
+    }
+  }
+
+  // Create a job group ID for this batch
+  const jobGroupId = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const jobRecord = {
+    id: jobGroupId,
+    workflow: workflowSelect.value === 'inherit' ? 'Inherited' : workflowSelect.value.replace(/^APP /, '').replace(/\.json$/, ''),
+    workflowFile: workflowSelect.value,
+    prompt: promptInput.value.substring(0, 200) || '(inherited)',
+    fullPrompt: promptInput.value || '',
+    loras: currentLoras.length > 0 ? currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })) : null,
+    frames: framesSelect.value !== 'inherit' ? framesSelect.value : null,
+    sourceFile: currentFileName,
+    sourcePath: currentImagePath,
+    sourceImageUrl: '/file/' + encodeURIComponent(currentImagePath),
+    status: 'running',
+    runs: totalRuns,
+    presets: selectedPresets.filter(Boolean),
+    runsCompleted: 0,
+    startTime: runStartTime,
+    endTime: null,
+    promptIds: [],
+    results: [],
+  };
+  try { await JobDB.put(jobRecord); } catch {}
+
+  if (seedPinned && (runCount > 1)) {
+    log('⚠ Seed is pinned (' + seedInput.value.trim() + ') — the ' + runCount + ' runs per preset will produce identical images. Clear the Seed box (🎲) for variations.', 'log-err');
+  }
+
+  let aborted = false;
+  for (const preset of selectedPresets) {
+    if (aborted) break;
+    for (let run = 0; run < runCount; run++) {
+      runIndex++;
+      const label = (preset ? preset + ' ' : '') + (runCount > 1 ? '#' + (run + 1) : '');
+      if (totalRuns > 1) {
+        runProgress.textContent = runIndex + '/' + totalRuns + (label ? ' — ' + label : '');
+        log('--- Run ' + runIndex + '/' + totalRuns + (preset ? ' [' + preset + ']' : '') + (runCount > 1 ? ' (' + (run + 1) + '/' + runCount + ')' : '') + ' ---');
+      } else if (preset) {
+        log('--- Preset: ' + preset + ' ---');
+      }
+
+      let runPrompt;
+      try {
+        runPrompt = await getRunPrompt(preset);
+      } catch (e) {
+        log('Error loading workflow: ' + e.message, 'log-err');
+        status.textContent = 'Error: ' + e.message;
+        aborted = true;
+        break;
+      }
+
+      // If we uploaded an image, set it in the prompt
+      if (uploadedImageName && workflowSelect.value !== 'inherit') {
+        for (const [id, node] of Object.entries(runPrompt)) {
+          const title = (node._meta && node._meta.title || '').toUpperCase();
+          if (title.includes('MAIN IMAGE') && node.inputs) {
+            node.inputs.image = uploadedImageName;
+          }
+        }
+      }
+
+      // Randomize all seed inputs (unless the user pinned a seed) and strip is_changed
+      for (const [id, node] of Object.entries(runPrompt)) {
+        if (node.inputs && !seedPinned) {
+          for (const key of Object.keys(node.inputs)) {
+            if (key.includes('seed') && typeof node.inputs[key] === 'number') {
+              node.inputs[key] = Math.floor(Math.random() * 2147483647);
+              // Remember the main seed so 📌 can pin "what I just got"
+              if (node.class_type === 'Seed (rgthree)' || key === 'noise_seed' || key === 'seed') {
+                lastUsedSeed = node.inputs[key];
+              }
+            }
+          }
+        }
+        delete node.is_changed;
+      }
+      if (!seedPinned && lastUsedSeed !== null) seedInput.placeholder = 'random (last: ' + lastUsedSeed + ')';
+
+      // Build node map for job progress tracking
+      const jobNodeMap = {};
+      Object.entries(runPrompt).forEach(([id, n]) => {
+        jobNodeMap[id] = (n._meta && n._meta.title) || n.class_type || id;
+      });
+      jobRecord.nodeMap = jobNodeMap;
+      jobRecord.totalNodes = Object.keys(runPrompt).length;
+
+      const ok = await executePrompt(runPrompt, (pid) => {
+        jobRecord.promptIds.push(pid);
+        JobDB.put(jobRecord).catch(() => {});
+      });
+      if (ok) {
+        jobRecord.runsCompleted++;
+        // Show this run's output(s) now, without waiting for the rest of the batch.
+        await new Promise(r => setTimeout(r, 500)); // brief pause for disk flush
+        await scanNewOutputs();
+      } else {
+        jobRecord.status = 'error';
+        jobRecord.endTime = Date.now();
+        try { await JobDB.put(jobRecord); } catch {}
+        aborted = true;
+        break;
+      }
+    }
+  }
+
+  runBtn.disabled = false;
+  runBtn.style.display = '';
+  cancelBtn.style.display = 'none';
+  runProgress.textContent = '';
+
+  // Final catch-up scan for any stragglers not yet flushed when their run finished.
+  await new Promise(r => setTimeout(r, 1000));
+  await scanNewOutputs();
+  log('Batch complete — ' + overlayItems.length + ' output file(s).');
+  if (overlayItems.length === 0 && jobRecord.runsCompleted > 0) {
+    log('⚠ Runs "succeeded" but produced no new files — ComfyUI served everything from cache. This happens when the seed and all settings exactly match a previous run. Clear the Seed box (🎲) or change a setting, then re-run.', 'log-err');
+  }
+
+  // Finalize job record
+  if (jobRecord.status === 'running') {
+    jobRecord.status = jobRecord.runsCompleted === runCount ? 'complete' : 'error';
+  }
+  jobRecord.endTime = Date.now();
+  try { await JobDB.put(jobRecord); } catch {}
+};
+
+let lastPromptIdCallback = null;
+function executePrompt(prompt, onPromptId) {
+  lastPromptIdCallback = onPromptId || null;
+  return new Promise((resolve) => {
+    const totalNodes = Object.keys(prompt).length;
+    let nodesCompleted = 0;
+    const nodeMap = {};
+    Object.entries(prompt).forEach(([id, n]) => {
+      nodeMap[id] = (n._meta && n._meta.title) || n.class_type || id;
+    });
+
+    const clientId = crypto.randomUUID ? crypto.randomUUID() : 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    const comfyHost = location.host;
+    let wsReconnects = 0;
+    let submitted = false;
+
+    status.textContent = 'Connecting...';
+    progressFill.style.width = '0%';
+    progressFill.className = 'progress-fill';
+
+    function done(ok) {
+      progressFill.style.width = '100%';
+      progressFill.className = 'progress-fill ' + (ok ? 'done' : 'err');
+      if (ws) { ws.close(); ws = null; }
+      currentPromptId = null;
+      resolve(ok);
+    }
+
+    function onWsMessage(evt) {
+      if (typeof evt.data !== 'string') return;
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch { return; }
+      const d = msg.data || {};
+      if (d.prompt_id && d.prompt_id !== currentPromptId) return;
+
+      switch (msg.type) {
+        case 'execution_start':
+          status.textContent = 'Running...';
+          log('Execution started');
+          jobChannel.postMessage({ type: 'executing', promptId: currentPromptId, node: 'Starting...', pct: 0 });
+          break;
+        case 'execution_cached':
+          if (d.nodes) {
+            nodesCompleted += d.nodes.length;
+            log('Cached: ' + d.nodes.length + ' node(s) skipped');
+            progressFill.style.width = Math.round(nodesCompleted / totalNodes * 100) + '%';
+          }
+          break;
+        case 'executing':
+          if (d.node == null) break;
+          const name = nodeMap[d.node] || d.node;
+          status.textContent = 'Running — ' + name;
+          log('▶ [' + d.node + '] ' + name);
+          jobChannel.postMessage({ type: 'executing', promptId: currentPromptId, node: name, pct: null });
+          break;
+        case 'executed':
+          nodesCompleted++;
+          progressFill.style.width = Math.round(nodesCompleted / totalNodes * 100) + '%';
+          status.textContent = 'Running (' + nodesCompleted + '/' + totalNodes + ')';
+          if (d.output) {
+            const imgs = d.output.images || d.output.gifs || [];
+            imgs.forEach(f => {
+              if (f.filename && (f.type === 'output' || f.type === 'temp')) {
+                allOutputFiles.push({ filename: f.filename, subfolder: f.subfolder || '', type: f.type });
+                log('Output: subfolder=' + JSON.stringify(f.subfolder) + ' file=' + f.filename);
+              }
+            });
+          }
+          break;
+        case 'progress':
+          if (d.max > 0) {
+            const pct = Math.round(d.value / d.max * 100);
+            status.textContent = 'Running — step ' + d.value + '/' + d.max + ' (' + pct + '%)';
+            jobChannel.postMessage({ type: 'progress', promptId: currentPromptId, pct });
+          }
+          break;
+        case 'execution_success':
+          status.textContent = 'Complete!';
+          log('Workflow completed successfully!', 'log-done');
+          jobChannel.postMessage({ type: 'done', promptId: currentPromptId, ok: true });
+          done(true);
+          break;
+        case 'execution_error':
+          status.textContent = 'Error: ' + (d.exception_message || 'unknown');
+          log('Error in node ' + d.node_id + ' (' + (d.node_type || '') + '): ' + (d.exception_message || ''), 'log-err');
+          jobChannel.postMessage({ type: 'done', promptId: currentPromptId, ok: false });
+          done(false);
+          break;
+        case 'execution_interrupted':
+          status.textContent = 'Interrupted';
+          log('Execution interrupted', 'log-err');
+          jobChannel.postMessage({ type: 'done', promptId: currentPromptId, ok: false });
+          done(false);
+          break;
+      }
+    }
+
+    function connectWs() {
+      try {
+        ws = new WebSocket('ws://' + comfyHost + '/comfy-ws?clientId=' + clientId);
+        ws.binaryType = 'arraybuffer';
+      } catch (e) {
+        log('WebSocket create error: ' + e.message, 'log-err');
+        done(false);
+        return;
+      }
+      ws.onmessage = onWsMessage;
+      ws.onerror = () => { log('WebSocket error', 'log-err'); };
+      ws.onclose = () => {
+        if (currentPromptId && wsReconnects < 3) {
+          wsReconnects++;
+          log('WebSocket dropped, reconnecting (' + wsReconnects + '/3)...');
+          setTimeout(connectWs, 1000);
+        } else if (currentPromptId) {
+          log('WebSocket closed after ' + wsReconnects + ' retries', 'log-err');
+          done(false);
+        }
+      };
+      ws.onopen = async () => {
+        log('WebSocket connected');
+        if (submitted) return;
+        submitted = true;
+        status.textContent = 'Queueing workflow...';
+        log('Submitting workflow (' + totalNodes + ' nodes)...');
+        try {
+          const submitPayload = { prompt, client_id: clientId };
+          // Attach the matching visual graph as extra_pnginfo — required by
+          // graph-introspecting nodes (WidgetToString etc.) and embedded into the
+          // output PNG. Inherited runs use the source image's graph; APP runs use
+          // the override-applied graph returned by /api/workflow-prompt.
+          const pnGraph = workflowSelect.value === 'inherit' ? window.workingWorkflow : window.appWorkflowGraph;
+          if (pnGraph) {
+            submitPayload.extra_data = { extra_pnginfo: { workflow: pnGraph } };
+          }
+          const body = JSON.stringify(submitPayload);
+          log('Payload: ' + (body.length / 1024).toFixed(1) + ' KB');
+          const resp = await fetch('/api/comfy/api/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
+          });
+          log('Response: HTTP ' + resp.status);
+          const result = await resp.json();
+          if (result.error) {
+            const errMsg = result.error.message || JSON.stringify(result.error);
+            log('Error: ' + errMsg, 'log-err');
+            if (result.node_errors) {
+              for (const [nid, ne] of Object.entries(result.node_errors)) {
+                const errs = (ne.errors || []).map(e => e.message).join('; ');
+                if (errs) log('  Node [' + nid + ']: ' + errs, 'log-err');
+              }
+            }
+            done(false);
+            return;
+          }
+          // ComfyUI can return HTTP 200 + prompt_id yet still reject nodes: it
+          // silently drops the invalid subtree and only runs what's left (often
+          // just display nodes → instant "success" with no images). Treat any
+          // node_errors as a hard failure so this never happens silently.
+          if (result.node_errors && Object.keys(result.node_errors).length > 0) {
+            log('ComfyUI rejected ' + Object.keys(result.node_errors).length + ' node(s) — the run would produce no output. Aborting.', 'log-err');
+            for (const [nid, ne] of Object.entries(result.node_errors)) {
+              const cls = ne.class_type || '';
+              for (const err of (ne.errors || [])) {
+                log('  Node [' + nid + '] ' + cls + ': ' + err.message + (err.details ? ' (' + err.details + ')' : ''), 'log-err');
+              }
+            }
+            status.textContent = 'Error: workflow validation failed';
+            done(false);
+            return;
+          }
+          currentPromptId = result.prompt_id;
+          if (lastPromptIdCallback) lastPromptIdCallback(currentPromptId);
+          status.textContent = 'Queued...';
+          log('Queued - prompt ' + currentPromptId.substring(0, 8) + '...');
+          runBtn.style.display = 'none';
+          cancelBtn.style.display = '';
+        } catch (e) {
+          status.textContent = 'Error: ' + e.message;
+          log('Error: ' + e.name + ': ' + e.message, 'log-err');
+          done(false);
+        }
+      };
+    }
+
+    connectWs();
+  });
+}
+
+let overlayItems = [];
+let overlayIndex = 0;
+
+function isVideoFile(name) {
+  return ['mp4','webm','mkv','mov'].includes(name.split('.').pop().toLowerCase());
+}
+
+function buildOutputCard(f, idx) {
+  const isVideo = isVideoFile(f.name);
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#1c1c1e;border:1px solid #38383a;border-radius:8px;overflow:hidden;cursor:pointer;position:relative';
+  card.dataset.idx = idx;
+
+  const cbHtml = '<input type="checkbox" class="output-cb" data-idx="' + idx + '" style="position:absolute;top:6px;left:6px;z-index:2;width:18px;height:18px;cursor:pointer;accent-color:#0a84ff" onclick="event.stopPropagation();updateOutputBulkBar()">';
+
+  if (isVideo && f.thumbPath) {
+    card.innerHTML = cbHtml + '<img src="/file/' + encodeURIComponent(f.thumbPath) + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block" loading="lazy"><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;opacity:0.8;pointer-events:none">▶</div>';
+  } else if (isVideo) {
+    card.innerHTML = cbHtml + '<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#1a0505;font-size:32px">🎬</div>';
+  } else {
+    card.innerHTML = cbHtml + '<img src="/file/' + encodeURIComponent(f.path) + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block" loading="lazy">';
+  }
+  card.innerHTML += '<div style="padding:4px 6px;font-size:10px;color:#8e8e93;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</div>';
+  card.onclick = (e) => { if (!e.target.classList.contains('output-cb')) openOverlay(idx); };
+  return card;
+}
+
+function showOutputBrowser(files) {
+  document.getElementById('outputGrid').innerHTML = '';
+  document.getElementById('outputBulkActions').style.display = 'none';
+  overlayItems = [];
+  appendOutputFiles(files);
+}
+
+// Append newly-finished outputs without rebuilding the grid (live, as runs complete)
+function appendOutputFiles(files) {
+  if (!files || !files.length) return;
+  const browser = document.getElementById('outputBrowser');
+  const grid = document.getElementById('outputGrid');
+  browser.style.display = '';
+  files.forEach((f) => {
+    const idx = overlayItems.length;
+    overlayItems.push(f);
+    grid.appendChild(buildOutputCard(f, idx));
+  });
+}
+
+function updateOutputBulkBar() {
+  const checked = document.querySelectorAll('.output-cb:checked');
+  document.getElementById('outputBulkActions').style.display = checked.length > 0 ? 'flex' : 'none';
+}
+
+document.getElementById('outputDelSelBtn').onclick = async () => {
+  const checked = document.querySelectorAll('.output-cb:checked');
+  if (!checked.length) return;
+  if (!window.confirm('Delete ' + checked.length + ' selected file(s)? This cannot be undone.')) return;
+  for (const cb of checked) {
+    const idx = parseInt(cb.dataset.idx);
+    const f = overlayItems[idx];
+    if (!f) continue;
+    try {
+      await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: f.path }) });
+      cb.closest('div[data-idx]').remove();
+    } catch {}
+  }
+  updateOutputBulkBar();
+};
+
+document.getElementById('outputSaveSelBtn').onclick = async () => {
+  const checked = document.querySelectorAll('.output-cb:checked');
+  if (!checked.length) return;
+  for (const cb of checked) {
+    const idx = parseInt(cb.dataset.idx);
+    const f = overlayItems[idx];
+    if (!f) continue;
+    try {
+      await fetch('/api/favorite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: f.path }) });
+      const card = cb.closest('div[data-idx]');
+      card.style.border = '2px solid #ffd700';
+      cb.checked = false;
+    } catch {}
+  }
+  updateOutputBulkBar();
+};
+
+function openOverlay(idx) {
+  overlayIndex = idx;
+  const overlay = document.getElementById('outputOverlay');
+  overlay.style.display = 'flex';
+  renderOverlayItem();
+}
+
+function closeOverlay() {
+  const overlay = document.getElementById('outputOverlay');
+  overlay.style.display = 'none';
+  const media = document.getElementById('overlayMedia');
+  media.innerHTML = '';
+}
+
+function renderOverlayItem() {
+  const f = overlayItems[overlayIndex];
+  if (!f) return;
+  const isVideo = isVideoFile(f.name);
+  const media = document.getElementById('overlayMedia');
+  const info = document.getElementById('overlayInfo');
+
+  if (isVideo) {
+    media.innerHTML = '<video src="/file/' + encodeURIComponent(f.path) + '" controls autoplay playsinline style="max-width:100%;max-height:100%;border-radius:8px"></video>';
+  } else {
+    media.innerHTML = '<img src="/file/' + encodeURIComponent(f.path) + '" style="max-width:100%;max-height:100%;border-radius:8px;object-fit:contain">';
+  }
+
+  const ftype = isVideo ? 'video' : 'image';
+  const params = new URLSearchParams({ path: f.path, name: f.name, type: ftype });
+  info.innerHTML = '<span>' + (overlayIndex + 1) + ' / ' + overlayItems.length + ' — ' + f.name + '</span>'
+    + ' <a href="/inspect?' + params.toString() + '&_=' + Date.now() + '" style="color:#0a84ff;margin-left:12px">Open Meta</a>';
+
+  document.getElementById('overlayPrev').style.visibility = overlayIndex > 0 ? 'visible' : 'hidden';
+  document.getElementById('overlayNext').style.visibility = overlayIndex < overlayItems.length - 1 ? 'visible' : 'hidden';
+}
+
+document.getElementById('overlayClose').onclick = closeOverlay;
+document.getElementById('overlayPrev').onclick = () => { if (overlayIndex > 0) { overlayIndex--; renderOverlayItem(); } };
+document.getElementById('overlayNext').onclick = () => { if (overlayIndex < overlayItems.length - 1) { overlayIndex++; renderOverlayItem(); } };
+document.addEventListener('keydown', (e) => {
+  if (document.getElementById('outputOverlay').style.display === 'none') return;
+  if (e.key === 'Escape') closeOverlay();
+  if (e.key === 'ArrowLeft' && overlayIndex > 0) { overlayIndex--; renderOverlayItem(); }
+  if (e.key === 'ArrowRight' && overlayIndex < overlayItems.length - 1) { overlayIndex++; renderOverlayItem(); }
+});
+document.getElementById('outputOverlay').onclick = (e) => { if (e.target.id === 'outputOverlay') closeOverlay(); };
+
+cancelBtn.onclick = async () => {
+  try {
+    await fetch('/api/comfy/api/interrupt', { method: 'POST' });
+    log('Cancel requested...', 'log-err');
+  } catch {}
+};
+
+document.getElementById('favBtn').onclick = async () => {
+  if (!window.confirm('Move this file to Favorites?')) return;
+  try {
+    const r = await fetch('/api/favorite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: currentImagePath }) });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    // Update path to new location so subsequent actions (run, delete) use the correct file
+    if (d.dest) currentImagePath = d.dest.replace(/\\/g, '/');
+    document.getElementById('favBtn').textContent = '⭐ Moved!';
+    document.getElementById('favBtn').disabled = true;
+  } catch (e) { alert('Error: ' + e.message); }
+};
+
+document.getElementById('delBtn').onclick = async () => {
+  if (!window.confirm('Delete this file? This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: currentImagePath }) });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    history.back();
+  } catch (e) { alert('Error: ' + e.message); }
+};
+
+async function saveLog() {
+  const btn = document.getElementById('saveLogBtn');
+  const payload = {
+    timestamp: new Date().toISOString(),
+    host: location.host,
+    page: location.href,
+    userAgent: navigator.userAgent,
+    status: status.textContent,
+    log: execLog.innerText,
+    wsState: ws ? ['CONNECTING','OPEN','CLOSING','CLOSED'][ws.readyState] : 'null',
+    promptId: currentPromptId
+  };
+  try {
+    const r = await fetch('/api/debug-results', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload, null, 2) });
+    if (r.ok) { btn.textContent = 'Saved!'; setTimeout(() => { btn.textContent = 'Save Log'; }, 2000); }
+    else { btn.textContent = 'Error ' + r.status; }
+  } catch(e) { btn.textContent = e.message; }
+}
+</script></body></html>

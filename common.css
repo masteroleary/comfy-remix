@@ -1,0 +1,16 @@
+/* Archive Media Browser — shared theme tokens + base reset.
+   Linked by every page BEFORE its own <style>, so page styles can override.
+   Scrollbar styling is intentionally page-local (index hides scrollbars,
+   chat/voice use thin ones). */
+:root{
+  --bg:#0d0d0d;--surface:#1c1c1e;--surface2:#2c2c2e;--surface3:#3a3a3c;
+  --border:#38383a;--text:#f2f2f7;--text2:#8e8e93;--text3:#636366;
+  --accent:#0a84ff;--red:#ff453a;--green:#30d158;--amber:#ffd60a;--purple:#bf5af2;
+  --folder:#ffd60a;--video:#ff453a;--image:#30d158;--audio:#bf5af2;
+  --r:10px;--r-sm:7px;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}

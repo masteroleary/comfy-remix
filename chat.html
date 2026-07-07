@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chat</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+html,body{height:100%;background:var(--bg);overflow:hidden}
+body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;display:flex;flex-direction:column}
+
+/* ── TOP BAR ── */
+.top-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:calc(10px + var(--safe-t)) 12px 10px;
+  background:rgba(13,13,13,.92);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;z-index:10;
+}
+.top-bar .home-btn{
+  background:var(--surface2);border:none;color:var(--accent);
+  padding:8px 12px;border-radius:var(--r-sm);font-size:18px;cursor:pointer;
+}
+.top-bar .home-btn:active{opacity:.6}
+.top-bar h1{font-size:16px;font-weight:600;flex:1}
+.top-bar select{
+  background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  padding:6px 8px;border-radius:var(--r-sm);font-size:13px;max-width:180px;
+}
+.top-bar .icon-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  width:36px;height:36px;border-radius:var(--r-sm);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.top-bar .icon-btn.active{color:var(--accent);border-color:var(--accent)}
+.top-bar .icon-btn:active{opacity:.6}
+
+/* ── MESSAGES ── */
+.messages{
+  flex:1;overflow-y:auto;padding:16px 12px;
+  display:flex;flex-direction:column;gap:12px;
+  scroll-behavior:smooth;
+}
+/* Thin rounded scrollbars (applies everywhere scrollable) */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
+*::-webkit-scrollbar-corner{background:transparent}
+.msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:15px;line-height:1.45;word-wrap:break-word;white-space:pre-wrap}
+.msg.user{
+  align-self:flex-end;
+  background:var(--accent);color:#fff;
+  border-bottom-right-radius:4px;
+}
+.msg.assistant{
+  align-self:flex-start;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-bottom-left-radius:4px;
+}
+.msg.assistant .typing{display:inline-block;animation:blink 1s steps(2) infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}}
+
+.msg.system{
+  align-self:center;
+  background:transparent;color:var(--text3);
+  font-size:12px;padding:4px 8px;
+}
+.msg-timing{
+  align-self:flex-start;
+  font-size:11px;color:var(--text3);padding:0 14px;margin-top:-6px;
+}
+.msg-error{
+  align-self:flex-start;
+  font-size:12px;color:var(--red);padding:6px 10px;margin-top:2px;
+  background:rgba(255,69,58,.08);border:1px solid rgba(255,69,58,.3);border-radius:var(--r-sm);
+  max-width:85%;word-wrap:break-word;
+}
+.msg.assistant{position:relative;padding-bottom:24px}
+.msg-replay{
+  position:absolute;bottom:4px;right:6px;
+  background:transparent;border:none;color:var(--text3);
+  width:22px;height:22px;border-radius:50%;font-size:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;line-height:1;
+}
+.msg-replay:hover{color:var(--accent);background:var(--surface2)}
+.msg-replay:active{opacity:.6}
+.msg-replay.playing{color:var(--green)}
+
+/* ── INPUT BAR ── */
+.input-bar{
+  display:flex;gap:8px;
+  padding:10px 12px calc(10px + var(--safe-b));
+  background:rgba(13,13,13,.92);
+  backdrop-filter:saturate(180%) blur(20px);
+  border-top:1px solid var(--border);
+  flex-shrink:0;
+}
+.input-bar textarea{
+  flex:1;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);padding:10px 14px;border-radius:18px;
+  font-size:15px;font-family:inherit;resize:none;
+  outline:none;min-height:40px;max-height:120px;
+  line-height:1.4;
+}
+.input-bar textarea:focus{border-color:var(--accent)}
+.input-bar textarea::placeholder{color:var(--text3)}
+.send-btn{
+  align-self:flex-end;
+  background:var(--accent);border:none;color:#fff;
+  width:40px;height:40px;border-radius:50%;font-size:18px;
+  cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.send-btn:disabled{opacity:.4;cursor:default}
+.send-btn:active:not(:disabled){opacity:.7}
+
+/* ── SETTINGS DRAWER (slide from right) ── */
+.settings-overlay{
+  display:none;position:fixed;inset:0;z-index:100;
+  background:rgba(0,0,0,.5);
+}
+.settings-overlay.open{display:flex;justify-content:flex-end}
+.settings-panel{
+  background:var(--surface);border-radius:16px 0 0 16px;
+  padding:0 16px 20px;
+  width:340px;max-width:85vw;height:100%;overflow-y:auto;
+  animation:slideIn .2s ease-out;
+}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.settings-panel h2{font-size:15px;font-weight:600}
+.settings-header{display:flex;align-items:center;justify-content:space-between;padding:16px 0 12px;position:sticky;top:0;background:var(--surface);z-index:1}
+.settings-row{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.settings-row label{font-size:12px;color:var(--text2);font-weight:500}
+.settings-row select,.settings-row input{
+  background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  padding:8px 10px;border-radius:var(--r-sm);font-size:14px;width:100%;
+}
+.settings-row .hint{font-size:11px;color:var(--text3);margin-top:2px}
+.settings-close{
+  padding:6px 14px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--accent);border-radius:var(--r-sm);font-size:14px;font-weight:500;cursor:pointer;
+}
+
+/* ── AUDIO INDICATOR ── */
+.audio-indicator{
+  display:none;align-items:center;gap:6px;
+  padding:4px 10px;font-size:11px;color:var(--green);
+}
+.audio-indicator.active{display:flex}
+.audio-indicator.error{color:var(--red)}
+.audio-indicator.generating{color:var(--amber)}
+.audio-bars{display:flex;gap:2px;align-items:flex-end;height:14px}
+.audio-bars span{width:3px;background:currentColor;border-radius:1px;animation:bar .8s ease-in-out infinite}
+.audio-bars span:nth-child(1){height:6px;animation-delay:0s}
+.audio-bars span:nth-child(2){height:10px;animation-delay:.15s}
+.audio-bars span:nth-child(3){height:4px;animation-delay:.3s}
+.audio-bars span:nth-child(4){height:12px;animation-delay:.45s}
+@keyframes bar{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+
+/* ── SERVICE STATUS SCREEN ── */
+.service-screen{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 20px;gap:24px;
+}
+.service-screen.hidden{display:none}
+.service-title{font-size:18px;font-weight:600;color:var(--text)}
+.service-list{display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px}
+.service-item{
+  display:flex;align-items:center;gap:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 16px;
+}
+.service-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.service-dot.ok{background:var(--green)}
+.service-dot.fail{background:var(--red)}
+.service-dot.checking{background:var(--amber);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.service-info{flex:1;min-width:0}
+.service-name{font-size:14px;font-weight:600}
+.service-status{font-size:12px;color:var(--text2);margin-top:2px}
+.service-action{
+  background:var(--accent);border:none;color:#fff;
+  padding:6px 12px;border-radius:var(--r-sm);font-size:13px;font-weight:500;cursor:pointer;
+  white-space:nowrap;
+}
+.service-action:active{opacity:.7}
+.service-action:disabled{opacity:.4;cursor:default}
+.service-action.secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.service-retry{
+  background:var(--surface2);border:1px solid var(--border);color:var(--accent);
+  padding:10px 24px;border-radius:var(--r-sm);font-size:15px;font-weight:500;cursor:pointer;
+}
+.service-retry:active{opacity:.7}
+.service-hint{font-size:12px;color:var(--text3);text-align:center;max-width:360px;line-height:1.5}
+.chat-area{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.chat-area.hidden{display:none}
+
+/* ── CONVERSATION INDEX ── */
+.convo-index{
+  flex:1;overflow-y:auto;padding:16px 12px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.convo-index.hidden{display:none}
+.convo-new{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--accent);color:#fff;border:none;border-radius:var(--r);
+  padding:14px;font-size:15px;font-weight:600;cursor:pointer;
+}
+.convo-new:active{opacity:.7}
+.convo-card{
+  display:flex;align-items:center;gap:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:12px 14px;cursor:pointer;
+}
+.convo-card:active{transform:scale(.98)}
+.convo-card-info{flex:1;min-width:0}
+.convo-card-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.convo-card-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.convo-card-del{
+  background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;
+  padding:4px;flex-shrink:0;
+}
+.convo-card-del:hover{color:var(--red)}
+.convo-empty{text-align:center;color:var(--text3);font-size:14px;padding:40px 0}
+
+/* ── SAVE BUTTON ── */
+.auto-save-status{font-size:11px;color:var(--text3);white-space:nowrap;min-width:60px;text-align:right;transition:opacity .2s}
+.auto-save-status.saving{color:var(--amber)}
+.auto-save-status.saved{color:var(--green)}
+
+/* Character 3-dot menu */
+.char-menu-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  width:36px;height:36px;border-radius:var(--r-sm);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;
+}
+.char-menu-btn:hover{color:var(--text)}
+.char-menu-btn:active{opacity:.6}
+.char-menu{
+  display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:20;
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);
+  min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:4px;
+}
+.char-menu.open{display:flex;flex-direction:column}
+.char-menu button{
+  background:none;border:none;color:var(--text);
+  padding:9px 12px;border-radius:var(--r-sm);font-size:14px;text-align:left;cursor:pointer;
+  white-space:nowrap;
+}
+.char-menu button:hover:not(:disabled){background:var(--surface3)}
+.char-menu button:disabled{color:var(--text3);cursor:not-allowed;opacity:.5}
+.char-menu button.danger{color:var(--red)}
+.char-menu button.danger:hover:not(:disabled){background:rgba(255,69,58,.1)}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <button class="home-btn" onclick="location.href='/'">&#8962;</button>
+  <h1>Chat</h1>
+  <select id="modelSelect" title="LLM Model"><option>Loading...</option></select>
+  <span class="auto-save-status" id="autoSaveStatus"></span>
+  <button class="icon-btn" id="muteBtn" title="Toggle voice">&#128264;</button>
+  <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
+</div>
+
+<!-- Service status screen -->
+<div class="service-screen" id="serviceScreen">
+  <div class="service-title">Services</div>
+  <div class="service-list">
+    <div class="service-item" id="svcOllama">
+      <div class="service-dot checking" id="dotOllama"></div>
+      <div class="service-info">
+        <div class="service-name">Ollama (LLM)</div>
+        <div class="service-status" id="statusOllama">Checking...</div>
+      </div>
+    </div>
+    <div class="service-item" id="svcVoxtral">
+      <div class="service-dot checking" id="dotVoxtral"></div>
+      <div class="service-info">
+        <div class="service-name" id="svcVoxtralName">Voxtral TTS</div>
+        <div class="service-status" id="statusVoxtral">Checking...</div>
+      </div>
+      <button class="service-action" id="startVoxtralBtn" style="display:none" onclick="startVoxtral()">Start</button>
+      <button class="service-action" id="addXaiKeyBtn" style="display:none" onclick="addXaiKey()">Add xAI key</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="service-retry" id="retryBtn" onclick="checkServices()">Refresh</button>
+    <button class="service-retry" id="engineToggleBtn" onclick="toggleEngine()"></button>
+  </div>
+  <div class="service-hint" id="serviceHint">Ollama runs automatically. Voxtral TTS needs to be started in WSL or click Start above.</div>
+</div>
+
+
+<!-- Conversation index -->
+<div class="convo-index hidden" id="convoIndex">
+  <button class="convo-new" onclick="startNewChat()">+ New Chat</button>
+  <div id="convoList"></div>
+</div>
+
+<!-- Chat area (hidden until services ready) -->
+<div class="chat-area hidden" id="chatArea">
+  <div class="audio-indicator" id="audioIndicator">
+    <div class="audio-bars"><span></span><span></span><span></span><span></span></div>
+    Speaking...
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="msg system">Select a model and start chatting. Responses will be spoken aloud.</div>
+  </div>
+
+  <div class="input-bar">
+    <textarea id="chatInput" placeholder="Type a message..." rows="1"></textarea>
+    <button class="send-btn" id="sendBtn">&#9654;</button>
+  </div>
+</div>
+
+<!-- Settings drawer -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <h2>Chat Settings</h2>
+      <button class="settings-close" onclick="closeSettings()">Done</button>
+    </div>
+    <div class="settings-row">
+      <label>TTS Engine</label>
+      <select id="ttsEngineSelect">
+        <option value="voxtral">Voxtral (local, free)</option>
+        <option value="grok">Grok (cloud, $4.20/M chars)</option>
+      </select>
+      <div class="hint">Voxtral runs on your GPU. Grok sends text to xAI servers.</div>
+    </div>
+    <div class="settings-row">
+      <label>Voice</label>
+      <select id="voiceSelect"><option>Loading...</option></select>
+      <div class="hint" id="voiceHint">Voxtral TTS voice preset</div>
+    </div>
+    <div class="settings-row" id="speedRow">
+      <label>Speed: <span id="speedValue">1.0x</span></label>
+      <input type="range" id="speedSlider" min="0.25" max="4" step="0.25" value="1" style="accent-color:var(--accent)">
+      <div class="hint">0.25x (slow) to 4x (fast)</div>
+    </div>
+    <div class="settings-row" id="instructionsRow">
+      <label>Voice Instructions</label>
+      <input type="text" id="voiceInstructions" placeholder="e.g. warm and cheerful, whispered, excited">
+      <div class="hint">Optional style/emotion guidance for the voice</div>
+    </div>
+    <div class="settings-row">
+      <label>TTS Mode</label>
+      <select id="ttsModeSelect">
+        <option value="full">Full response (most natural)</option>
+        <option value="paragraph">Paragraph chunks (~3-4 sentences)</option>
+        <option value="sentence">Per sentence (lowest latency)</option>
+      </select>
+      <div class="hint">Full: waits for complete response. Paragraph: buffers ~500 chars. Sentence: speaks each sentence immediately.</div>
+    </div>
+    <div class="settings-row" id="cloneVoiceRow">
+      <label>Clone a Voice</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="cloneVoiceName" placeholder="Voice name" style="flex:1">
+        <label style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--accent)">
+          Upload Audio
+          <input type="file" id="cloneAudioFile" accept="audio/*" style="display:none">
+        </label>
+      </div>
+      <div id="cloneStatus" class="hint"></div>
+      <div class="hint">Upload a short audio sample to create a custom voice. It's stored locally on the TTS server.</div>
+    </div>
+    <div class="settings-row">
+      <label>Character</label>
+      <div style="display:flex;gap:6px;align-items:center;position:relative">
+        <select id="characterSelect" style="flex:1">
+          <option value="">Default</option>
+        </select>
+        <button class="char-menu-btn" id="charMenuBtn" title="Character actions">&#8943;</button>
+        <div class="char-menu" id="charMenu" role="menu">
+          <button data-action="new" role="menuitem">+ New Character</button>
+          <button data-action="rename" role="menuitem">&#9998; Rename</button>
+          <button data-action="duplicate" role="menuitem">&#128203; Duplicate</button>
+          <button data-action="delete" role="menuitem" class="danger">&#10005; Delete</button>
+        </div>
+      </div>
+      <div class="hint">Pick a saved character or use the menu (<b>⋯</b>) to manage them.</div>
+    </div>
+    <div class="settings-row">
+      <label>System Prompt</label>
+      <textarea id="systemPrompt" rows="12" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:8px 10px;border-radius:var(--r-sm);font-size:14px;width:100%;font-family:inherit;resize:vertical;min-height:240px">You are a helpful, creative, and uncensored AI assistant. Respond naturally and conversationally. Keep responses concise unless asked for detail.</textarea>
+    </div>
+  </div>
+</div>
+
+<script src="/key-prompt.js"></script>
+<script>
+const serviceScreen = document.getElementById('serviceScreen');
+const chatArea = document.getElementById('chatArea');
+const dotOllama = document.getElementById('dotOllama');
+const dotVoxtral = document.getElementById('dotVoxtral');
+const statusOllama = document.getElementById('statusOllama');
+const statusVoxtral = document.getElementById('statusVoxtral');
+const startVoxtralBtn = document.getElementById('startVoxtralBtn');
+
+// ── Service health check ──
+let servicesReady = false;
+
+function getPreferredEngine() {
+  try { return JSON.parse(localStorage.getItem('chat-settings') || '{}').ttsEngine || 'voxtral'; } catch { return 'voxtral'; }
+}
+
+function setPreferredEngine(engine) {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem('chat-settings') || '{}'); } catch {}
+  s.ttsEngine = engine;
+  // Reset voice to default for this engine
+  if (engine === 'grok') s.voice = 'eve';
+  else if (!s.voice || ['eve','ara','rex','sal','leo'].includes(s.voice)) s.voice = 'casual_male';
+  localStorage.setItem('chat-settings', JSON.stringify(s));
+}
+
+
+async function addXaiKey(){
+  if (await requireApiKey('xaiApiKey','Grok TTS (xAI)','https://console.x.ai')) checkServices();
+}
+
+async function toggleEngine() {
+  const cur = getPreferredEngine();
+  const next = cur === 'grok' ? 'voxtral' : 'grok';
+  if (next === 'grok' && !(await requireApiKey('xaiApiKey','Grok TTS (xAI)','https://console.x.ai'))) return;
+  setPreferredEngine(next);
+  checkServices();
+}
+
+async function checkServices() {
+  dotOllama.className = 'service-dot checking';
+  dotVoxtral.className = 'service-dot checking';
+  statusOllama.textContent = 'Checking...';
+  statusVoxtral.textContent = 'Checking...';
+  startVoxtralBtn.style.display = 'none';
+  const addXaiKeyBtn = document.getElementById('addXaiKeyBtn');
+  if (addXaiKeyBtn) addXaiKeyBtn.style.display = 'none';
+
+  try {
+    const r = await fetch('/api/chat/health');
+    const data = await r.json();
+
+    dotOllama.className = 'service-dot ' + (data.ollama ? 'ok' : 'fail');
+    statusOllama.textContent = data.ollama ? 'Running' : 'Not running — start Ollama app';
+
+    const preferredEngine = getPreferredEngine();
+    const toggleBtn = document.getElementById('engineToggleBtn');
+    const hintEl = document.getElementById('serviceHint');
+
+    if (preferredEngine === 'grok') {
+      dotVoxtral.className = 'service-dot ' + (data.grok ? 'ok' : 'fail');
+      statusVoxtral.textContent = data.grok ? 'Grok TTS (cloud) — key configured' : 'No xAI API key — tap “Add xAI key”';
+      startVoxtralBtn.style.display = 'none';
+      if (addXaiKeyBtn) addXaiKeyBtn.style.display = data.grok ? 'none' : '';
+      document.getElementById('svcVoxtralName').textContent = 'Grok TTS (cloud)';
+      toggleBtn.textContent = 'Use Voxtral instead';
+      hintEl.textContent = 'Ollama runs locally. Grok TTS is a paid cloud service ($4.20/M chars).';
+    } else {
+      dotVoxtral.className = 'service-dot ' + (data.voxtral ? 'ok' : 'fail');
+      statusVoxtral.textContent = data.voxtral ? 'Running on port 8091' : 'Not running';
+      startVoxtralBtn.style.display = data.voxtral ? 'none' : '';
+      if (addXaiKeyBtn) addXaiKeyBtn.style.display = 'none';
+      document.getElementById('svcVoxtralName').textContent = 'Voxtral TTS';
+      // Grok toggle is always available now — clicking it prompts for the key if missing.
+      toggleBtn.textContent = data.grok ? 'Use Grok instead' : 'Use Grok (add xAI key)';
+      toggleBtn.disabled = false;
+      toggleBtn.style.opacity = '';
+      hintEl.textContent = 'Ollama runs automatically. Voxtral TTS needs to be started in WSL or click Start above. Or switch to Grok cloud TTS.';
+    }
+
+    const ttsReady = preferredEngine === 'grok' ? data.grok : data.voxtral;
+    if (data.ollama && ttsReady) {
+      servicesReady = true;
+      serviceScreen.classList.add('hidden');
+      init();
+      showConvoIndex();
+    }
+  } catch {
+    dotOllama.className = 'service-dot fail';
+    dotVoxtral.className = 'service-dot fail';
+    statusOllama.textContent = 'Cannot reach server';
+    statusVoxtral.textContent = 'Cannot reach server';
+  }
+}
+
+async function startVoxtral() {
+  startVoxtralBtn.disabled = true;
+  startVoxtralBtn.textContent = 'Starting...';
+  dotVoxtral.className = 'service-dot checking';
+  statusVoxtral.textContent = 'Starting... (may take 30-60s)';
+
+  try {
+    await fetch('/api/chat/start-voxtral', { method: 'POST' });
+  } catch {}
+
+  // Poll until ready
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch('/api/chat/health');
+      const data = await r.json();
+      if (data.voxtral) {
+        clearInterval(poll);
+        dotVoxtral.className = 'service-dot ok';
+        statusVoxtral.textContent = 'Running on port 8091';
+        startVoxtralBtn.style.display = 'none';
+        startVoxtralBtn.disabled = false;
+        startVoxtralBtn.textContent = 'Start';
+        if (data.ollama) {
+          servicesReady = true;
+          serviceScreen.classList.add('hidden');
+          init();
+          showConvoIndex();
+        }
+      }
+    } catch {}
+    if (attempts > 40) { // ~2 min timeout
+      clearInterval(poll);
+      dotVoxtral.className = 'service-dot fail';
+      statusVoxtral.textContent = 'Failed to start — try manually in WSL';
+      startVoxtralBtn.disabled = false;
+      startVoxtralBtn.textContent = 'Retry';
+    }
+  }, 3000);
+}
+
+// Check on page load
+checkServices();
+
+const convoIndex = document.getElementById('convoIndex');
+const convoList = document.getElementById('convoList');
+let currentConvoId = null;
+
+// ── Conversation management ──
+function showConvoIndex() {
+  convoIndex.classList.remove('hidden');
+  chatArea.classList.add('hidden');
+  setChatSaveStatus('', '');
+  loadConvoList();
+}
+
+async function loadConvoList() {
+  try {
+    const r = await fetch('/api/chat/conversations');
+    const convos = await r.json();
+    if (!convos.length) {
+      convoList.innerHTML = '<div class="convo-empty">No saved conversations</div>';
+      return;
+    }
+    convoList.innerHTML = convos.map(c => `
+      <div class="convo-card" onclick="loadConvo('${c.id}')">
+        <div class="convo-card-info">
+          <div class="convo-card-title">${esc(c.title)}</div>
+          <div class="convo-card-meta">${c.messages ? c.messages.length + ' messages' : ''} &middot; ${timeAgo(c.updatedAt || c.createdAt)}</div>
+        </div>
+        <button class="convo-card-del" onclick="event.stopPropagation();renameConvo('${c.id}')" title="Rename">&#9998;</button>
+        <button class="convo-card-del" onclick="event.stopPropagation();deleteConvo('${c.id}')" title="Delete">&#10005;</button>
+      </div>
+    `).join('');
+  } catch {
+    convoList.innerHTML = '<div class="convo-empty">Error loading conversations</div>';
+  }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function startNewChat() {
+  currentConvoId = null;
+  chatHistory = [];
+  convoIndex.classList.add('hidden');
+  chatArea.classList.remove('hidden');
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '<div class="msg system">Select a model and start chatting. Responses will be spoken aloud.</div>';
+  setChatSaveStatus('', '');
+}
+
+async function loadConvo(id) {
+  try {
+    const r = await fetch('/api/chat/conversations');
+    const convos = await r.json();
+    const convo = convos.find(c => c.id === id);
+    if (!convo) return;
+    currentConvoId = convo.id;
+    chatHistory = convo.messages || [];
+    convoIndex.classList.add('hidden');
+    chatArea.classList.remove('hidden');
+    // Render messages
+    const msgs = document.getElementById('messages');
+    msgs.innerHTML = '';
+    for (const m of chatHistory) {
+      if (m.role === 'system') continue;
+      const div = document.createElement('div');
+      div.className = 'msg ' + m.role;
+      div.textContent = m.content;
+      if (m.role === 'assistant') {
+        const replayBtn = document.createElement('button');
+        replayBtn.className = 'msg-replay';
+        replayBtn.innerHTML = '&#9654;';
+        replayBtn.title = 'Replay audio';
+        replayBtn.onclick = () => replayMessage(m.content, replayBtn);
+        div.appendChild(replayBtn);
+      }
+      msgs.appendChild(div);
+    }
+    // Scroll to bottom after layout settles
+    requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
+  } catch {}
+}
+
+async function deleteConvo(id) {
+  try {
+    await fetch('/api/chat/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+    loadConvoList();
+  } catch {}
+}
+
+async function renameConvo(id) {
+  try {
+    const r = await fetch('/api/chat/conversations');
+    const convos = await r.json();
+    const convo = convos.find(c => c.id === id);
+    if (!convo) return;
+    const newTitle = prompt('Rename conversation:', convo.title);
+    if (!newTitle || !newTitle.trim() || newTitle === convo.title) return;
+    await fetch('/api/chat/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...convo, title: newTitle.trim() }),
+    });
+    loadConvoList();
+  } catch (e) { alert('Rename failed: ' + e.message); }
+}
+
+const autoSaveStatus = document.getElementById('autoSaveStatus');
+function setChatSaveStatus(cls, text) {
+  autoSaveStatus.className = 'auto-save-status ' + (cls || '');
+  autoSaveStatus.textContent = text || '';
+}
+let chatAutoSaveTimer = null;
+function scheduleChatAutoSave(delay) {
+  if (chatAutoSaveTimer) clearTimeout(chatAutoSaveTimer);
+  chatAutoSaveTimer = setTimeout(() => { chatAutoSaveTimer = null; saveConversation(true); }, typeof delay === 'number' ? delay : 1500);
+}
+
+async function generateTitleFromHistory() {
+  try {
+    const titleMessages = [
+      ...chatHistory.slice(0, 6),
+      { role: 'user', content: 'Give this conversation a short title (max 6 words). Reply with ONLY the title, nothing else.' }
+    ];
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelSelect.value, messages: titleMessages, tts: false, ttsMode: 'full' }),
+    });
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let titleText = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === 'text') titleText += evt.content;
+        } catch {}
+      }
+    }
+    return titleText.trim().replace(/^["']|["']$/g, '').slice(0, 80) || '';
+  } catch { return ''; }
+}
+
+async function saveConversation(silent) {
+  if (!chatHistory.length) return;
+  setChatSaveStatus('saving', 'Saving…');
+
+  // Resolve existing convo (to preserve title / createdAt)
+  let existing = null;
+  if (currentConvoId) {
+    try {
+      const r = await fetch('/api/chat/conversations');
+      const convos = await r.json();
+      existing = convos.find(c => c.id === currentConvoId) || null;
+    } catch {}
+  }
+
+  // Decide title: keep existing; if none, generate once with LLM; fallback to first user msg
+  let title = existing?.title;
+  if (!title) {
+    const firstUser = chatHistory.find(m => m.role === 'user');
+    title = firstUser ? firstUser.content.slice(0, 60) : 'Untitled';
+    // Try to upgrade with LLM-generated title (fire-and-forget; also saves)
+    generateTitleFromHistory().then(async t => {
+      if (!t || !currentConvoId) return;
+      try {
+        const r = await fetch('/api/chat/conversations');
+        const convos = await r.json();
+        const cur = convos.find(c => c.id === currentConvoId);
+        if (!cur || (cur.title && cur.title !== title)) return; // user may have renamed already
+        await fetch('/api/chat/conversations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...cur, title: t }),
+        });
+      } catch {}
+    });
+  }
+
+  const convo = {
+    id: currentConvoId || 'chat_' + Date.now(),
+    title,
+    messages: chatHistory,
+    model: modelSelect.value,
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  };
+  currentConvoId = convo.id;
+
+  try {
+    await fetch('/api/chat/conversations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(convo),
+    });
+    setChatSaveStatus('saved', 'Saved');
+    setTimeout(() => { if (autoSaveStatus.classList.contains('saved')) setChatSaveStatus('', ''); }, 2000);
+  } catch (e) {
+    setChatSaveStatus('', '');
+    if (!silent) alert('Save failed: ' + e.message);
+  }
+}
+
+const messagesEl = document.getElementById('messages');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const modelSelect = document.getElementById('modelSelect');
+const voiceSelect = document.getElementById('voiceSelect');
+const muteBtn = document.getElementById('muteBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+const audioIndicator = document.getElementById('audioIndicator');
+const systemPrompt = document.getElementById('systemPrompt');
+const characterSelect = document.getElementById('characterSelect');
+const charMenuBtn = document.getElementById('charMenuBtn');
+const charMenu = document.getElementById('charMenu');
+
+// ── Characters (shared with voice page via /api/characters) ──
+let characters = [];
+function refreshCharMenuState() {
+  const hasSelection = !!characterSelect.value;
+  charMenu.querySelectorAll('button').forEach(b => {
+    const action = b.dataset.action;
+    let disabled = false;
+    let title = '';
+    if (action === 'rename' || action === 'duplicate') {
+      disabled = !hasSelection;
+      title = disabled ? 'Select a character first' : '';
+    } else if (action === 'delete') {
+      if (!hasSelection) { disabled = true; title = 'Select a character first'; }
+      else if (characters.length <= 1) { disabled = true; title = 'At least one character must remain'; }
+    }
+    b.disabled = disabled;
+    b.title = title;
+  });
+}
+async function loadCharacters() {
+  try {
+    const r = await fetch('/api/characters');
+    characters = await r.json();
+    let savedId = '';
+    try { savedId = JSON.parse(localStorage.getItem('chat-settings') || '{}').characterId || ''; } catch {}
+    characterSelect.innerHTML = '<option value="">Default</option>' + characters.map(c =>
+      `<option value="${c.id}"${c.id === savedId ? ' selected' : ''}>${String(c.name).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}</option>`
+    ).join('');
+    if (savedId) {
+      const c = characters.find(x => x.id === savedId);
+      if (c) systemPrompt.value = c.prompt;
+    }
+    refreshCharMenuState();
+  } catch { characters = []; refreshCharMenuState(); }
+}
+
+characterSelect.addEventListener('change', () => {
+  const id = characterSelect.value;
+  if (id) {
+    const c = characters.find(x => x.id === id);
+    if (c) systemPrompt.value = c.prompt;
+  }
+  saveSettings();
+  refreshCharMenuState();
+});
+
+function closeCharMenu() { charMenu.classList.remove('open'); }
+charMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); charMenu.classList.toggle('open'); });
+document.addEventListener('click', (e) => {
+  if (!charMenu.contains(e.target) && e.target !== charMenuBtn) closeCharMenu();
+});
+charMenu.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn || btn.disabled) return;
+  closeCharMenu();
+  const action = btn.dataset.action;
+  if (action === 'new') return charActionNew();
+  if (action === 'rename') return charActionRename();
+  if (action === 'duplicate') return charActionDuplicate();
+  if (action === 'delete') return charActionDelete();
+});
+
+async function charActionNew() {
+  const name = prompt('New character name:');
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), prompt: systemPrompt.value || 'You are a helpful AI assistant.' }),
+    });
+    const saved = await r.json();
+    if (!r.ok) { alert('Error: ' + (saved.error || 'save failed')); return; }
+    await loadCharacters();
+    characterSelect.value = saved.id;
+    saveSettings();
+    refreshCharMenuState();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionRename() {
+  const id = characterSelect.value;
+  if (!id) return;
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt('Rename character:', c.name);
+  if (!name || !name.trim() || name === c.name) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...c, name: name.trim() }),
+    });
+    if (!r.ok) { const err = await r.json().catch(()=>({})); alert('Rename failed: ' + (err.error || '')); return; }
+    await loadCharacters();
+    characterSelect.value = id;
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionDuplicate() {
+  const id = characterSelect.value;
+  if (!id) return;
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt('Name for the copy:', c.name + ' (copy)');
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), prompt: c.prompt }),
+    });
+    const saved = await r.json();
+    if (!r.ok) { alert('Duplicate failed: ' + (saved.error || '')); return; }
+    await loadCharacters();
+    characterSelect.value = saved.id;
+    characterSelect.dispatchEvent(new Event('change'));
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function charActionDelete() {
+  const id = characterSelect.value;
+  if (!id) return;
+  if (characters.length <= 1) { alert('At least one character must remain — create a new one first.'); return; }
+  const c = characters.find(x => x.id === id);
+  if (!confirm('Delete character "' + (c ? c.name : id) + '"?')) return;
+  try {
+    await fetch('/api/characters/' + encodeURIComponent(id), { method: 'DELETE' });
+    await loadCharacters();
+    characterSelect.value = '';
+    saveSettings();
+    refreshCharMenuState();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+loadCharacters();
+
+// Persist prompt edits back to the selected character (debounced)
+let charSaveTimer = null;
+async function persistCharacterEdit() {
+  const id = characterSelect.value;
+  if (!id) return;
+  const c = characters.find(x => x.id === id);
+  if (!c) return;
+  const newPrompt = systemPrompt.value;
+  if (c.prompt === newPrompt) return;
+  try {
+    const r = await fetch('/api/characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, name: c.name, prompt: newPrompt }),
+    });
+    if (r.ok) c.prompt = newPrompt;
+  } catch {}
+}
+systemPrompt.addEventListener('input', () => {
+  saveSettings();
+  if (charSaveTimer) clearTimeout(charSaveTimer);
+  charSaveTimer = setTimeout(persistCharacterEdit, 600);
+});
+systemPrompt.addEventListener('change', () => {
+  saveSettings();
+  if (charSaveTimer) { clearTimeout(charSaveTimer); charSaveTimer = null; }
+  persistCharacterEdit();
+});
+
+const ttsModeSelect = document.getElementById('ttsModeSelect');
+const ttsEngineSelect = document.getElementById('ttsEngineSelect');
+const voiceHint = document.getElementById('voiceHint');
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
+const voiceInstructions = document.getElementById('voiceInstructions');
+const cloneVoiceName = document.getElementById('cloneVoiceName');
+const cloneAudioFile = document.getElementById('cloneAudioFile');
+const cloneStatus = document.getElementById('cloneStatus');
+
+// Detect which chat mode from URL: /chat/local -> voxtral, /chat/grok -> grok, /chat -> user choice
+const PAGE_MODE = location.pathname.endsWith('/grok') ? 'grok'
+  : location.pathname.endsWith('/local') ? 'voxtral'
+  : null; // null = legacy /chat page with selector
+if (PAGE_MODE) {
+  // Lock the engine to the page mode — write to settings before anything reads it
+  try {
+    const s = JSON.parse(localStorage.getItem('chat-settings') || '{}');
+    s.ttsEngine = PAGE_MODE;
+    if (PAGE_MODE === 'grok') s.voice = 'eve';
+    else if (!s.voice || ['eve','ara','rex','sal','leo'].includes(s.voice)) s.voice = 'casual_male';
+    localStorage.setItem('chat-settings', JSON.stringify(s));
+  } catch {}
+  // Hide engine selector in settings, update title
+  const engineRow = ttsEngineSelect && ttsEngineSelect.closest('.settings-row');
+  if (engineRow) engineRow.style.display = 'none';
+  const toggleBtnEl = document.getElementById('engineToggleBtn');
+  if (toggleBtnEl) toggleBtnEl.style.display = 'none';
+  document.title = PAGE_MODE === 'grok' ? 'Chat — Grok' : 'Chat — Local';
+  const h1 = document.querySelector('.top-bar h1');
+  if (h1) h1.textContent = PAGE_MODE === 'grok' ? 'Chat — Grok' : 'Chat — Local';
+
+  // Hide Voxtral-only features on Grok page
+  if (PAGE_MODE === 'grok') {
+    const cloneRow = document.getElementById('cloneVoiceRow');
+    const speedRow = document.getElementById('speedRow');
+    const instrRow = document.getElementById('instructionsRow');
+    if (cloneRow) cloneRow.style.display = 'none';
+    if (speedRow) speedRow.style.display = 'none';
+    if (instrRow) instrRow.style.display = 'none';
+  }
+}
+
+let isMuted = false;
+let isStreaming = false;
+let chatHistory = []; // {role, content}
+let audioQueue = [];
+let isPlayingAudio = false;
+let currentAbort = null;
+
+// ── Init ──
+async function init() {
+  // Load models
+  try {
+    const r = await fetch('/api/chat/models');
+    const data = await r.json();
+    modelSelect.innerHTML = data.models.map(m =>
+      `<option value="${m}"${m.includes('dolphin') ? ' selected' : ''}>${m}</option>`
+    ).join('');
+    if (!data.models.length) modelSelect.innerHTML = '<option>No models found</option>';
+  } catch {
+    modelSelect.innerHTML = '<option>Ollama offline</option>';
+  }
+  // Restore TTS engine first so voice loading uses the right one
+  const saved = localStorage.getItem('chat-settings');
+  let savedSettings = null;
+  if (saved) {
+    try { savedSettings = JSON.parse(saved); } catch {}
+  }
+  if (savedSettings && savedSettings.ttsEngine) ttsEngineSelect.value = savedSettings.ttsEngine;
+
+  // Load voices for current engine
+  await loadVoicesForEngine(savedSettings && savedSettings.voice);
+
+  // Restore remaining settings
+  if (savedSettings) {
+    if (savedSettings.model) modelSelect.value = savedSettings.model;
+    if (savedSettings.muted) { isMuted = true; updateMuteBtn(); }
+    if (savedSettings.ttsMode) ttsModeSelect.value = savedSettings.ttsMode;
+    if (savedSettings.speed) { speedSlider.value = savedSettings.speed; speedValue.textContent = savedSettings.speed + 'x'; }
+    if (savedSettings.instructions) voiceInstructions.value = savedSettings.instructions;
+  }
+}
+
+async function loadVoicesForEngine(preferredVoice) {
+  const engine = ttsEngineSelect.value;
+  try {
+    const r = await fetch('/api/chat/voices?engine=' + engine);
+    const data = await r.json();
+    const defaultVoice = engine === 'grok' ? 'eve' : 'casual_male';
+    const selectedVoice = (preferredVoice && data.voices.includes(preferredVoice)) ? preferredVoice : defaultVoice;
+
+    let html = '';
+    if (data.presets && data.presets.length) {
+      html += '<optgroup label="Presets">' + data.presets.map(v =>
+        `<option value="${v}"${v === selectedVoice ? ' selected' : ''}>${v}</option>`
+      ).join('') + '</optgroup>';
+    }
+    if (data.custom && data.custom.length) {
+      html += '<optgroup label="Custom Voices">' + data.custom.map(v =>
+        `<option value="${v}"${v === selectedVoice ? ' selected' : ''}>&#127908; ${v}</option>`
+      ).join('') + '</optgroup>';
+    }
+    voiceSelect.innerHTML = html || data.voices.map(v =>
+      `<option value="${v}"${v === selectedVoice ? ' selected' : ''}>${v}</option>`
+    ).join('');
+  } catch {
+    voiceSelect.innerHTML = '<option value="' + (engine === 'grok' ? 'eve' : 'casual_male') + '">' + (engine === 'grok' ? 'eve' : 'casual_male') + '</option>';
+  }
+  voiceHint.textContent = engine === 'grok'
+    ? 'Grok voices: eve (default), ara, rex, sal, leo'
+    : 'Voxtral TTS voice preset (20 presets + custom clones)';
+}
+
+function saveSettings() {
+  // Only per-device UI prefs. systemPrompt lives on the character record.
+  localStorage.setItem('chat-settings', JSON.stringify({
+    voice: voiceSelect.value,
+    model: modelSelect.value,
+    muted: isMuted,
+    ttsMode: ttsModeSelect.value,
+    ttsEngine: ttsEngineSelect.value,
+    speed: speedSlider.value,
+    instructions: voiceInstructions.value,
+    characterId: characterSelect ? characterSelect.value : '',
+  }));
+}
+
+// ── UI Helpers ──
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function updateMuteBtn() {
+  muteBtn.textContent = isMuted ? '\u{1F507}' : '\u{1F50A}';
+  muteBtn.classList.toggle('active', !isMuted);
+  saveSettings();
+}
+
+function openSettings() { settingsOverlay.classList.add('open'); }
+function closeSettings() { settingsOverlay.classList.remove('open'); saveSettings(); }
+
+// ── Auto-resize textarea ──
+chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+});
+
+// ── Audio playback queue ──
+async function replayMessage(text, btn) {
+  if (!text || !text.trim()) return;
+  btn.classList.add('playing');
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = '&#9209;'; // stop symbol
+  try {
+    const r = await fetch('/api/chat/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voice: voiceSelect.value,
+        ttsEngine: ttsEngineSelect.value,
+        speed: parseFloat(speedSlider.value),
+        instructions: voiceInstructions.value || undefined,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'TTS failed' }));
+      alert('TTS Error: ' + (err.error || 'unknown'));
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => { URL.revokeObjectURL(url); btn.classList.remove('playing'); btn.innerHTML = originalHTML; };
+    audio.onerror = () => { URL.revokeObjectURL(url); btn.classList.remove('playing'); btn.innerHTML = originalHTML; };
+    btn.onclick = () => { audio.pause(); URL.revokeObjectURL(url); btn.classList.remove('playing'); btn.innerHTML = originalHTML; btn.onclick = () => replayMessage(text, btn); };
+    audio.play().catch(() => { btn.classList.remove('playing'); btn.innerHTML = originalHTML; });
+  } catch (e) {
+    alert('Replay failed: ' + e.message);
+    btn.classList.remove('playing');
+    btn.innerHTML = originalHTML;
+  }
+}
+
+async function playAudioChunk(chunk) {
+  if (isMuted) return;
+  return new Promise((resolve) => {
+    try {
+      let src;
+      let cleanup = () => {};
+      if (chunk.url) {
+        src = chunk.url;
+      } else if (chunk.data) {
+        // Fallback for any old base64 path
+        const bin = atob(chunk.data);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: chunk.mime || 'audio/wav' });
+        src = URL.createObjectURL(blob);
+        cleanup = () => URL.revokeObjectURL(src);
+      } else {
+        return resolve();
+      }
+      const audio = new Audio(src);
+      audio.onended = () => { cleanup(); resolve(); };
+      audio.onerror = (e) => { console.error('Audio play error', e, audio.error); cleanup(); resolve(); };
+      audio.play().catch((err) => { console.error('Audio play() rejected', err); cleanup(); resolve(); });
+    } catch (e) { console.error('playAudioChunk exception', e); resolve(); }
+  });
+}
+
+async function processAudioQueue() {
+  if (isPlayingAudio) return;
+  isPlayingAudio = true;
+  audioIndicator.classList.add('active');
+  while (audioQueue.length > 0) {
+    const chunk = audioQueue.shift();
+    await playAudioChunk(chunk);
+  }
+  isPlayingAudio = false;
+  audioIndicator.classList.remove('active');
+}
+
+// ── Send message ──
+async function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!text || isStreaming) return;
+
+  addMessage('user', text);
+  chatHistory.push({ role: 'user', content: text });
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+
+  isStreaming = true;
+  sendBtn.disabled = true;
+  const assistantDiv = addMessage('assistant', '');
+  const cursor = document.createElement('span');
+  cursor.className = 'typing';
+  cursor.textContent = '\u2588';
+  assistantDiv.appendChild(cursor);
+
+  let fullText = '';
+  let llmStart = Date.now(), llmEnd = 0, ttsStart = 0, ttsEnd = 0, firstToken = false;
+  let ttsErrors = [];
+  currentAbort = new AbortController();
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: currentAbort.signal,
+      body: JSON.stringify({
+        model: modelSelect.value,
+        messages: [
+          { role: 'system', content: systemPrompt.value },
+          ...chatHistory,
+        ],
+        voice: voiceSelect.value,
+        tts: !isMuted,
+        ttsMode: ttsModeSelect.value,
+        ttsEngine: ttsEngineSelect.value,
+        speed: parseFloat(speedSlider.value),
+        instructions: voiceInstructions.value || undefined,
+      }),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === 'text') {
+            if (!firstToken) { firstToken = true; }
+            fullText += evt.content;
+            assistantDiv.textContent = fullText;
+            assistantDiv.appendChild(cursor);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          } else if (evt.type === 'llm_done') {
+            llmEnd = Date.now();
+          } else if (evt.type === 'audio') {
+            audioQueue.push({ url: evt.url, data: evt.data, mime: evt.mime || 'audio/wav' });
+            processAudioQueue();
+          } else if (evt.type === 'tts_status') {
+            if (evt.status === 'generating' && !ttsStart) {
+              ttsStart = Date.now();
+              audioIndicator.className = 'audio-indicator active generating';
+              audioIndicator.querySelector('span:last-child') || 0;
+              audioIndicator.innerHTML = '<div class="audio-bars"><span></span><span></span><span></span><span></span></div>Generating audio...';
+            } else if (evt.status === 'error') {
+              const msg = evt.message || 'unknown';
+              ttsErrors.push(msg);
+              audioIndicator.className = 'audio-indicator active error';
+              audioIndicator.innerHTML = 'TTS Error: ' + msg;
+              setTimeout(() => { audioIndicator.className = 'audio-indicator'; }, 8000);
+            } else if (evt.status === 'ready') {
+              ttsEnd = Date.now();
+              audioIndicator.className = 'audio-indicator active';
+              audioIndicator.innerHTML = '<div class="audio-bars"><span></span><span></span><span></span><span></span></div>Speaking...';
+            }
+          } else if (evt.type === 'error') {
+            fullText += '\n[Error: ' + evt.message + ']';
+            assistantDiv.textContent = fullText;
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      fullText += '\n[Connection error]';
+    }
+  }
+
+  cursor.remove();
+  if (fullText) {
+    assistantDiv.textContent = fullText;
+    chatHistory.push({ role: 'assistant', content: fullText });
+    scheduleChatAutoSave();
+    // Show timing
+    if (!llmEnd) llmEnd = Date.now();
+    const timingParts = [];
+    const llmMs = llmEnd - llmStart;
+    timingParts.push('LLM: ' + (llmMs < 1000 ? llmMs + 'ms' : (llmMs / 1000).toFixed(1) + 's'));
+    if (ttsStart && ttsEnd) {
+      const ttsMs = ttsEnd - ttsStart;
+      timingParts.push('TTS: ' + (ttsMs < 1000 ? ttsMs + 'ms' : (ttsMs / 1000).toFixed(1) + 's'));
+    } else if (ttsStart && !ttsEnd) {
+      timingParts.push('TTS: pending');
+    }
+    const timingDiv = document.createElement('div');
+    timingDiv.className = 'msg-timing';
+    timingDiv.textContent = timingParts.join(' \u00b7 ');
+    messagesEl.appendChild(timingDiv);
+
+    // Replay button in the chat bubble
+    const replayBtn = document.createElement('button');
+    replayBtn.className = 'msg-replay';
+    replayBtn.innerHTML = '&#9654;';
+    replayBtn.title = 'Replay audio';
+    replayBtn.onclick = () => replayMessage(fullText, replayBtn);
+    assistantDiv.appendChild(replayBtn);
+
+    // Show TTS errors persistently under the message
+    if (ttsErrors.length) {
+      const errDiv = document.createElement('div');
+      errDiv.className = 'msg-error';
+      const unique = [...new Set(ttsErrors)];
+      errDiv.textContent = (unique.length > 1 ? 'TTS Errors: ' : 'TTS Error: ') + unique.join(' | ');
+      messagesEl.appendChild(errDiv);
+    }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  } else {
+    assistantDiv.remove();
+  }
+  isStreaming = false;
+  sendBtn.disabled = false;
+  currentAbort = null;
+}
+
+// ── Speed slider ──
+speedSlider.addEventListener('input', () => {
+  speedValue.textContent = speedSlider.value + 'x';
+  saveSettings();
+});
+
+// ── Voice clone upload ──
+cloneAudioFile.addEventListener('change', async () => {
+  const file = cloneAudioFile.files[0];
+  const name = cloneVoiceName.value.trim();
+  if (!file) return;
+  if (!name) { cloneStatus.textContent = 'Please enter a voice name first.'; cloneStatus.style.color = 'var(--red)'; return; }
+
+  cloneStatus.textContent = 'Uploading...';
+  cloneStatus.style.color = 'var(--text2)';
+
+  try {
+    const formData = new FormData();
+    formData.append('audio_sample', file);
+    formData.append('name', name);
+
+    const r = await fetch('/api/chat/voices/upload', { method: 'POST', body: formData });
+    const data = await r.json();
+    if (r.ok && !data.error) {
+      cloneStatus.textContent = 'Voice "' + name + '" created! Select it from the dropdown.';
+      cloneStatus.style.color = 'var(--green)';
+      // Refresh voice list
+      const vr = await fetch('/api/chat/voices');
+      const vd = await vr.json();
+      voiceSelect.innerHTML = vd.voices.map(v =>
+        `<option value="${v}"${v === name ? ' selected' : ''}>${v}</option>`
+      ).join('');
+      cloneVoiceName.value = '';
+      cloneAudioFile.value = '';
+    } else {
+      const errMsg = data.error ? (typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error)) : 'Upload failed';
+      cloneStatus.textContent = 'Error: ' + errMsg;
+      cloneStatus.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    cloneStatus.textContent = 'Error: ' + e.message;
+    cloneStatus.style.color = 'var(--red)';
+  }
+});
+
+// ── Event listeners ──
+sendBtn.addEventListener('click', sendMessage);
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+muteBtn.addEventListener('click', () => { isMuted = !isMuted; updateMuteBtn(); });
+settingsBtn.addEventListener('click', openSettings);
+settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+modelSelect.addEventListener('change', saveSettings);
+ttsEngineSelect.addEventListener('change', async () => {
+  await loadVoicesForEngine();
+  saveSettings();
+});
+voiceSelect.addEventListener('change', saveSettings);
+</script>
+</body>
+</html>
