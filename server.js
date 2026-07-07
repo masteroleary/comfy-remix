@@ -1902,6 +1902,36 @@ runTests();
     return;
   }
 
+  // API: Start the local ComfyUI install. Uses config.comfyStartCmd (shell string
+  // or [cmd, ...args] array); falls back to the ComfyUI-Easy-Install launcher bat
+  // next to comfyDir. Probes first so a running instance is never double-started.
+  if (pn === '/api/comfy/start' && req.method === 'POST') {
+    let responded = false;
+    const done = (obj, code) => { if (!responded) { responded = true; jsonRes(res, obj, code || 200); } };
+    const launch = () => {
+      let cmd = config.comfyStartCmd;
+      if (!cmd) {
+        const guess = path.join(path.dirname(COMFY_DIR), 'Start ComfyUI.bat');
+        if (fs.existsSync(guess)) cmd = guess;
+      }
+      if (!cmd || (Array.isArray(cmd) && !cmd.length)) {
+        done({ error: 'No comfyStartCmd configured and no "Start ComfyUI.bat" found next to comfyDir — set comfyStartCmd in config.json.' }, 400);
+        return;
+      }
+      try {
+        const proc = Array.isArray(cmd)
+          ? spawn(cmd[0], cmd.slice(1), { detached: true, stdio: 'ignore', windowsHide: true, cwd: path.dirname(cmd[0]) })
+          : spawn('"' + cmd + '"', { shell: true, detached: true, stdio: 'ignore', windowsHide: true, cwd: path.dirname(cmd) });
+        proc.unref();
+        done({ started: true, message: 'ComfyUI starting — model load can take 30-90s.' });
+      } catch (e) { done({ error: 'Launch failed: ' + e.message }, 500); }
+    };
+    const probe = http.get(COMFY_URL + '/system_stats', { timeout: 2500 }, (r) => { r.resume(); done({ running: true }); });
+    probe.on('timeout', () => { probe.destroy(); launch(); });
+    probe.on('error', launch);
+    return;
+  }
+
   // API: Recognize which enabled workflow an embedded graph is (structural match).
   // POST { workflow } -> { name, label, score } of the best match, or {} if none.
   // Fingerprint = node-type multiset + typed link topology; widget values (prompt,

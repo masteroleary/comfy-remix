@@ -5,6 +5,7 @@
   "comfyDir": "D:/ComfyUI/ComfyUI",
   "comfyOutput": "D:/ComfyUI/ComfyUI/output",
   "comfyUrl": "http://127.0.0.1:8188",
+  "comfyStartCmd": "D:/ComfyUI/Start ComfyUI.bat",
   "comfyNotesDir": "",
   "ollamaUrl": "http://localhost:11434",
   "voxtralUrl": "http://localhost:8091",

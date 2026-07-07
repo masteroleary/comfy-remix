@@ -53,6 +53,7 @@ Copy `config.example.json` to `config.json` and fill in your values. Paths/URLs/
 - `comfyDir` — ComfyUI install directory (workflow list, Claude Code cwd)
 - `comfyOutput` — Path to ComfyUI output folder
 - `comfyUrl` — ComfyUI API address (default `http://127.0.0.1:8188`; used by the run proxy, WS proxy, and status checks)
+- `comfyStartCmd` — command that launches ComfyUI (shell string or `[cmd, ...args]` array); if unset, auto-detects `Start ComfyUI.bat` next to `comfyDir`. Used by the Run button's "start it now" offer (`POST /api/comfy/start`). Note: launched by the SYSTEM server it runs invisibly in session 0.
 - `comfyNotesDir` — optional notes folder passed to Claude Code via `--add-dir`
 - `ollamaUrl` / `voxtralUrl` — local LLM / TTS service addresses
 - `voxtralStartCmd` — command that launches your Voxtral service (shell string or `[cmd, ...args]` array); the Start button errors without it

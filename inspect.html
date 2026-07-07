@@ -1329,19 +1329,51 @@ async function uploadImageToComfy(imagePath) {
 
 const allOutputFiles = [];
 
+async function comfyUp(timeoutMs) {
+  try {
+    const r = await fetch('/api/comfy/system_stats', { signal: AbortSignal.timeout(timeoutMs || 4000) });
+    return r.ok;
+  } catch { return false; }
+}
+
+// ComfyUI must be up before a run (upload, queue, WS all need it). If it's down,
+// offer to launch it via the server (config.comfyStartCmd / Easy-Install bat) and
+// poll until the API answers.
+async function ensureComfyRunning() {
+  status.style.color = '';
+  status.textContent = 'Checking ComfyUI...';
+  if (await comfyUp()) return true;
+
+  status.style.color = '#ff453a';
+  status.textContent = 'ComfyUI is not running';
+  if (!confirm('ComfyUI is not running.\n\nStart it now? Model load usually takes 30–90 seconds.')) return false;
+
+  let data = {};
+  try { data = await (await fetch('/api/comfy/start', { method: 'POST' })).json(); } catch {}
+  if (!data.started && !data.running) {
+    alert('Could not start ComfyUI: ' + (data.error || 'unknown error'));
+    return false;
+  }
+  const t0 = Date.now(), deadline = t0 + 180000;
+  status.style.color = '#ff9f0a';
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 3000));
+    if (await comfyUp(2500)) {
+      status.style.color = '';
+      status.textContent = 'ComfyUI ready';
+      return true;
+    }
+    status.textContent = 'Starting ComfyUI… ' + Math.round((Date.now() - t0) / 1000) + 's';
+  }
+  status.style.color = '#ff453a';
+  status.textContent = 'ComfyUI did not come up within 3 minutes — check its console/logs';
+  return false;
+}
+
 runBtn.onclick = async () => {
   if (!promptData && workflowSelect.value === 'inherit') return;
 
-  // ComfyUI must be up before anything else (upload, queue, WS all need it)
-  status.textContent = 'Checking ComfyUI...';
-  try {
-    const ping = await fetch('/api/comfy/system_stats', { signal: AbortSignal.timeout(4000) });
-    if (!ping.ok) throw new Error('HTTP ' + ping.status);
-  } catch (e) {
-    status.textContent = 'ComfyUI not running';
-    alert('ComfyUI is not running.\n\nStart ComfyUI on this machine, wait for it to finish loading, then hit Run again.');
-    return;
-  }
+  if (!(await ensureComfyRunning())) return;
 
   const runCount = parseInt(runCountSelect.value) || 1;
   const runProgress = document.getElementById('runProgress');
