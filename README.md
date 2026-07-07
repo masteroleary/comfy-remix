@@ -7,7 +7,7 @@ Browse and curate your AI-generated media (images, video, audio), then **remix**
 > **License:** [CC BY-NC 4.0](LICENSE) — free to use, share, and modify **with credit** to [masteroleary/comfy-remix](https://github.com/masteroleary/comfy-remix); **commercial use requires written consent** (webdevllc@gmail.com).
 
 - **Start:** `cd D:/Archive && npm start` → serves on **http://localhost:8080** (HTTPS on **8443**).
-- **Auto-start:** runs headless at boot as a Windows scheduled task, before any user logs in.
+- **Auto-start:** can run headless at boot as a Windows scheduled task, before any user logs in — see [Run at startup](#run-at-startup-windows).
 - **API keys / settings:** click the **⚙** button in the app header (Claude, Grok/xAI, Civitai keys, service URLs).
 
 See [CLAUDE.md](CLAUDE.md) for architecture, API endpoints, and the full firewall/hardening details.
@@ -113,6 +113,49 @@ The app is **local-first**: your media library is served straight off your disk 
 | **Civitai** | cloud | API key stored for authenticated model downloads (some models require an account to fetch). | Only the download requests you trigger |
 
 All API keys live in `config.json` (gitignored) and are managed via ⚙ Settings; each cloud feature detects a missing key, prompts for it on first use, and stays inactive until you provide one.
+
+---
+
+## Run at startup (Windows)
+
+Two options, depending on whether you want the app up **before anyone logs in** (headless server / remote access after a reboot) or just when you sign in.
+
+### Option A — At boot, before login (recommended for headless use)
+
+Registers a scheduled task that runs the server as **SYSTEM** at startup — the app is reachable right after a cold boot with nobody at the desk. Run in an **elevated** PowerShell (adjust the app path):
+
+```powershell
+$app      = 'C:\path\to\comfy-remix'          # <- your clone
+$node     = (Get-Command node).Source
+$action   = New-ScheduledTaskAction -Execute $node -Argument 'server.js' -WorkingDirectory $app
+$trigger  = New-ScheduledTaskTrigger -AtStartup
+$principal= New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+              -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -Hidden
+Register-ScheduledTask -TaskName 'ComfyRemixAutoStart' -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+Start-ScheduledTask -TaskName 'ComfyRemixAutoStart'    # start it now without rebooting
+```
+
+Verify: open `http://localhost:8080`, or `Get-ScheduledTask ComfyRemixAutoStart | Select State`.
+
+Notes for SYSTEM mode:
+- The 🤖 Claude assistant can't see your per-user `claude` login under SYSTEM — paste an **Anthropic API key in ⚙ Settings** instead (it's passed to the CLI automatically).
+- To restart after pulling updates: `Stop-ScheduledTask ComfyRemixAutoStart; Start-ScheduledTask ComfyRemixAutoStart` (elevated).
+- For **remote access before login** over Tailscale, also enable Tailscale's unattended mode: `reg add "HKLM\SOFTWARE\Tailscale IPN" /v UnattendedMode /t REG_SZ /d always` — otherwise the tailnet disconnects at logoff.
+
+### Option B — At your logon (no admin needed)
+
+```powershell
+$app     = 'C:\path\to\comfy-remix'
+$node    = (Get-Command node).Source
+$action  = New-ScheduledTaskAction -Execute $node -Argument 'server.js' -WorkingDirectory $app
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+Register-ScheduledTask -TaskName 'ComfyRemixAutoStart' -Action $action -Trigger $trigger
+```
+
+> Use **one option, not both** — two instances fight over port 8080 (`EADDRINUSE`). Remove with `Unregister-ScheduledTask -TaskName 'ComfyRemixAutoStart'`.
+
+On Linux/macOS the equivalent is a `systemd` user unit or `launchd` plist running `node server.js` in the app directory.
 
 ---
 
