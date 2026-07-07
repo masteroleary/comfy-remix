@@ -530,7 +530,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
   </div>
   <div class="hdr-row2" id="searchRow">
-    <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false"><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
+    <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" readonly><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
     <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🏷</button>
     <button class="sort-btn" id="sortBtn">Date ↓</button>
   </div>
@@ -747,6 +747,21 @@ const searchInp  = $('searchInp');
 // Chromium ignores autocomplete="off" and keys saved-entry suggestions off the
 // input's name — a random name per page load means nothing ever matches.
 searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
+// Personal-data autofill (emails etc.) ignores even that, but browsers won't fill a
+// readonly field: it stays readonly until the user actually touches/focuses it
+// (markup has `readonly`), and anything injected regardless gets wiped.
+const unlockSearch = () => searchInp.removeAttribute('readonly');
+searchInp.addEventListener('touchstart', unlockSearch, { passive: true });
+searchInp.addEventListener('focus', unlockSearch);
+function wipeInjectedSearch() {
+  if (document.activeElement === searchInp) return; // user is typing — leave it alone
+  if (searchInp.value && searchInp.value !== (S.search || '')) {
+    searchInp.value = S.search || '';
+    $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+  }
+}
+setTimeout(wipeInjectedSearch, 400);
+window.addEventListener('pageshow', () => setTimeout(wipeInjectedSearch, 100));
 const sortBtn    = $('sortBtn');
 const filterBar  = $('filterBar');
 const statsTxt   = $('statsTxt');
