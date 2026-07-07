@@ -895,6 +895,16 @@ blurToggle.onclick = () => {
   blurToggle.textContent = document.body.classList.contains('blur-on') ? '🔒' : '👁';
 };
 
+// Auto-relock: when the tab is hidden (switched away / minimized), re-enable the
+// blur and close the full-screen viewer so returning to the tab shows nothing sensitive.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;
+  document.body.classList.add('blur-on');
+  blurToggle.classList.add('active');
+  blurToggle.textContent = '🔒';
+  if (modal.classList.contains('open')) closeModal();
+});
+
 let sortIdx = 5; // Date ↓
 sortBtn.onclick = () => {
   sortIdx = (sortIdx + 1) % SORTS.length;

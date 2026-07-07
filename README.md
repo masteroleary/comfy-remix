@@ -2,7 +2,9 @@
 
 Browse and curate your AI-generated media (images, video, audio), then **remix** it — rerun the workflow inside any file with a new prompt, seed, or style. Zero-dependency Node.js server + single-page front end, built to pair with [ComfyUI](https://github.com/Comfy-Org/ComfyUI).
 
-> ComfyRemix is an independent community project. It is **not affiliated with, endorsed by, or sponsored by Comfy Org, Inc.** — "ComfyUI" is the branding of Comfy Org. This app contains no ComfyUI code; it talks to your own ComfyUI install over its local API. Licensed under [MIT](LICENSE).
+> ComfyRemix is an independent community project. It is **not affiliated with, endorsed by, or sponsored by Comfy Org, Inc.** — "ComfyUI" is the branding of Comfy Org. This app contains no ComfyUI code; it talks to your own ComfyUI install over its local API.
+>
+> **License:** [CC BY-NC 4.0](LICENSE) — free to use, share, and modify **with credit** to [masteroleary/comfy-remix](https://github.com/masteroleary/comfy-remix); **commercial use requires written consent** (webdevllc@gmail.com).
 
 - **Start:** `cd D:/Archive && npm start` → serves on **http://localhost:8080** (HTTPS on **8443**).
 - **Auto-start:** runs headless at boot as a Windows scheduled task, before any user logs in.
