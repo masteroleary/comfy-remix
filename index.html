@@ -339,6 +339,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 /* ── CLAUDE PANEL ── */
 .blur-on .card-thumb img{filter:blur(20px);transform:scale(1.1)}
+.card-tags{position:absolute;top:4px;left:4px;display:flex;gap:3px;z-index:2;pointer-events:none}
+.card-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:6px;background:rgba(0,0,0,.65);color:#c8c8cd;letter-spacing:.3px}
+.card-tag.nsfw{background:rgba(120,20,20,.85);color:#ffd7d7}
+#safeToggle.active{background:var(--green,#30d158);color:#fff}
 .blur-btn{
   flex:1;display:flex;align-items:center;justify-content:center;
   background:var(--surface2);border:none;color:var(--text2);
@@ -527,6 +531,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </button>
     <button class="home-btn" id="homeBtn" title="Home">⌂</button>
     <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
+    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items">🛡</button>
     <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
   </div>
   <div class="hdr-row2" id="searchRow">
@@ -910,6 +915,17 @@ blurToggle.onclick = () => {
   blurToggle.textContent = document.body.classList.contains('blur-on') ? '🔒' : '👁';
 };
 
+// Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter)
+const safeToggle = $('safeToggle');
+S.safeMode = localStorage.getItem('archiveSafeMode') === '1';
+safeToggle.classList.toggle('active', S.safeMode);
+safeToggle.onclick = () => {
+  S.safeMode = !S.safeMode;
+  localStorage.setItem('archiveSafeMode', S.safeMode ? '1' : '0');
+  safeToggle.classList.toggle('active', S.safeMode);
+  loadDir(S.dir, 1, false); // re-fetch with/without the filter
+};
+
 // Auto-relock: when the tab is hidden (switched away / minimized), re-enable the
 // blur and close the full-screen viewer so returning to the tab shows nothing sensitive.
 document.addEventListener('visibilitychange', () => {
@@ -980,6 +996,7 @@ async function loadDir(dir, page = 1, pushStack = true) {
       sort: S.sort,
       asc: S.asc,
       type: S.type,
+      safe: S.safeMode ? '1' : '0',
     });
     const data = await fetch('/api/list?' + q).then(r => r.json());
     if (data.error) throw new Error(data.error);
@@ -1160,6 +1177,11 @@ function makeCard(item, idx) {
   const ext = item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : '';
   let extColor = item.isVideo ? 'var(--video)' : item.isImage ? 'var(--image)' : item.isAudio ? 'var(--audio)' : 'var(--text3)';
 
+  // Index-derived tags: embedded workflow + NSFW (visible even while blurred)
+  const tagsHtml = (item.workflow || item.nsfw)
+    ? `<div class="card-tags">${item.workflow ? '<span class="card-tag wf" title="Has embedded workflow">⚙ wf</span>' : ''}${item.nsfw ? '<span class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span>' : ''}</div>`
+    : '';
+
   let thumbHtml = '';
   if (item.isDir) {
     thumbHtml = `<div class="card-thumb"><div class="card-icon">📁</div></div>`;
@@ -1170,12 +1192,14 @@ function makeCard(item, idx) {
         ${tsrc ? `<img data-src="${esc(tsrc)}" alt="">` : `<div class="card-icon">🎬</div>`}
         <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
         ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
+        ${tagsHtml}
       </div>`;
   } else if (item.isImage) {
     thumbHtml = `
       <div class="card-thumb">
         <img data-src="/file/${enc(item.path)}" alt="">
         ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
+        ${tagsHtml}
       </div>`;
   } else if (item.isAudio) {
     thumbHtml = `<div class="card-thumb"><div class="card-icon">🎵</div>${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}</div>`;
@@ -1884,7 +1908,7 @@ $('statusOpenSettings').onclick = () => { $('statusOverlay').classList.remove('o
   $('wordsBtn').onclick = () => {
     overlay.classList.add('open');
     $('wordsList').innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">Loading…</div>';
-    fetch('/api/prompt-words').then(r => r.json()).then(d => {
+    fetch('/api/prompt-words?safe=' + (S.safeMode ? '1' : '0')).then(r => r.json()).then(d => {
       words = d.words || [];
       render();
     }).catch(e => { $('wordsList').innerHTML = '<div style="padding:16px;color:var(--red);font-size:12px">' + esc(e.message) + '</div>'; });

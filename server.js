@@ -275,7 +275,13 @@ function extractPngMetadata(filePath, cb) {
 // Maps PNG path -> embedded prompt text so /api/list search can match prompt
 // words, not just file names. Incremental by mtime, persisted across restarts.
 const PROMPT_INDEX_PATH = path.join(__dirname, 'app-prompt-index.json');
-const PROMPT_INDEX_VERSION = 3; // bump to force a full re-extract after extractor changes
+const PROMPT_INDEX_VERSION = 4; // bump to force a full re-extract after extractor changes
+
+// NSFW tagging: indexed prompt text is matched against this term list (stored
+// base64-encoded — same repo-hygiene pattern as SANITIZE_RULES). An entry that
+// matches gets n:1 and is omitted entirely when the client requests safe=1.
+const NSFW_TERMS_B64 = ["bnNmdw==","cG9ybg==","aGVudGFp","bnVkZQ==","bmFrZWQ=","dG9wbGVzcw==","c2V4","cGVuaXM=","Y29jaw==","ZGljaw==","cHVzc3k=","dmFnaW5h","Y3Vt","Y3Vtc2hvdA==","Ymxvd2pvYg==","ZGVlcHRocm9hdA==","ZmVsbGF0aW8=","Y3VubmlsaW5ndXM=","YW5hbA==","Y3JlYW1waWU=","bmlwcGxlcw==","YXJlb2xh","YWhlZ2Fv","bWFzdHVyYmF0aW9u","b3JnYXNt","ZXJlY3Rpb24=","Z2FuZ2Jhbmc=","dGhyZWVzb21l","c3BpdHJvYXN0","YnVra2FrZQ==","aGFuZGpvYg==","Zm9vdGpvYg==","ZmluZ2VyaW5n","c3F1aXJ0aW5n","Ym9uZGFnZQ==","YmRzbQ==","YnJlYXN0cw==","Ym9vYnM=","dGl0cw==","cHViaWM=","Z2VuaXRhbHM=","cGVuZXRyYXRpb24=","ZG9nZ3lzdHlsZQ=="];
+const NSFW_RE = new RegExp('\\b(' + NSFW_TERMS_B64.map(s => Buffer.from(s, 'base64').toString('utf8')).join('|') + ')\\b', 'i');
 let promptIndex = { v: PROMPT_INDEX_VERSION, files: {} };
 let promptIndexing = false;
 try {
@@ -331,7 +337,10 @@ async function buildPromptIndex() {
             if (e.name.startsWith('.')) continue;
             const fp = path.join(dir, e.name);
             if (e.isDirectory()) { stack.push(fp); continue; }
-            if (!e.name.toLowerCase().endsWith('.png')) continue;
+            const lower = e.name.toLowerCase();
+            const isPng = lower.endsWith('.png');
+            const isVid = /\.(mp4|webm|mov)$/.test(lower);
+            if (!isPng && !isVid) continue;
             const key = fp.replace(/\\/g, '/');
             seen.add(key);
             checked++;
@@ -339,9 +348,14 @@ async function buildPromptIndex() {
             const rec = promptIndex.files[key];
             if (rec && rec.m === st.mtimeMs) continue;
             const meta = await new Promise(r => {
-              try { extractPngMetadata(fp, (err, m) => r(err ? null : m)); } catch { r(null); }
+              try { (isPng ? extractPngMetadata : extractVideoMetadata)(fp, (err, m) => r(err ? null : m)); } catch { r(null); }
             });
-            promptIndex.files[key] = { m: st.mtimeMs, t: meta ? promptTextFromMeta(meta) : '' };
+            const text = meta ? promptTextFromMeta(meta) : '';
+            promptIndex.files[key] = {
+              m: st.mtimeMs, t: text,
+              w: (meta && (meta.prompt || meta.workflow)) ? 1 : 0,
+              n: NSFW_RE.test(text) ? 1 : 0,
+            };
             added++;
             if (added % 25 === 0) await new Promise(r => setImmediate(r)); // stay responsive
           } catch (fileErr) {
@@ -397,10 +411,11 @@ const PHRASE_STOPLIST = new Set(['enable', 'disable', 'default', 'simple', 'norm
   'worst quality', 'low quality', 'normal quality', 'high quality', 'bad quality', 'lowres', 'low resolution',
   'high resolution', 'absurdres', 'incredibly absurdres', 'very aesthetic', 'newest', '4k', '8k',
   'jpeg artifacts', 'bad anatomy', 'bad hands', 'deformed', 'ugly', 'poorly drawn', 'text', 'logo', 'signature']);
-function promptPhraseCounts() {
+function promptPhraseCounts(safeMode) {
   const counts = new Map();
   for (const rec of Object.values(promptIndex.files)) {
     if (!rec.t) continue;
+    if (safeMode && rec.n) continue; // safe mode: NSFW-tagged files contribute nothing
     const seenInFile = new Set();
     for (let part of rec.t.split(/[,\n.]|\bbreak\b/g)) {
       part = part.replace(/[()\[\]{}<>]/g, '').replace(/:\s*\d+(\.\d+)?/g, '').replace(/\s+/g, ' ').trim();
@@ -410,6 +425,7 @@ function promptPhraseCounts() {
       if (/%[a-z]/i.test(part)) continue;                // filename pattern placeholders
       if (/embedding:|lora:/i.test(part)) continue;      // resource references
       if (PHRASE_STOPLIST.has(part)) continue;
+      if (safeMode && NSFW_RE.test(part)) continue;      // belt & braces: no NSFW phrases either
       if (seenInFile.has(part)) continue;
       seenInFile.add(part);
       counts.set(part, (counts.get(part) || 0) + 1);
@@ -627,8 +643,14 @@ async function workflowToPrompt(wf) {
         if (resolved) {
           inputs[inp.name] = [resolved.fromNode, resolved.fromSlot];
           linkedInputs.add(inp.name);
+        } else if (!inp.widget && info.input && info.input.required && (inp.name in info.input.required)) {
+          // A required SOCKET input is wired in the editor but its chain dead-ends
+          // in a muted/bypassed branch — this node can't run. Mark it dead so the
+          // prune pass removes it (mirrors ComfyUI, which never submits dead branches).
+          // Widget inputs are exempt: their value lives in widgets_values (e.g. a
+          // PrimitiveNode feeding wildcard_text) and substitutes for the dead link.
+          inputs.__dead = true;
         }
-        // If null, the bypass chain couldn't be resolved — input is disconnected
       }
     }
 
@@ -725,7 +747,16 @@ async function workflowToPrompt(wf) {
               typeName === 'BOOLEAN' ? (typeof val === 'boolean' || val === 0 || val === 1)
               : (typeName === 'INT' || typeName === 'FLOAT') ? typeof val === 'number'
               : (val === null || typeof val !== 'object'); // STRING/COMBO/custom accept any scalar
-            if (typeOk) { inputs[name] = val; widgetIdx = scanIdx + 1; assigned = true; break; }
+            if (typeOk) {
+              // Single-choice combos are UI placeholders whose label text drifts
+              // between node-pack versions ("Select Wildcard 🟢 Full Cache" vs the
+              // installed pack's label) — coerce to the installed value.
+              if (typeName === 'COMBO' && Array.isArray(def[0]) && def[0].length === 1
+                  && typeof val === 'string' && !def[0].includes(val)) {
+                val = def[0][0];
+              }
+              inputs[name] = val; widgetIdx = scanIdx + 1; assigned = true; break;
+            }
             scanIdx++; // junk entry — skip it
           }
           if (!assigned) {
@@ -799,6 +830,49 @@ async function workflowToPrompt(wf) {
       }
     }
   }
+
+  // ── Prune dead branches (mirrors ComfyUI, which builds prompts backward from
+  // output nodes and never submits disabled branches) ──
+  // 1) Nodes whose required editor-wired input dead-ended in a muted/bypassed
+  //    chain (__dead marker) can't run.
+  const isRef = v => Array.isArray(v) && v.length === 2 && typeof v[0] === 'string';
+  for (const [id, n] of Object.entries(prompt)) {
+    if (n.inputs.__dead) delete prompt[id];
+  }
+  // 2) Cascade: a dangling ref on a REQUIRED input kills the node; a dangling
+  //    ref on an optional input just drops that input (ComfyUI's semantics).
+  let prunedSomething = true;
+  while (prunedSomething) {
+    prunedSomething = false;
+    for (const [id, n] of Object.entries(prompt)) {
+      const inf = objectInfo[n.class_type];
+      const required = (inf && inf.input && inf.input.required) || {};
+      for (const [key, v] of Object.entries(n.inputs)) {
+        if (!isRef(v) || prompt[v[0]]) continue;
+        if (key in required) { delete prompt[id]; prunedSomething = true; break; }
+        delete n.inputs[key];
+      }
+    }
+  }
+  // 3) Keep only nodes that feed an output node (SaveImage etc.) — active nodes
+  //    orphaned by a bypassed branch would otherwise fail ComfyUI validation.
+  const outputIds = Object.entries(prompt)
+    .filter(([, n]) => { const inf = objectInfo[n.class_type]; return inf && inf.output_node === true; })
+    .map(([id]) => id);
+  if (outputIds.length) {
+    const keep = new Set();
+    const stack = [...outputIds];
+    while (stack.length) {
+      const id = stack.pop();
+      if (keep.has(id)) continue;
+      keep.add(id);
+      for (const v of Object.values(prompt[id].inputs)) {
+        if (isRef(v) && prompt[v[0]]) stack.push(v[0]);
+      }
+    }
+    for (const id of Object.keys(prompt)) if (!keep.has(id)) delete prompt[id];
+  }
+  for (const n of Object.values(prompt)) delete n.inputs.__dead;
 
   return prompt;
 }
@@ -1305,6 +1379,7 @@ runTests();
     const sort = url.searchParams.get('sort') || 'name';
     const asc = url.searchParams.get('asc') !== 'false';
     const typeFilter = url.searchParams.get('type') || 'all'; // all | video | image | audio | folder
+    const safeMode = url.searchParams.get('safe') === '1'; // omit NSFW-tagged items entirely
 
     // A search spans the whole subtree; plain browsing lists one directory.
     const deep = !!search;
@@ -1352,6 +1427,10 @@ runTests();
           if (hasMatchingVideo) continue;
         }
 
+        // Prompt-index flags: embedded workflow present + NSFW word match
+        const idxRec = isDir ? null : promptIndex.files[fullPath.replace(/\\/g, '/')];
+        if (safeMode && idxRec && idxRec.n) continue;
+
         const thumbPath = isVideo ? getThumbPath(fullPath) : null;
 
         items.push({
@@ -1363,6 +1442,8 @@ runTests();
           sizeBytes: isDir ? 0 : stat.size,
           modified: stat.mtime.toISOString(),
           thumb: !!thumbPath,
+          workflow: !!(idxRec && idxRec.w),
+          nsfw: !!(idxRec && idxRec.n),
         });
       }
     }
@@ -1799,7 +1880,8 @@ runTests();
 
   // API: Prompt phrase directory (word/phrase -> number of images containing it)
   if (pn === '/api/prompt-words' && req.method === 'GET') {
-    jsonRes(res, { words: promptPhraseCounts(), files: Object.keys(promptIndex.files).length });
+    const safeMode = url.searchParams.get('safe') === '1';
+    jsonRes(res, { words: promptPhraseCounts(safeMode), files: Object.keys(promptIndex.files).length });
     return;
   }
 
@@ -2169,6 +2251,10 @@ runTests();
           }
 
           const prompt = await workflowToPrompt(wf);
+          if (!Object.keys(prompt).length) {
+            jsonRes(res, { error: 'Workflow resolves to no runnable output nodes (is ComfyUI running? are all savers muted/bypassed?)' }, 422);
+            return;
+          }
           // Return the (override-applied) visual graph too: the client submits it
           // as extra_data.extra_pnginfo.workflow, which graph-introspecting nodes
           // (WidgetToString etc.) require at execution time.
