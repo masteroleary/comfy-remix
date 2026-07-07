@@ -915,9 +915,10 @@ blurToggle.onclick = () => {
   blurToggle.textContent = document.body.classList.contains('blur-on') ? '🔒' : '👁';
 };
 
-// Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter)
+// Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter).
+// ON by default — only an explicit opt-out ('0') disables it.
 const safeToggle = $('safeToggle');
-S.safeMode = localStorage.getItem('archiveSafeMode') === '1';
+S.safeMode = localStorage.getItem('archiveSafeMode') !== '0';
 safeToggle.classList.toggle('active', S.safeMode);
 safeToggle.onclick = () => {
   S.safeMode = !S.safeMode;
