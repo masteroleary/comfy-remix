@@ -464,6 +464,7 @@ function saveLoras() {
 promptInput.addEventListener('input', () => {
   const name = workflowSelect.value;
   if (name !== 'inherit') localStorage.setItem('archivePrompt_' + name, promptInput.value);
+  updateCopyPromptBtn(); // reappears when the text diverges from the image's prompt
 });
 
 // ── "Use image's prompt" ──
@@ -574,9 +575,13 @@ function setupInheritControls() {
 
 const copyImgPromptBtn = document.getElementById('copyImgPromptBtn');
 function updateCopyPromptBtn() {
+  const imgPrompt = extractImagePrompt();
+  // Hidden when the box already holds the image's prompt (auto-loaded via
+  // recognition, or previously copied) — it reappears if the text diverges.
   const show = workflowSelect.value !== 'inherit'
     && promptSection.style.display !== 'none'
-    && !!extractImagePrompt();
+    && !!imgPrompt
+    && promptInput.value.trim() !== imgPrompt.trim();
   copyImgPromptBtn.style.display = show ? '' : 'none';
 }
 copyImgPromptBtn.onclick = () => {
@@ -585,8 +590,7 @@ copyImgPromptBtn.onclick = () => {
   promptInput.value = text;
   const name = workflowSelect.value;
   if (name !== 'inherit') localStorage.setItem('archivePrompt_' + name, text);
-  copyImgPromptBtn.textContent = '✓ Copied from image';
-  setTimeout(() => { copyImgPromptBtn.textContent = "📷 Use image's prompt"; }, 1600);
+  updateCopyPromptBtn(); // now loaded — hides itself
 };
 
 workflowSelect.addEventListener('change', () => {
@@ -655,7 +659,7 @@ async function recognizeWorkflow(wf) {
     // Preload the controls with this image's values (session-only; the saved
     // workflow defaults in localStorage are untouched unless you edit something).
     const embPrompt = extractImagePrompt();
-    if (embPrompt && promptSection.style.display !== 'none') promptInput.value = embPrompt;
+    if (embPrompt && promptSection.style.display !== 'none') { promptInput.value = embPrompt; updateCopyPromptBtn(); }
     const embSeed = extractImageSeed();
     if (hasSeedControl && embSeed !== null) {
       seedInput.value = String(embSeed);
