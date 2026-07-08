@@ -117,6 +117,13 @@ textarea.edit-input{resize:vertical;line-height:1.4}
         <label id="stepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Steps
           <input type="number" id="stepsInput" min="1" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
         </label>
+        <label id="highStepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">High steps
+          <input type="number" id="highStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+        <label id="lowStepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Low steps
+          <input type="number" id="lowStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+        <span id="hlTotalTxt" style="display:none;font-size:12px;color:#8e8e93;padding-bottom:9px"></span>
       </div>
     </div>
     <div id="presetSection" style="display:none;margin:8px 0">
@@ -143,7 +150,11 @@ textarea.edit-input{resize:vertical;line-height:1.4}
     <div class="exec-panel" id="execPanel">
       <div class="progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
       <div class="exec-log" id="execLog"></div>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" id="saveLogBtn" onclick="saveLog()">Save Log</button></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" id="saveLogBtn" onclick="saveLog()">Save Log</button><button class="btn" id="fixClaudeBtn" onclick="fixWithClaude()" style="display:none" title="Save the log and have Claude review it and edit the workflow file to fix the problem">🤖 Fix workflow with Claude</button></div>
+      <div id="applyWfWrap" style="margin-top:8px;gap:8px;align-items:center;flex-wrap:wrap;display:none">
+        <button class="btn" id="applyWfBtn" onclick="applyWorkflowToImage()" title="Write the selected app workflow into this file's metadata, replacing the embedded one">🖼 Save workflow</button>
+        <span id="applyWfHint" style="font-size:12px;color:#8e8e93"></span>
+      </div>
     </div>
     <div id="outputBrowser" style="display:none;margin-top:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -283,6 +294,18 @@ const seedInput = document.getElementById('seedInput');
 const seedRandomBtn = document.getElementById('seedRandomBtn');
 const stepsField = document.getElementById('stepsField');
 const stepsInput = document.getElementById('stepsInput');
+const highStepsField = document.getElementById('highStepsField');
+const highStepsInput = document.getElementById('highStepsInput');
+const lowStepsField = document.getElementById('lowStepsField');
+const lowStepsInput = document.getElementById('lowStepsInput');
+const hlTotalTxt = document.getElementById('hlTotalTxt');
+let hasHLControl = false;   // dual high/low sampler workflows (Wan video)
+function updateHLTotal() {
+  const h = parseInt(highStepsInput.value, 10) || 0;
+  const l = parseInt(lowStepsInput.value, 10) || 0;
+  hlTotalTxt.textContent = '= ' + (h + l) + ' total steps';
+  hlTotalTxt.style.display = '';
+}
 const presetSection = document.getElementById('presetSection');
 const presetList = document.getElementById('presetList');
 let currentPresets = []; // [{ title, on }]
@@ -314,12 +337,16 @@ seedPinBtn.onclick = () => {
 seedRandomBtn.onclick = () => { seedPinMode = false; seedInput.value = ''; persistGen(); reflectSeedPin(); };
 seedInput.addEventListener('input', () => { persistGen(); reflectSeedPin(); });
 stepsInput.addEventListener('input', persistGen);
+highStepsInput.addEventListener('input', () => { persistGen(); updateHLTotal(); });
+lowStepsInput.addEventListener('input', () => { persistGen(); updateHLTotal(); });
 function persistGen() {
   const name = workflowSelect.value;
   if (name === 'inherit') return;
   localStorage.setItem('archiveSeed_' + name, seedInput.value);
   localStorage.setItem('archiveSeedPin_' + name, seedPinMode ? '1' : '');
   localStorage.setItem('archiveSteps_' + name, stepsInput.value);
+  localStorage.setItem('archiveHighSteps_' + name, highStepsInput.value);
+  localStorage.setItem('archiveLowSteps_' + name, lowStepsInput.value);
 }
 
 function renderPresets() {
@@ -346,6 +373,7 @@ if (savedFrames) framesSelect.value = savedFrames;
 framesSelect.addEventListener('change', () => localStorage.setItem('archiveFrames', framesSelect.value));
 
 function loadWorkflowConfig(name) {
+  if (!name) return Promise.resolve();   // no selection yet (e.g. Inherit removed, options still loading)
   if (name === 'inherit') {
     setupInheritControls();
     return Promise.resolve();
@@ -395,6 +423,8 @@ function loadWorkflowConfig(name) {
       localStorage.removeItem('archiveSeed_' + name);
       localStorage.removeItem('archiveSeedPin_' + name);
       localStorage.removeItem('archiveSteps_' + name);
+      localStorage.removeItem('archiveHighSteps_' + name);
+      localStorage.removeItem('archiveLowSteps_' + name);
       localStorage.removeItem('archivePresets_' + name);
     }
 
@@ -416,7 +446,26 @@ function loadWorkflowConfig(name) {
       stepsInput.value = savedSteps !== null ? savedSteps : String(cfg.steps);
       stepsField.style.display = 'flex';
     } else { stepsField.style.display = 'none'; }
-    genSection.style.display = (hasSeedControl || hasStepsControl) ? 'block' : 'none';
+
+    // High/low sampler steps (dual-KSampler video workflows) — replaces the
+    // single Steps box; the two passes sum to the total step count.
+    hasHLControl = !!cfg.highLowSteps;
+    if (hasHLControl) {
+      const savedH = localStorage.getItem('archiveHighSteps_' + name);
+      const savedL = localStorage.getItem('archiveLowSteps_' + name);
+      highStepsInput.value = savedH !== null ? savedH : String(cfg.highLowSteps.high);
+      lowStepsInput.value = savedL !== null ? savedL : String(cfg.highLowSteps.low);
+      highStepsField.style.display = 'flex';
+      lowStepsField.style.display = 'flex';
+      stepsField.style.display = 'none';
+      hasStepsControl = false;   // total is high+low; don't also send a steps override
+      updateHLTotal();
+    } else {
+      highStepsField.style.display = 'none';
+      lowStepsField.style.display = 'none';
+      hlTotalTxt.style.display = 'none';
+    }
+    genSection.style.display = (hasSeedControl || hasStepsControl || hasHLControl) ? 'block' : 'none';
 
     // Preset checkboxes
     if (cfg.presets && cfg.presets.length > 0) {
@@ -596,6 +645,7 @@ copyImgPromptBtn.onclick = () => {
 workflowSelect.addEventListener('change', () => {
   localStorage.setItem('archiveWorkflowSelect', workflowSelect.value);
   loadWorkflowConfig(workflowSelect.value);
+  updateApplyBtnVisibility();
 });
 
 // Load available (app-enabled) workflows into the dropdown
@@ -618,6 +668,7 @@ function refreshWorkflowDropdown(selectName) {
   }).catch(() => {});
 }
 const wfDropdownReady = refreshWorkflowDropdown();
+wfDropdownReady.then(() => updateApplyBtnVisibility());   // e.g. reopening a file with its DEBUG fix workflow still selected
 
 // The image's actual seed, from its embedded API prompt (Seed node preferred).
 function extractImageSeed() {
@@ -858,8 +909,26 @@ fetch(metaUrl)
       return;
     }
     if (!data.prompt && !data.workflow) {
-      metaContent.innerHTML = '<div class="loading">No workflow metadata found in this file.</div>';
+      metaContent.innerHTML = '<div class="loading">No workflow metadata found in this file. You can still run an APP workflow on it — pick one above.</div>';
       status.textContent = 'No metadata';
+      promptData = null;
+      window.workingPrompt = null;
+      window.workingWorkflow = null;
+      fileHasNoEmbeddedWf = true;
+      // No embedded workflow to inherit, but an APP workflow can still be run
+      // against this file (images are uploaded to its MAIN IMAGE node). Show
+      // the run controls and drop the Inherit option; the metadata-driven
+      // sections (summary, nodes, raw JSON) simply stay hidden.
+      document.getElementById('runSection').style.display = '';
+      const inhOpt = workflowSelect.querySelector('option[value="inherit"]');
+      if (inhOpt) inhOpt.remove();
+      wfDropdownReady.then(() => {
+        if (!workflowSelect.value || workflowSelect.value === 'inherit') {
+          const first = workflowSelect.querySelector('option');
+          if (first) { workflowSelect.value = first.value; loadWorkflowConfig(first.value); }
+        }
+        updateApplyBtnVisibility();
+      });
       return;
     }
     promptData = data.prompt;
@@ -1279,6 +1348,10 @@ async function getRunPrompt(presetTitle) {
   if (currentLoras.length > 0) overrides.loras = currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
   if (framesSelect.value !== 'inherit') overrides.frames = parseInt(framesSelect.value);
   if (hasStepsControl && stepsInput.value.trim()) overrides.steps = parseInt(stepsInput.value);
+  if (hasHLControl) {
+    const h = parseInt(highStepsInput.value, 10), l = parseInt(lowStepsInput.value, 10);
+    if (!isNaN(h) && !isNaN(l) && h >= 0 && l >= 0 && h + l > 0) { overrides.highSteps = h; overrides.lowSteps = l; }
+  }
   if (isSeedPinned()) overrides.seed = parseInt(seedInput.value, 10);
   if (presetTitle) overrides.preset = presetTitle;
 
@@ -1311,16 +1384,10 @@ async function getRunPrompt(presetTitle) {
   return wfPrompt;
 }
 
-// Upload current image to ComfyUI input folder for use as MAIN IMAGE
-async function uploadImageToComfy(imagePath) {
-  // Fetch the image from our server
-  const imgResp = await fetch('/file/' + encodeURIComponent(imagePath));
-  if (!imgResp.ok) { log('Upload fetch failed: HTTP ' + imgResp.status, 'log-err'); return null; }
-  const blob = await imgResp.blob();
-  // Use a unique filename to avoid stale cache issues in ComfyUI's input folder
-  const origName = imagePath.split(/[\\/]/).pop();
-  const ext = origName.includes('.') ? origName.split('.').pop() : 'png';
-  const uploadName = 'app_input_' + Date.now() + '.' + ext;
+// Upload a blob into ComfyUI's input folder under a unique name (avoids stale
+// cache issues) and return the stored filename.
+async function uploadBlobToComfy(blob, ext) {
+  const uploadName = 'app_input_' + Date.now() + '.' + (ext || 'png');
   const formData = new FormData();
   formData.append('image', blob, uploadName);
   formData.append('overwrite', 'true');
@@ -1329,6 +1396,45 @@ async function uploadImageToComfy(imagePath) {
   const result = await uploadResp.json();
   log('ComfyUI upload result: ' + JSON.stringify(result));
   return result.name || uploadName;
+}
+
+// Upload current image to ComfyUI input folder for use as MAIN IMAGE
+async function uploadImageToComfy(imagePath) {
+  // Fetch the image from our server
+  const imgResp = await fetch('/file/' + encodeURIComponent(imagePath));
+  if (!imgResp.ok) { log('Upload fetch failed: HTTP ' + imgResp.status, 'log-err'); return null; }
+  const blob = await imgResp.blob();
+  const origName = imagePath.split(/[\\/]/).pop();
+  const ext = origName.includes('.') ? origName.split('.').pop() : 'png';
+  return uploadBlobToComfy(blob, ext);
+}
+
+// Decode the first frame of the current video in the browser and return it as
+// a PNG blob (no server dependency; works for codecs the browser can play).
+function firstVideoFrameBlob(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    let settled = false;
+    const finish = (fn, arg) => { if (!settled) { settled = true; v.removeAttribute('src'); v.load(); fn(arg); } };
+    v.onerror = () => finish(reject, new Error('the browser could not decode this video'));
+    // Seek just past 0 once data exists — 'seeked' guarantees a drawable frame
+    v.onloadeddata = () => { try { v.currentTime = 0.001; } catch {} };
+    v.onseeked = () => {
+      if (settled) return;
+      try {
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        if (!c.width || !c.height) return finish(reject, new Error('video has no dimensions'));
+        c.getContext('2d').drawImage(v, 0, 0);
+        c.toBlob(b => b ? finish(resolve, b) : finish(reject, new Error('canvas export failed')), 'image/png');
+      } catch (e) { finish(reject, e); }
+    };
+    setTimeout(() => finish(reject, new Error('timed out decoding the video')), 20000);
+    v.src = videoUrl;
+  });
 }
 
 const allOutputFiles = [];
@@ -1410,6 +1516,7 @@ runBtn.onclick = async () => {
   runBtn.disabled = true;
   execPanel.classList.add('vis');
   execLog.innerHTML = '';
+  document.getElementById('fixClaudeBtn').style.display = 'none';   // fresh attempt — reappears if this run errors
   document.getElementById('outputBrowser').style.display = 'none';
   document.getElementById('outputGrid').innerHTML = '';
   allOutputFiles.length = 0;
@@ -1438,17 +1545,31 @@ runBtn.onclick = async () => {
     } catch { return 0; }
   }
 
-  // If using an APP workflow with MAIN IMAGE, upload the image first
+  // If using an APP workflow with MAIN IMAGE, upload the image first.
+  // For videos, the first frame is extracted and uploaded instead — otherwise
+  // the workflow would silently run on its own baked-in MAIN IMAGE default.
   let uploadedImageName = null;
   if (workflowSelect.value !== 'inherit') {
     const ext = currentFileName.split('.').pop().toLowerCase();
     const isImage = ['png','jpg','jpeg','webp','bmp','gif'].includes(ext);
+    const isVideo = ['mp4','webm','mkv','mov'].includes(ext);
     if (isImage) {
       status.textContent = 'Uploading image to ComfyUI...';
       log('Uploading image for MAIN IMAGE...');
       uploadedImageName = await uploadImageToComfy(currentImagePath);
       if (uploadedImageName) log('Uploaded as: ' + uploadedImageName);
       else log('Upload failed, continuing anyway', 'log-err');
+    } else if (isVideo) {
+      status.textContent = 'Extracting first video frame...';
+      log('Extracting the video\'s first frame for MAIN IMAGE...');
+      try {
+        const frame = await firstVideoFrameBlob('/file/' + encodeURIComponent(currentImagePath));
+        uploadedImageName = await uploadBlobToComfy(frame, 'png');
+        if (uploadedImageName) log('First frame uploaded as: ' + uploadedImageName);
+        else log('Frame upload failed — the workflow\'s own MAIN IMAGE will be used.', 'log-err');
+      } catch (e) {
+        log('Could not extract a frame from this video (' + e.message + ') — the workflow\'s own MAIN IMAGE will be used.', 'log-err');
+      }
     }
   }
 
@@ -1570,12 +1691,27 @@ runBtn.onclick = async () => {
     log('⚠ Runs "succeeded" but produced no new files — ComfyUI served everything from cache. This happens when the seed and all settings exactly match a previous run. Clear the Seed box (🎲) or change a setting, then re-run.', 'log-err');
   }
 
+  // Fix-with-Claude loop closure: a DEBUG workflow saved from this file just ran
+  // successfully with real output — write the fixed workflow back automatically.
+  if (autoApplyWfName && workflowSelect.value === autoApplyWfName
+      && jobRecord.runsCompleted === totalRuns && overlayItems.length > 0) {
+    autoApplyWfName = null;   // once per fix
+    log('Test run succeeded — applying the fixed workflow back to ' + currentFileName + '…');
+    await applyWorkflowToImage(true);
+  }
+
   // Finalize job record
   if (jobRecord.status === 'running') {
     jobRecord.status = jobRecord.runsCompleted === runCount ? 'complete' : 'error';
   }
   jobRecord.endTime = Date.now();
   try { await JobDB.put(jobRecord); } catch {}
+
+  // Offer the Claude repair path only when a run actually failed
+  if (jobRecord.status === 'error') {
+    document.getElementById('fixClaudeBtn').style.display = '';
+    log('Run failed — tap 🤖 Fix workflow with Claude to have it reviewed and repaired.', 'log-err');
+  }
 };
 
 let lastPromptIdCallback = null;
@@ -1929,22 +2065,207 @@ document.getElementById('delBtn').onclick = async () => {
   } catch (e) { alert('Error: ' + e.message); }
 };
 
-async function saveLog() {
-  const btn = document.getElementById('saveLogBtn');
-  const payload = {
+function buildLogPayload() {
+  return {
     timestamp: new Date().toISOString(),
     host: location.host,
     page: location.href,
     userAgent: navigator.userAgent,
+    workflow: workflowSelect.value,
     status: status.textContent,
     log: execLog.innerText,
     wsState: ws ? ['CONNECTING','OPEN','CLOSING','CLOSED'][ws.readyState] : 'null',
     promptId: currentPromptId
   };
+}
+
+async function saveLog() {
+  const btn = document.getElementById('saveLogBtn');
   try {
-    const r = await fetch('/api/debug-results', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload, null, 2) });
+    const r = await fetch('/api/debug-results', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(buildLogPayload(), null, 2) });
     if (r.ok) { btn.textContent = 'Saved!'; setTimeout(() => { btn.textContent = 'Save Log'; }, 2000); }
     else { btn.textContent = 'Error ' + r.status; }
   } catch(e) { btn.textContent = e.message; }
+}
+
+// Save the log, then have Claude Code review it and edit the selected app
+// workflow file so the run works. Claude's cwd is the ComfyUI dir with write
+// scope limited to user/default/workflows/, so the log is inlined in the
+// prompt (debug-results.json lives outside its reach).
+let claudeFixRunning = false;
+async function fixWithClaude() {
+  const btn = document.getElementById('fixClaudeBtn');
+  if (claudeFixRunning) {   // second click = stop
+    try { await fetch('/api/claude/stop', { method: 'POST' }); } catch {}
+    return;
+  }
+  const logText = execLog.innerText.trim();
+  if (!logText) { alert('Nothing in the run log yet — press ▶ Run first.'); return; }
+
+  try { await fetch('/api/debug-results', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(buildLogPayload(), null, 2) }); } catch {}
+
+  // In Inherit mode there is no app workflow file — save the image-embedded
+  // graph into user/default/workflows/ so Claude has a file to debug and edit,
+  // and switch the dropdown to it so ▶ Run uses the fixed copy.
+  let targetWf = workflowSelect.value;
+  let savedFromImage = false;
+  if (targetWf === 'inherit' && window.workingWorkflow) {
+    const base = (currentFileName || 'embedded').replace(/\.[^.]+$/, '');
+    try {
+      const sr = await fetch('/api/workflows/save', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name: 'DEBUG - ' + base + '.json', workflow: window.workingWorkflow, enable: true }) });
+      const sd = await sr.json();
+      if (sd.ok) {
+        targetWf = sd.name;
+        savedFromImage = true;
+        autoApplyWfName = sd.name;   // apply back to the file after a successful test run
+        localStorage.setItem('archiveWorkflowSelect', sd.name);
+        await refreshWorkflowDropdown(sd.name);
+        await loadWorkflowConfig(sd.name);   // ensure controls are populated before we pin the seed
+        updateApplyBtnVisibility();
+        log('Saved embedded workflow as "' + sd.name + '" and selected it.');
+        // Pin the original image's seed so test runs reproduce the exact failing
+        // conditions instead of randomizing.
+        const embSeed = extractImageSeed();
+        if (hasSeedControl && embSeed !== null) {
+          seedInput.value = String(embSeed);
+          seedPinMode = true;
+          persistGen();
+          reflectSeedPin();
+          log('Seed pinned to the original image\'s seed (' + embSeed + ') for the test run.');
+        }
+      } else {
+        log('Could not save embedded workflow: ' + (sd.error || 'unknown error'), 'log-err');
+      }
+    } catch (e) { log('Could not save embedded workflow: ' + e.message, 'log-err'); }
+  }
+
+  const clipped = logText.length > 12000 ? ('…(earlier log truncated)…\n' + logText.slice(-12000)) : logText;
+  const prompt = (targetWf !== 'inherit'
+      ? 'The ComfyRemix app ran the workflow file "user/default/workflows/' + targetWf + '" and it failed or misbehaved.'
+        + (savedFromImage ? ' (The file was just saved from a workflow embedded in a media file, so this exact file has not been run before.)' : '')
+        + ' Review the run log below, find the root cause, and EDIT that workflow file so it works. Keep the workflow\'s intent — only change what is needed (bad widget values, wrong connections, missing/renamed models; check the models folders for what actually exists before swapping a model name). When done, summarize what you changed in 2-3 sentences.'
+      : 'A ComfyUI run from the ComfyRemix app failed. The workflow came embedded in a media file ("Inherit" mode) and no workflow graph could be extracted, so there is no file to edit. Review the run log below and explain the root cause and the exact fix in a few sentences.')
+    + '\n\n=== RUN LOG ===\n' + clipped;
+
+  claudeFixRunning = true;
+  btn.textContent = '■ Stop Claude';
+  execPanel.classList.add('vis');
+  log('🤖 Log saved. Claude is reviewing it' + (targetWf !== 'inherit' ? ' and workflow "' + targetWf + '"' : '') + '…');
+  try {
+    const r = await fetch('/api/claude', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ prompt }) });
+    if (!r.ok || !r.body) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || ('HTTP ' + r.status));
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join('');
+        if (!line) continue;
+        let evt; try { evt = JSON.parse(line); } catch { continue; }
+        if (evt.type === 'assistant' && evt.message && Array.isArray(evt.message.content)) {
+          for (const c of evt.message.content) {
+            if (c.type === 'text' && c.text.trim()) log(c.text.trim());
+            else if (c.type === 'tool_use') {
+              const target = c.input && (c.input.file_path || c.input.path || c.input.pattern || c.input.command);
+              log('  🔧 ' + c.name + (target ? ': ' + String(target).slice(0, 120) : ''));
+            }
+          }
+        } else if (evt.type === 'result') {
+          if (evt.is_error) log('Claude finished with an error: ' + (evt.result || ''), 'log-err');
+          else {
+            log('✅ Claude finished — press ▶ Run to try again.', 'log-done');
+            if (savedFromImage) log('Press ▶ Run to test — if it succeeds, the fixed workflow is applied back into the original file automatically.');
+          }
+        } else if (evt.type === 'error') {
+          log('Claude error: ' + (evt.error || JSON.stringify(evt)), 'log-err');
+        } else if (evt.type === 'system' && evt.message) {
+          log('  ' + String(evt.message).slice(0, 300));   // CLI stderr passthrough
+        } else if (evt.type === 'done' && evt.code) {
+          log('Claude exited with code ' + evt.code, 'log-err');
+        }
+      }
+    }
+  } catch (e) {
+    log('Fix with Claude failed: ' + e.message, 'log-err');
+  } finally {
+    claudeFixRunning = false;
+    btn.textContent = '🤖 Fix workflow with Claude';
+  }
+}
+
+// Write the selected app workflow back into the original file's metadata (PNG
+// text chunks, or the video container's comment tag) so the file itself carries
+// the fixed workflow (Inherit runs use it from then on).
+const EMBEDDABLE_RE = /\.(png|mp4|webm|mkv|mov)$/i;
+let autoApplyWfName = null;      // DEBUG workflow saved from this file; auto-applied after a successful run
+let fileHasNoEmbeddedWf = false; // set by the metadata loader when the file carries no workflow
+
+// The Save-workflow button is a secondary/rescue control — hidden unless there
+// is a concrete step the user can take, stated in the hint next to it.
+function applyBtnLabel() {
+  return '🖼 Save workflow to ' + (/\.png$/i.test(currentImagePath) ? 'image' : 'video');
+}
+function showApplyBtn(hint) {
+  if (!EMBEDDABLE_RE.test(currentImagePath)) return;
+  document.getElementById('applyWfBtn').textContent = applyBtnLabel();
+  document.getElementById('applyWfHint').textContent = hint;
+  document.getElementById('applyWfWrap').style.display = 'flex';
+}
+function hideApplyBtn() { document.getElementById('applyWfWrap').style.display = 'none'; }
+function updateApplyBtnVisibility() {
+  const wf = workflowSelect.value;
+  if (!wf || wf === 'inherit' || !EMBEDDABLE_RE.test(currentImagePath)) { hideApplyBtn(); return; }
+  const base = (currentFileName || '').replace(/\.[^.]+$/, '');
+  if (wf === 'DEBUG - ' + base + '.json') {
+    showApplyBtn('This is the fix workflow for this file. A successful ▶ Run saves it back automatically — or tap the button to save it now.');
+  } else if (fileHasNoEmbeddedWf) {
+    showApplyBtn('This file has no embedded workflow. Run this one, and if you like the result tap the button to save it into the file.');
+  } else {
+    hideApplyBtn();
+  }
+}
+async function applyWorkflowToImage(auto) {
+  const btn = document.getElementById('applyWfBtn');
+  const wfName = workflowSelect.value;
+  if (wfName === 'inherit') { if (!auto) alert('Select an APP workflow first (e.g. the DEBUG one Claude fixed) — Inherit has no file to apply.'); return; }
+  if (!EMBEDDABLE_RE.test(currentImagePath)) {
+    if (auto) log('Auto-apply skipped — this file type can\'t carry an embedded workflow.');
+    else alert('Only PNG and video files can carry an embedded workflow.');
+    return;
+  }
+  if (!auto && !window.confirm('Write workflow "' + wfName + '" into this file\'s metadata, replacing the embedded one? This edits the original file.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/image/embed-workflow', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filePath: currentImagePath, workflowName: wfName }) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    execPanel.classList.add('vis');
+    log('🖼 Embedded workflow "' + wfName + '" into ' + currentFileName + ' — Inherit runs of this file now use it.', 'log-done');
+    // Refresh in-memory embedded metadata so an immediate Inherit run uses the new workflow
+    try {
+      const md = await fetch('/api/metadata?path=' + encodeURIComponent(currentImagePath)).then(x => x.json());
+      if (md && (md.prompt || md.workflow)) { promptData = md.prompt; window.workingWorkflow = md.workflow || null; }
+    } catch {}
+    btn.textContent = '🖼 Saved!';
+    fileHasNoEmbeddedWf = false;   // the file carries this workflow now
+    setTimeout(() => { btn.textContent = applyBtnLabel(); btn.disabled = false; hideApplyBtn(); }, 2500);
+  } catch (e) {
+    if (auto) {
+      log('Auto-save failed: ' + e.message, 'log-err');
+      showApplyBtn('The fixed workflow was NOT saved into this file (' + e.message + ') — tap the button to retry.');
+    } else alert('Save failed: ' + e.message);
+    btn.textContent = applyBtnLabel();
+    btn.disabled = false;
+  }
 }
 </script></body></html>

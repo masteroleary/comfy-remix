@@ -10,7 +10,7 @@ A local web app for browsing, curating, and managing AI-generated media (images,
 >
 > **Windows 11 24H2+ gotcha:** non-admin `Get-ScheduledTask` **cannot see SYSTEM tasks** — the boot task will look missing from a normal shell. That's query visibility, not absence. Verify via the result log above, via an elevated shell, or by checking who owns port 8080 (`Get-NetTCPConnection -LocalPort 8080 -State Listen`).
 >
-> **Known caveat (SYSTEM context):** under SYSTEM the in-app Claude-chat panel can't resolve the user's global `claude` login — set **`anthropicApiKey`** in ⚙ Settings (it's injected into the CLI env), after which the assistant works headless. To revert to the per-user at-logon model: `Enable-ScheduledTask ArchiveAutoStart` and disable/unregister `ComfyRemixAutoStart`.
+> **Known caveat (SYSTEM context):** under SYSTEM the in-app Claude-chat panel can't resolve the user's global `claude` login — set **`anthropicApiKey`** in ⚙ Settings (it's injected into the CLI env), after which the assistant works headless. Likewise, per-user PATH entries are invisible to SYSTEM: ffmpeg/ffprobe live in the user's WinGet Links folder, so server.js resolves them to absolute paths at startup (`findFfBin`; override with `ffmpegDir` in config.json) — a bare `execFile('ffprobe', …)` fails silently under SYSTEM and all video metadata comes back null. To revert to the per-user at-logon model: `Enable-ScheduledTask ArchiveAutoStart` and disable/unregister `ComfyRemixAutoStart`.
 
 ## Architecture
 

@@ -651,7 +651,60 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
     <div id="statusList" style="flex:1;overflow:auto"></div>
     <div class="confirm-btns" style="margin-top:12px">
+      <button class="btn-cancel" id="statusFeatures">✎ Features</button>
       <button class="btn-cancel" id="statusOpenSettings">⚙ Open Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- First-run setup wizard -->
+<div class="confirm-overlay" id="setupOverlay" style="align-items:center">
+  <div class="confirm-sheet" style="border-radius:var(--r);max-height:88vh;overflow:auto">
+    <div style="display:flex;align-items:center;margin-bottom:4px">
+      <div class="confirm-title" style="margin:0">Set up ComfyRemix</div>
+      <button id="setupClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <div id="setupSub" style="font-size:12px;color:var(--text2);margin-bottom:10px"></div>
+    <div id="setupStep1"></div>
+    <div id="setupStep2" style="display:none">
+      <div class="setup-group" data-group="media" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Media library</div>
+        <div id="setupMediaInfo" style="font-size:12px;color:var(--text2);word-break:break-all"></div>
+      </div>
+      <div class="setup-group" data-group="comfy" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">ComfyUI</div>
+        <div class="set-field" data-wpath="comfyDir"><label>ComfyUI install folder</label>
+          <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
+        <div class="set-field" data-wpath="comfyOutput"><label>ComfyUI output folder</label>
+          <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\output"><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
+        <div class="set-field" data-wurl="comfyUrl"><label>ComfyUI API address</label>
+          <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
+      </div>
+      <div class="setup-group" data-group="claude" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Claude Code</div>
+        <div class="set-field" data-wkey="anthropicApiKey"><label>Claude (Anthropic) API key</label>
+          <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"></div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Also needs the CLI: npm install -g @anthropic-ai/claude-code</div></div>
+      </div>
+      <div class="setup-group" data-group="ollama" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local LLM</div>
+        <div class="set-field" data-wurl="ollamaUrl"><label>Ollama address</label>
+          <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:11434"></div></div>
+      </div>
+      <div class="setup-group" data-group="voxtral" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local TTS</div>
+        <div class="set-field" data-wurl="voxtralUrl"><label>Voxtral address</label>
+          <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
+      </div>
+      <div class="setup-group" data-group="xai" style="display:none">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Grok (xAI)</div>
+        <div class="set-field" data-wkey="xaiApiKey"><label>Grok (xAI) API key</label>
+          <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"></div></div>
+      </div>
+    </div>
+    <div class="confirm-btns" style="margin-top:18px">
+      <button class="btn-cancel" id="setupBack" style="display:none">‹ Back</button>
+      <button class="btn-ok" id="setupNext" style="background:var(--accent)">Next ›</button>
     </div>
   </div>
 </div>
@@ -1013,7 +1066,48 @@ async function loadDir(dir, page = 1, pushStack = true) {
   }
 }
 
-function showHomeLanding() {
+// Feature registry: home tiles grouped by opt-in feature. `ready` judges the
+// /api/status services map — `configured` for set-once items (folders, keys,
+// CLI), `running` for services that must be live to be usable at all.
+const FEATURES = [
+  { id: 'media', name: 'Media library', icon: '📂', desc: 'Browse archive media & favorites',
+    ready: sv => !!(sv.media && sv.media.configured),
+    tiles: [
+      { id: 'hlArchive', icon: '📂', text: 'Archive Media', sub: 'Browse saved media files' },
+      { id: 'hlFav', icon: '⭐', text: 'Favorites', sub: 'Saved favorites' },
+    ] },
+  { id: 'comfy', name: 'ComfyUI', icon: '🎨', desc: 'Browse output, run workflows, watch jobs',
+    ready: sv => !!(sv.comfy && sv.comfy.configured),
+    tiles: [
+      { id: 'hlComfy', icon: '🎨', text: 'ComfyUI Output', sub: 'Browse generated output files' },
+      { id: 'hlJobs', icon: '⚡', text: 'Jobs', sub: 'Running and completed jobs' },
+    ] },
+  { id: 'claude', name: 'Claude Code', icon: '🤖', desc: 'AI assistant for ComfyUI & workflows',
+    ready: sv => !!(sv.anthropic && sv.anthropic.configured),
+    tiles: [{ id: 'hlClaude', icon: '🤖', text: 'Claude Code', sub: 'AI assistant for ComfyUI & workflows' }] },
+  { id: 'chatLocal', name: 'Chat — Local', icon: '🏠', desc: 'Ollama LLM + Voxtral TTS (fully local)',
+    ready: sv => !!(sv.ollama && sv.ollama.running),
+    tiles: [{ id: 'hlChatLocal', icon: '🏠', text: 'Chat — Local', sub: 'Ollama LLM + Voxtral TTS (fully local)' }] },
+  { id: 'chatGrok', name: 'Chat — Grok', icon: '☁️', desc: 'Ollama LLM + Grok cloud TTS',
+    ready: sv => !!(sv.ollama && sv.ollama.running && sv.xai && sv.xai.configured),
+    tiles: [{ id: 'hlChatGrok', icon: '☁️', text: 'Chat — Grok', sub: 'Ollama LLM + Grok cloud TTS' }] },
+  { id: 'voice', name: 'Voice Agent', icon: '🎙️', desc: 'Real-time speech-to-speech with Grok (xAI)',
+    ready: sv => !!(sv.xai && sv.xai.configured),
+    tiles: [{ id: 'hlVoice', icon: '🎙️', text: 'Voice Agent', sub: 'Real-time speech-to-speech with Grok (xAI)' }] },
+];
+
+let homeStatus = null, homeStatusTs = 0;   // cached /api/status for home rendering
+async function getHomeStatus(force) {
+  if (homeStatus && !force) return homeStatus;
+  const d = await fetch('/api/status').then(r => r.json());
+  const services = {};
+  (d.services || []).forEach(s => { services[s.id] = s; });
+  homeStatus = { services, setupDone: !!d.setupDone, features: Array.isArray(d.features) ? d.features : null };
+  homeStatusTs = Date.now();
+  return homeStatus;
+}
+
+async function showHomeLanding(forceStatus) {
   searchInp.value = '';
   S.navStack = [];
   S.dir = '';
@@ -1027,18 +1121,29 @@ function showHomeLanding() {
   const fr = document.querySelector('.folder-row');
   if (fr) fr.innerHTML = '';
 
-  gridWrap.innerHTML = '<div class="home-landing">'
-    + '<div class="home-folder" id="hlStatus"><div class="home-folder-icon">🩺</div><div><div class="home-folder-text">Status / Setup</div><div class="home-folder-sub">Which services are set up, running, and healthy</div></div></div>'
-    + '<div class="home-folder" id="hlArchive"><div class="home-folder-icon">📂</div><div><div class="home-folder-text">Archive Media</div><div class="home-folder-sub">Browse saved media files</div></div></div>'
-    + '<div class="home-folder" id="hlComfy"><div class="home-folder-icon">🎨</div><div><div class="home-folder-text">ComfyUI Output</div><div class="home-folder-sub">Browse generated output files</div></div></div>'
-    + '<div class="home-folder" id="hlFav"><div class="home-folder-icon">⭐</div><div><div class="home-folder-text">Favorites</div><div class="home-folder-sub">Saved favorites</div></div></div>'
-    + '<div class="home-folder" id="hlJobs"><div class="home-folder-icon">⚡</div><div><div class="home-folder-text">Jobs</div><div class="home-folder-sub">Running and completed jobs</div></div></div>'
-    + '<div class="home-folder" id="hlClaude"><div class="home-folder-icon">🤖</div><div><div class="home-folder-text">Claude Code</div><div class="home-folder-sub">AI assistant for ComfyUI & workflows</div></div></div>'
-    + '<div class="home-folder" id="hlChatLocal"><div class="home-folder-icon">🏠</div><div><div class="home-folder-text">Chat — Local</div><div class="home-folder-sub">Ollama LLM + Voxtral TTS (fully local)</div></div></div>'
-    + '<div class="home-folder" id="hlChatGrok"><div class="home-folder-icon">☁️</div><div><div class="home-folder-text">Chat — Grok</div><div class="home-folder-sub">Ollama LLM + Grok cloud TTS</div></div></div>'
-    + '<div class="home-folder" id="hlVoice"><div class="home-folder-icon">🎙️</div><div><div class="home-folder-text">Voice Agent</div><div class="home-folder-sub">Real-time speech-to-speech with Grok (xAI)</div></div></div>'
-    + '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>'
-    + '</div>';
+  if (!homeStatus || forceStatus) {
+    gridWrap.innerHTML = '<div class="home-landing"><div style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div></div>';
+    try { await getHomeStatus(true); } catch {}
+  } else if (Date.now() - homeStatusTs > 15000) {
+    getHomeStatus(true).catch(() => {});   // stale: render from cache now, refresh for next visit
+  }
+  const st = homeStatus;
+  if (st && !st.setupDone) openSetupWizard(null);
+
+  // Surface the user's chosen features; show everything if setup/status is unknown
+  const selected = st && st.features ? st.features : FEATURES.map(f => f.id);
+  const tile = t => '<div class="home-folder" id="' + t.id + '"><div class="home-folder-icon">' + t.icon + '</div><div><div class="home-folder-text">' + t.text + '</div><div class="home-folder-sub">' + t.sub + '</div></div></div>';
+  const pending = [];   // selected but failing their status check → hidden
+  let html = tile({ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' });
+  FEATURES.forEach(f => {
+    if (!selected.includes(f.id)) return;
+    if (st && !f.ready(st.services)) { pending.push(f.name); return; }
+    html += f.tiles.map(tile).join('');
+  });
+  if (pending.length) html += '<div style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: ' + esc(pending.join(', ')) + ' — see Status / Setup</div>';
+  html += '<div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" id="homeFeatures" style="color:inherit">✎ Choose features</a></div>';
+  html += '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>';
+  gridWrap.innerHTML = '<div class="home-landing">' + html + '</div>';
 
   // Show total spent
   fetch('/api/cost/summary').then(r => r.json()).then(d => {
@@ -1050,21 +1155,23 @@ function showHomeLanding() {
       + (d.imagineCount||0) + ' images)';
   }).catch(() => {});
 
-  $('hlArchive').onclick = () => loadDir('', 1, false);
-  $('hlComfy').onclick = () => { if (S.comfyOutputDir) loadDir(S.comfyOutputDir, 1, false); };
-  $('hlFav').onclick = () => { if (S.favDir) loadDir(S.favDir, 1, false); };
-  $('hlJobs').onclick = () => { location.href = '/jobs'; };
-  $('hlClaude').onclick = openClaudePanel;
-  $('hlStatus').onclick = openStatusPanel;
-  $('hlChatLocal').onclick = () => { location.href = '/chat/local'; };
-  $('hlChatGrok').onclick = () => { location.href = '/chat/grok'; };
-  $('hlVoice').onclick = async () => {
+  const wire = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  wire('hlArchive', () => loadDir('', 1, false));
+  wire('hlComfy', () => { if (S.comfyOutputDir) loadDir(S.comfyOutputDir, 1, false); });
+  wire('hlFav', () => { if (S.favDir) loadDir(S.favDir, 1, false); });
+  wire('hlJobs', () => { location.href = '/jobs'; });
+  wire('hlClaude', openClaudePanel);
+  wire('hlStatus', openStatusPanel);
+  wire('hlChatLocal', () => { location.href = '/chat/local'; });
+  wire('hlChatGrok', () => { location.href = '/chat/grok'; });
+  wire('hlVoice', async () => {
     // Voice page requires HTTPS for mic access — switch to the configured HTTPS port
     if (location.protocol === 'https:') { location.href = '/voice'; return; }
     let httpsPort = 8443;
     try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
     location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
-  };
+  });
+  wire('homeFeatures', e => { e.preventDefault(); openSetupWizard(selected); });
 }
 
 function renderHeader(data) {
@@ -1872,6 +1979,105 @@ $('statusClose').onclick = () => $('statusOverlay').classList.remove('open');
 $('statusOverlay').addEventListener('click', e => { if (e.target === $('statusOverlay')) $('statusOverlay').classList.remove('open'); });
 $('statusRefresh').onclick = loadStatus;
 $('statusOpenSettings').onclick = () => { $('statusOverlay').classList.remove('open'); $('settingsBtn').click(); };
+$('statusFeatures').onclick = () => {
+  $('statusOverlay').classList.remove('open');
+  openSetupWizard(homeStatus && homeStatus.features ? homeStatus.features : null);
+};
+
+// ── Setup wizard (first run, and "choose features" afterwards) ─────────────
+(function(){
+  const ov = $('setupOverlay');
+  // Which step-2 config groups each feature needs
+  const GROUPS = { media: ['media'], comfy: ['comfy'], claude: ['claude'],
+                   chatLocal: ['ollama', 'voxtral'], chatGrok: ['ollama', 'xai'], voice: ['xai'] };
+  let step = 1;
+  const close = () => ov.classList.remove('open');
+
+  function setStep(n) {
+    step = n;
+    $('setupStep1').style.display = n === 1 ? '' : 'none';
+    $('setupStep2').style.display = n === 2 ? '' : 'none';
+    $('setupBack').style.display = n === 2 ? '' : 'none';
+    $('setupNext').textContent = n === 1 ? 'Next ›' : 'Finish';
+    $('setupSub').textContent = n === 1
+      ? 'Step 1 of 2 — pick the features you want to use. You can set up more later from Status / Setup.'
+      : 'Step 2 of 2 — fill in what the selected features need. Blank fields keep their current value.';
+  }
+
+  window.openSetupWizard = function(pre) {
+    const chosen = Array.isArray(pre) ? pre : FEATURES.map(f => f.id);
+    $('setupStep1').innerHTML = FEATURES.map(f =>
+      '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--surface2);cursor:pointer">'
+      + '<input type="checkbox" data-feat="' + f.id + '"' + (chosen.includes(f.id) ? ' checked' : '') + ' style="margin-top:3px;accent-color:var(--accent)">'
+      + '<div><div style="font-size:14px;font-weight:600;color:var(--text)">' + f.icon + ' ' + esc(f.name) + '</div>'
+      + '<div style="font-size:12px;color:var(--text2)">' + esc(f.desc) + '</div></div></label>'
+    ).join('');
+    // Prefill step 2 from current settings
+    fetch('/api/settings').then(r => r.json()).then(s => {
+      document.querySelectorAll('#setupStep2 .set-field[data-wurl] input').forEach(inp => {
+        inp.value = (s.urls || {})[inp.closest('.set-field').dataset.wurl] || '';
+      });
+      document.querySelectorAll('#setupStep2 .set-field[data-wpath] input').forEach(inp => {
+        const p = (s.paths || {})[inp.closest('.set-field').dataset.wpath] || {};
+        inp.value = p.value || '';
+      });
+      document.querySelectorAll('#setupStep2 .set-field[data-wkey] input').forEach(inp => {
+        const k = (s.keys || {})[inp.closest('.set-field').dataset.wkey] || {};
+        inp.value = '';
+        inp.placeholder = k.set ? ('saved ' + k.hint + ' — type to replace') : 'not set';
+      });
+      $('setupMediaInfo').textContent = 'Media folder: ' + ((s.info || {}).mediaDir || '?') + ' — edit config.json to change.';
+    }).catch(() => {});
+    setStep(1);
+    ov.classList.add('open');
+  };
+
+  const selectedFeatures = () =>
+    Array.from(document.querySelectorAll('#setupStep1 input[data-feat]:checked')).map(c => c.dataset.feat);
+
+  async function finish() {
+    const payload = { setupDone: true, features: selectedFeatures() };
+    if (step === 2) {
+      document.querySelectorAll('#setupStep2 .setup-group').forEach(g => {
+        if (g.style.display === 'none') return;
+        g.querySelectorAll('.set-field').forEach(f => {
+          const inp = f.querySelector('input');
+          const v = inp ? inp.value.trim() : '';
+          if (!v) return;
+          const key = f.dataset.wkey || f.dataset.wurl || f.dataset.wpath;
+          if (key) payload[key] = v;
+        });
+      });
+    }
+    try {
+      const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await r.json();
+      if (!d.ok) { showToast('Save failed: ' + (d.error || r.status)); return; }
+      if (d.warning) showToast('⚠ Saved — ' + d.warning, 5000);
+      close();
+      homeStatus = null;   // re-probe services against the new config
+      showHomeLanding(true);
+    } catch (e) { showToast('Error: ' + e.message); }
+  }
+
+  $('setupNext').onclick = () => {
+    if (step === 2) { finish(); return; }
+    const sel = selectedFeatures();
+    const groups = new Set();
+    sel.forEach(id => (GROUPS[id] || []).forEach(g => groups.add(g)));
+    let anyVisible = false;
+    document.querySelectorAll('#setupStep2 .setup-group').forEach(g => {
+      const show = groups.has(g.dataset.group);
+      g.style.display = show ? '' : 'none';
+      if (show) anyVisible = true;
+    });
+    if (!anyVisible) { finish(); return; }   // nothing to configure for this selection
+    setStep(2);
+  };
+  $('setupBack').onclick = () => setStep(1);
+  $('setupClose').onclick = close;   // dismiss without saving — wizard returns next visit
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+})();
 
 // ── Prompt word directory ──────────────────────────────────────────────────
 (function(){

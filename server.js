@@ -270,12 +270,130 @@ function extractPngMetadata(filePath, cb) {
   });
 }
 
+// ── ffmpeg/ffprobe resolution ───────────────────────────────────────────
+// The binaries live in per-user WinGet Links folders on this box, which are
+// NOT on the SYSTEM service's PATH — resolve to an absolute path at startup
+// (config `ffmpegDir` overrides), falling back to the bare name for PATH.
+function findFfBin(name) {
+  if (config.ffmpegDir) {
+    const p = path.join(config.ffmpegDir, name + '.exe');
+    if (fs.existsSync(p)) return p;
+  }
+  const candidates = [];
+  try {
+    for (const u of fs.readdirSync('C:\\Users')) {
+      candidates.push(path.join('C:\\Users', u, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links', name + '.exe'));
+    }
+  } catch {}
+  candidates.push('C:\\ProgramData\\chocolatey\\bin\\' + name + '.exe');
+  for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch {} }
+  return name;
+}
+const FFPROBE_BIN = findFfBin('ffprobe');
+const FFMPEG_BIN = findFfBin('ffmpeg');
+
+// ── PNG text-chunk writing (no dependencies) ────────────────────────────
+// Used to write a fixed workflow back into a generated image's metadata.
+let CRC_TABLE = null;
+function crc32(buf) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      CRC_TABLE[n] = c;
+    }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const out = Buffer.alloc(12 + data.length);
+  out.writeUInt32BE(data.length, 0);
+  out.write(type, 4, 'ascii');
+  data.copy(out, 8);
+  out.writeUInt32BE(crc32(out.slice(4, 8 + data.length)), 8 + data.length);
+  return out;
+}
+
+// tEXt for pure-ASCII payloads (what ComfyUI writes normally), iTXt (UTF-8,
+// uncompressed) when the JSON contains non-ASCII — both are read back by
+// extractPngMetadata and by PIL/ComfyUI.
+function pngTextChunk(keyword, text) {
+  const kw = Buffer.from(keyword, 'latin1');
+  if (!/[^\x00-\x7f]/.test(text)) {
+    return pngChunk('tEXt', Buffer.concat([kw, Buffer.from([0]), Buffer.from(text, 'latin1')]));
+  }
+  // iTXt: keyword \0 compFlag(0) compMethod(0) lang \0 translated \0 utf8-text
+  return pngChunk('iTXt', Buffer.concat([kw, Buffer.from([0, 0, 0, 0, 0]), Buffer.from(text, 'utf8')]));
+}
+
+// Replace/insert text chunks (by keyword) in a PNG, atomically via tmp+rename.
+function embedPngText(filePath, textMap, cb) {
+  fs.readFile(filePath, (err, buf) => {
+    if (err) return cb(err);
+    const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    if (buf.length < 8 || !buf.slice(0, 8).equals(sig)) return cb(new Error('Not a valid PNG'));
+    const drop = new Set(Object.keys(textMap));
+    const keep = [];
+    let offset = 8, sawEnd = false;
+    while (offset + 12 <= buf.length) {
+      const len = buf.readUInt32BE(offset);
+      const type = buf.toString('ascii', offset + 4, offset + 8);
+      const end = offset + 12 + len;
+      if (end > buf.length) return cb(new Error('Corrupt PNG (truncated chunk)'));
+      let dropIt = false;
+      if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') {
+        const data = buf.slice(offset + 8, offset + 8 + len);
+        const nul = data.indexOf(0);
+        if (nul !== -1 && drop.has(data.toString('latin1', 0, nul))) dropIt = true;
+      }
+      if (!dropIt) keep.push(buf.slice(offset, end));
+      offset = end;
+      if (type === 'IEND') { sawEnd = true; break; }
+    }
+    if (!sawEnd || !keep.length || keep[0].toString('ascii', 4, 8) !== 'IHDR') {
+      return cb(new Error('Corrupt PNG (missing IHDR/IEND)'));
+    }
+    const inserted = Object.entries(textMap).map(([k, v]) => pngTextChunk(k, v));
+    const out = Buffer.concat([sig, keep[0], ...inserted, ...keep.slice(1)]);
+    const tmp = filePath + '.tmp_embed';
+    fs.writeFile(tmp, out, err2 => {
+      if (err2) return cb(err2);
+      fs.rename(tmp, filePath, cb);
+    });
+  });
+}
+
+// Write workflow metadata into a video's container 'comment' tag (the same
+// place extractVideoMetadata reads it from) via an ffmpeg stream-copy remux.
+// The JSON goes through an FFMETADATA file — it's far too big for a command line.
+function ffmetaEscape(s) {
+  return s.replace(/[\\=;#\n]/g, m => '\\' + m);
+}
+function embedVideoText(filePath, comment, cb) {
+  const ext = path.extname(filePath);
+  const tmpOut = filePath + '.tmp_embed' + ext;
+  const metaFile = filePath + '.tmp_ffmeta.txt';
+  fs.writeFile(metaFile, ';FFMETADATA1\ncomment=' + ffmetaEscape(comment) + '\n', (werr) => {
+    if (werr) return cb(werr);
+    execFile(FFMPEG_BIN, ['-v', 'error', '-y', '-i', filePath, '-i', metaFile, '-map', '0', '-map_metadata', '1', '-c', 'copy', tmpOut],
+      { timeout: 120000 }, (err, stdout, stderr) => {
+      fs.unlink(metaFile, () => {});
+      if (err) { fs.unlink(tmpOut, () => {}); return cb(new Error('ffmpeg failed: ' + (String(stderr || err.message).trim().slice(0, 300)))); }
+      fs.rename(tmpOut, filePath, cb);
+    });
+  });
+}
+
 // Extract metadata from video files using ffprobe
 // ── Prompt search index ─────────────────────────────────────────────────
 // Maps PNG path -> embedded prompt text so /api/list search can match prompt
 // words, not just file names. Incremental by mtime, persisted across restarts.
 const PROMPT_INDEX_PATH = path.join(__dirname, 'app-prompt-index.json');
-const PROMPT_INDEX_VERSION = 4; // bump to force a full re-extract after extractor changes
+const PROMPT_INDEX_VERSION = 5; // bump to force a full re-extract after extractor changes (v5: ffprobe was unresolvable under SYSTEM, so all videos indexed empty)
 
 // NSFW tagging: indexed prompt text is matched against this term list (stored
 // base64-encoded — same repo-hygiene pattern as SANITIZE_RULES). An entry that
@@ -445,7 +563,7 @@ function promptIndexMatches(fullPath, search) {
 }
 
 function extractVideoMetadata(filePath, cb) {
-  execFile('ffprobe', ['-v', 'quiet', '-show_entries', 'format_tags', '-of', 'json', filePath], { timeout: 10000 }, (err, stdout) => {
+  execFile(FFPROBE_BIN, ['-v', 'quiet', '-show_entries', 'format_tags', '-of', 'json', filePath], { timeout: 10000 }, (err, stdout) => {
     if (err) return cb(null, { prompt: null, workflow: null });
     try {
       const data = JSON.parse(stdout);
@@ -456,7 +574,9 @@ function extractVideoMetadata(filePath, cb) {
       const raw = tags.comment || tags.prompt || '';
       if (raw) {
         try {
-          const parsed = JSON.parse(raw);
+          let parsed = JSON.parse(raw);
+          // VHS writes the mp4 'prompt' tag double-encoded (a JSON string containing JSON)
+          if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed); } catch {} }
           if (parsed.prompt) {
             prompt = typeof parsed.prompt === 'string' ? JSON.parse(parsed.prompt) : parsed.prompt;
           }
@@ -1012,6 +1132,20 @@ function resolveStepsNode(wf, mapping) {
   if (mapping && mapping.stepsNodeId != null) { const n = nodeById(wf, mapping.stepsNodeId); if (n) return n; }
   return (wf.nodes || []).find(n => (n.title || '').toUpperCase() === 'STEPS' && n.type === 'mxSlider') || null;
 }
+// Wan-style dual-sampler workflows: two active KSamplerAdvanced nodes where the
+// high-noise pass starts at step 0 and hands off to the low-noise pass.
+// widgets_values: [add_noise, noise_seed, control, steps, cfg, sampler, scheduler,
+//                  start_at_step, end_at_step, return_with_leftover_noise]
+function findHighLowSamplers(wf) {
+  const ks = (wf.nodes || []).filter(n => n.type === 'KSamplerAdvanced'
+    && Array.isArray(n.widgets_values) && n.widgets_values.length >= 9
+    && n.mode !== 2 && n.mode !== 4);
+  if (ks.length !== 2) return null;
+  const high = ks.find(n => Number(n.widgets_values[7]) === 0);
+  const low = ks.find(n => Number(n.widgets_values[7]) > 0);
+  return (high && low) ? { high, low } : null;
+}
+
 function resolveSeedNode(wf, mapping) {
   if (mapping && mapping.seedNodeId != null) { const n = nodeById(wf, mapping.seedNodeId); if (n) return n; }
   return (wf.nodes || []).find(n => n.type === 'Seed (rgthree)' && (n.mode || 0) === 0) || null;
@@ -1803,6 +1937,7 @@ runTests();
         httpsPort: parseInt(config.httpsPort, 10) || 8443,
         mediaDir: ROOT,
       },
+      setup: { done: !!config.setupDone, features: Array.isArray(config.features) ? config.features : null },
     });
     return;
   }
@@ -1838,6 +1973,12 @@ runTests();
         }
         current[k] = p;
       }
+      // Setup wizard state: completion flag + which features the user opted into.
+      if ('setupDone' in body) current.setupDone = !!body.setupDone;
+      if (Array.isArray(body.features)) {
+        const known = ['media', 'comfy', 'claude', 'chatLocal', 'chatGrok', 'voice'];
+        current.features = body.features.filter(f => known.includes(f));
+      }
       try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(current, null, 2)); }
       catch (e) { jsonRes(res, { error: 'Write failed: ' + e.message }, 500); return; }
       reloadConfig();
@@ -1868,7 +2009,10 @@ runTests();
       try { wfCount = loadWfStore().enabled.filter(n => fs.existsSync(path.join(WORKFLOWS_DIR, n))).length; } catch {}
       const claudeCli = !!findClaudeCli();
       const comfyDirOk = fs.existsSync(COMFY_DIR);
-      jsonRes(res, { services: [
+      jsonRes(res, {
+        setupDone: !!config.setupDone,
+        features: Array.isArray(config.features) ? config.features : null,
+        services: [
         { id: 'comfy', name: 'ComfyUI', configured: comfyDirOk, running: comfy,
           detail: comfy ? ('Running at ' + COMFY_URL) : (comfyDirOk ? ('Installed but NOT running — not reachable at ' + COMFY_URL) : 'Install folder not found — set it in Settings'),
           affects: 'Running workflows / generating images' },
@@ -2137,6 +2281,69 @@ runTests();
     return;
   }
 
+  // API: Save a workflow JSON into the app workflows dir. Used by "Fix with
+  // Claude" to materialize an image-embedded workflow as a file so it can be
+  // debugged/edited, and optionally enable it for the workflow dropdown.
+  if (pn === '/api/workflows/save' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', c => bodyStr += c);
+    req.on('end', () => {
+      let body;
+      try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      if (!body.workflow || typeof body.workflow !== 'object') { jsonRes(res, { error: 'Missing workflow' }, 400); return; }
+      let name = String(body.name || 'DEBUG.json').replace(/[\\\/:*?"<>|]/g, '_').trim();
+      if (!name.toLowerCase().endsWith('.json')) name += '.json';
+      const wfPath = path.join(WORKFLOWS_DIR, name);
+      if (!path.resolve(wfPath).startsWith(path.resolve(WORKFLOWS_DIR))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+      try {
+        fs.mkdirSync(WORKFLOWS_DIR, { recursive: true });
+        fs.writeFileSync(wfPath, JSON.stringify(body.workflow, null, 2));
+      } catch (e) { jsonRes(res, { error: 'Write failed: ' + e.message }, 500); return; }
+      if (body.enable) {
+        const store = loadWfStore();
+        if (!store.enabled.includes(name)) { store.enabled.push(name); saveWfStore(store); }
+      }
+      jsonRes(res, { ok: true, name });
+    });
+    return;
+  }
+
+  // API: Write an app workflow back into a PNG's metadata, replacing the
+  // embedded 'workflow' (graph) and 'prompt' (API) text chunks — so Inherit
+  // runs of that image use the fixed workflow from then on.
+  if (pn === '/api/image/embed-workflow' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', c => bodyStr += c);
+    req.on('end', async () => {
+      let body;
+      try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      const { filePath, workflowName } = body;
+      if (!filePath || !workflowName) { jsonRes(res, { error: 'Missing filePath or workflowName' }, 400); return; }
+      const fileExt = path.extname(filePath).toLowerCase();
+      const isPng = fileExt === '.png';
+      const isVid = ['.mp4', '.webm', '.mkv', '.mov'].includes(fileExt);
+      if (!isPng && !isVid) { jsonRes(res, { error: 'Only PNG and video files can carry an embedded workflow' }, 400); return; }
+      const abs = path.resolve(filePath);
+      if (!abs.startsWith(path.resolve(ROOT)) && !abs.startsWith(path.resolve(COMFY_OUTPUT))) {
+        jsonRes(res, { error: 'File must be under the media or ComfyUI output folder' }, 403); return;
+      }
+      if (!fs.existsSync(abs)) { jsonRes(res, { error: 'File not found' }, 404); return; }
+      const wfPath = path.join(WORKFLOWS_DIR, workflowName);
+      if (!path.resolve(wfPath).startsWith(path.resolve(WORKFLOWS_DIR))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+      let wf;
+      try { wf = JSON.parse(fs.readFileSync(wfPath, 'utf8')); } catch (e) { jsonRes(res, { error: 'Workflow read failed: ' + e.message }, 500); return; }
+      let apiPrompt;
+      try { apiPrompt = await workflowToPrompt(wf); } catch (e) { jsonRes(res, { error: 'Workflow conversion failed: ' + e.message }, 500); return; }
+      const done = (err) => {
+        if (err) { jsonRes(res, { error: err.message }, 500); return; }
+        jsonRes(res, { ok: true });
+      };
+      if (isPng) embedPngText(abs, { workflow: JSON.stringify(wf), prompt: JSON.stringify(apiPrompt) }, done);
+      else embedVideoText(abs, JSON.stringify({ prompt: apiPrompt, workflow: wf }), done);
+    });
+    return;
+  }
+
   // API: Get editable config (MAIN PROMPT, loras) from an APP workflow
   if (pn === '/api/workflow-config' && req.method === 'GET') {
     const wfName = url.searchParams.get('name');
@@ -2160,6 +2367,14 @@ runTests();
         if (stepsNode) { const wv = stepsNode.widgets_values || []; config.steps = typeof wv[0] === 'number' ? wv[0] : (typeof wv[1] === 'number' ? wv[1] : null); }
         const seedNode = resolveSeedNode(wf, mapping);
         if (seedNode) { const wv = seedNode.widgets_values || []; config.seed = typeof wv[0] === 'number' ? wv[0] : -1; }
+
+        // Dual high/low sampler split (Wan video): report per-pass step counts
+        const hl = findHighLowSamplers(wf);
+        if (hl) {
+          const total = Number(hl.high.widgets_values[3]) || 0;
+          const high = Number(hl.high.widgets_values[8]) || 0;
+          config.highLowSteps = { high, low: Math.max(0, total - high) };
+        }
 
         // Frames slider (mxSlider titled "Frames") — unchanged convention
         for (const node of wf.nodes || []) {
@@ -2252,6 +2467,20 @@ runTests();
               const wv = stepsNode.widgets_values;
               if (typeof wv[0] === 'number') wv[0] = stepVal;
               if (typeof wv[1] === 'number') wv[1] = stepVal;
+            }
+          }
+
+          // High/low sampler split override — the sum becomes total steps on both
+          // passes; the high pass covers [0, high), the low pass takes over from there.
+          if (overrides.highSteps != null && overrides.lowSteps != null) {
+            const hs = parseInt(overrides.highSteps), ls = parseInt(overrides.lowSteps);
+            const hl = findHighLowSamplers(wf);
+            if (hl && !isNaN(hs) && !isNaN(ls) && hs >= 0 && ls >= 0 && hs + ls > 0) {
+              hl.high.widgets_values[3] = hs + ls;
+              hl.high.widgets_values[7] = 0;
+              hl.high.widgets_values[8] = hs;
+              hl.low.widgets_values[3] = hs + ls;
+              hl.low.widgets_values[7] = hs;
             }
           }
 
