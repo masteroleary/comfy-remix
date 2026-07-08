@@ -1151,6 +1151,35 @@ function resolveSeedNode(wf, mapping) {
   return (wf.nodes || []).find(n => n.type === 'Seed (rgthree)' && (n.mode || 0) === 0) || null;
 }
 
+// CFG: an mxSlider titled "CFG" by convention, else the active KSampler-family
+// nodes (cfg widget index 3 on KSampler, 4 on KSamplerAdvanced). When multiple
+// samplers are active they must agree on the value — otherwise the workflow
+// intends different CFGs per pass and we don't expose a single control that
+// would clobber that. Returns { get, set } or null.
+function resolveCfg(wf) {
+  const slider = (wf.nodes || []).find(n => (n.title || '').toUpperCase() === 'CFG'
+    && (n.type === 'mxSlider' || n.type === 'mxSliderF') && Array.isArray(n.widgets_values));
+  if (slider) {
+    const wv = slider.widgets_values;
+    return {
+      get: () => typeof wv[0] === 'number' ? wv[0] : (typeof wv[1] === 'number' ? wv[1] : null),
+      set: (v) => { if (typeof wv[0] === 'number') wv[0] = v; if (typeof wv[1] === 'number') wv[1] = v; },
+    };
+  }
+  const cfgIdx = n => n.type === 'KSamplerAdvanced' ? 4 : 3;
+  const samplers = (wf.nodes || []).filter(n =>
+    (n.type === 'KSampler' || n.type === 'KSamplerAdvanced')
+    && n.mode !== 2 && n.mode !== 4
+    && Array.isArray(n.widgets_values) && typeof n.widgets_values[cfgIdx(n)] === 'number');
+  if (!samplers.length) return null;
+  const first = samplers[0].widgets_values[cfgIdx(samplers[0])];
+  if (!samplers.every(n => n.widgets_values[cfgIdx(n)] === first)) return null;
+  return {
+    get: () => samplers[0].widgets_values[cfgIdx(samplers[0])],
+    set: (v) => { for (const n of samplers) n.widgets_values[cfgIdx(n)] = v; },
+  };
+}
+
 // Candidate nodes for the mapping editor dropdowns.
 function workflowCandidates(wf) {
   const strNodes = [], intNodes = [], seedNodes = [];
@@ -1782,10 +1811,20 @@ runTests();
           'Access-Control-Allow-Origin': '*',
         });
 
-        const args = [...cliInfo.baseArgs, '-p', prompt, '--output-format', 'stream-json', '--verbose'];
+        const args = [...cliInfo.baseArgs, '-p', prompt, '--output-format', 'stream-json', '--verbose',
+          // Headless mode can't show permission prompts, so grant the write scope
+          // explicitly: edit/create workflow files only (relative to cwd=COMFY_DIR),
+          // plus curl so the assistant can fall back to the local app/ComfyUI APIs
+          // when direct file writes fail (save workflow via /api/workflows/save,
+          // test-run so the fix gets embedded in a generated image). Anything else
+          // (other shell commands, web access) stays denied — headless default-deny
+          // covers whatever isn't allowed here. Ships with the app so users don't
+          // need a .claude/settings.json in their ComfyUI install (a local one
+          // still composes for extra grants).
+          '--allowedTools', 'Edit(user/default/workflows/**)', 'Write(user/default/workflows/**)', 'Bash(curl:*)',
+          '--disallowedTools', 'WebFetch', 'WebSearch'];
         // Give the assistant read access to the ComfyUI notes (patches, install history)
-        // so it has real context when inspecting/editing workflows. Write scope is limited
-        // to user/default/workflows/ by COMFY_DIR/.claude/settings.json.
+        // so it has real context when inspecting/editing workflows.
         const notesDir = config.comfyNotesDir || 'D:\\comfyui_notes';
         if (fs.existsSync(notesDir)) args.push('--add-dir', notesDir);
 
@@ -2358,7 +2397,7 @@ runTests();
       try {
         const wf = JSON.parse(raw);
         const mapping = (loadWfStore().mappings || {})[wfName] || null;
-        const config = { prompt: '', loras: [], frames: null, seed: null, steps: null, presets: [], mtime: wfStat ? wfStat.mtimeMs : 0 };
+        const config = { prompt: '', loras: [], frames: null, seed: null, steps: null, cfg: null, presets: [], mtime: wfStat ? wfStat.mtimeMs : 0 };
 
         // Prompt / steps / seed via mapping-or-convention resolvers
         const promptNode = resolvePromptNode(wf, mapping);
@@ -2375,6 +2414,10 @@ runTests();
           const high = Number(hl.high.widgets_values[8]) || 0;
           config.highLowSteps = { high, low: Math.max(0, total - high) };
         }
+
+        // CFG (slider convention or agreeing active samplers)
+        const cfgCtl = resolveCfg(wf);
+        if (cfgCtl) config.cfg = cfgCtl.get();
 
         // Frames slider (mxSlider titled "Frames") — unchanged convention
         for (const node of wf.nodes || []) {
@@ -2482,6 +2525,13 @@ runTests();
               hl.low.widgets_values[3] = hs + ls;
               hl.low.widgets_values[7] = hs;
             }
+          }
+
+          // CFG override (slider convention or agreeing active samplers)
+          if (overrides.cfg !== undefined && overrides.cfg !== null) {
+            const cfgVal = parseFloat(overrides.cfg);
+            const cfgCtl = resolveCfg(wf);
+            if (!isNaN(cfgVal) && cfgVal >= 0 && cfgCtl) cfgCtl.set(cfgVal);
           }
 
           // Pin seed on the resolved Seed node (omit/-1 = let the client randomize)

@@ -124,6 +124,9 @@ textarea.edit-input{resize:vertical;line-height:1.4}
           <input type="number" id="lowStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
         </label>
         <span id="hlTotalTxt" style="display:none;font-size:12px;color:#8e8e93;padding-bottom:9px"></span>
+        <label id="cfgField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">CFG
+          <input type="number" id="cfgInput" min="0" max="100" step="0.1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
       </div>
     </div>
     <div id="presetSection" style="display:none;margin:8px 0">
@@ -299,6 +302,9 @@ const highStepsInput = document.getElementById('highStepsInput');
 const lowStepsField = document.getElementById('lowStepsField');
 const lowStepsInput = document.getElementById('lowStepsInput');
 const hlTotalTxt = document.getElementById('hlTotalTxt');
+const cfgField = document.getElementById('cfgField');
+const cfgInput = document.getElementById('cfgInput');
+let hasCfgControl = false;
 let hasHLControl = false;   // dual high/low sampler workflows (Wan video)
 function updateHLTotal() {
   const h = parseInt(highStepsInput.value, 10) || 0;
@@ -339,6 +345,7 @@ seedInput.addEventListener('input', () => { persistGen(); reflectSeedPin(); });
 stepsInput.addEventListener('input', persistGen);
 highStepsInput.addEventListener('input', () => { persistGen(); updateHLTotal(); });
 lowStepsInput.addEventListener('input', () => { persistGen(); updateHLTotal(); });
+cfgInput.addEventListener('input', persistGen);
 function persistGen() {
   const name = workflowSelect.value;
   if (name === 'inherit') return;
@@ -347,6 +354,7 @@ function persistGen() {
   localStorage.setItem('archiveSteps_' + name, stepsInput.value);
   localStorage.setItem('archiveHighSteps_' + name, highStepsInput.value);
   localStorage.setItem('archiveLowSteps_' + name, lowStepsInput.value);
+  localStorage.setItem('archiveCfg_' + name, cfgInput.value);
 }
 
 function renderPresets() {
@@ -425,6 +433,7 @@ function loadWorkflowConfig(name) {
       localStorage.removeItem('archiveSteps_' + name);
       localStorage.removeItem('archiveHighSteps_' + name);
       localStorage.removeItem('archiveLowSteps_' + name);
+      localStorage.removeItem('archiveCfg_' + name);
       localStorage.removeItem('archivePresets_' + name);
     }
 
@@ -465,7 +474,16 @@ function loadWorkflowConfig(name) {
       lowStepsField.style.display = 'none';
       hlTotalTxt.style.display = 'none';
     }
-    genSection.style.display = (hasSeedControl || hasStepsControl || hasHLControl) ? 'block' : 'none';
+
+    // CFG control (mxSlider titled CFG, or the workflow's agreeing sampler nodes)
+    hasCfgControl = cfg.cfg !== null && cfg.cfg !== undefined;
+    if (hasCfgControl) {
+      const savedCfg = localStorage.getItem('archiveCfg_' + name);
+      cfgInput.value = savedCfg !== null ? savedCfg : String(cfg.cfg);
+      cfgField.style.display = 'flex';
+    } else { cfgField.style.display = 'none'; }
+
+    genSection.style.display = (hasSeedControl || hasStepsControl || hasHLControl || hasCfgControl) ? 'block' : 'none';
 
     // Preset checkboxes
     if (cfg.presets && cfg.presets.length > 0) {
@@ -585,8 +603,10 @@ function setupInheritControls() {
   presetSection.style.display = 'none';
   framesSelect.style.display = 'none';
   stepsField.style.display = 'none';
+  cfgField.style.display = 'none';
   currentPresets = [];
   hasStepsControl = false;
+  hasCfgControl = false;
 
   // Prompt (from the image's own embedded prompt)
   const ref = extractImagePromptRef();
@@ -685,6 +705,30 @@ function extractImageSeed() {
   return fallback;
 }
 
+// Which preset groups were active in an embedded graph — mirrors the server's
+// detectPresetGroups (rgthree "Fast Groups Muter" with max-one restriction over
+// purple groups; a group is ON when any member node is unmuted). Returns
+// {title: on} or null if the graph has no such muter.
+function embeddedPresetStates(wf) {
+  const nodes = (wf && wf.nodes) || [];
+  const groups = (wf && wf.groups) || [];
+  const muter = nodes.find(n => (n.type || '').includes('Fast Groups Muter')
+    && n.properties && (n.properties.matchColors || '').toLowerCase() === 'purple'
+    && n.properties.toggleRestriction === 'max one');
+  if (!muter) return null;
+  const inGroup = (node, g) => {
+    if (!node.pos || !g.bounding) return false;
+    const [gx, gy, gw, gh] = g.bounding;
+    return node.pos[0] >= gx - 2 && node.pos[1] >= gy - 2 && node.pos[0] <= gx + gw && node.pos[1] <= gy + gh;
+  };
+  const states = {};
+  groups.filter(g => (g.color || '').toLowerCase() === '#a1309b').forEach(g => {
+    const members = nodes.filter(n => inGroup(n, g));
+    states[g.title] = members.some(n => (n.mode || 0) === 0);
+  });
+  return states;
+}
+
 // Structural recognition: if the image's embedded graph matches an enabled APP
 // workflow (same nodes/wiring — prompt/seed/widget values may differ), switch the
 // selector from Inherit to it and preload the controls with the image's own
@@ -726,7 +770,17 @@ async function recognizeWorkflow(wf) {
       }
       if (applied) renderLoras();
     }
-    log("Controls preloaded from the image's prompt, seed, and LoRAs");
+    // Reflect the preset that actually generated this image (session-only, like
+    // the other preloads) — not whatever was checked in the UI last time.
+    const embPresets = embeddedPresetStates(wf);
+    if (embPresets && currentPresets.length) {
+      let touched = false;
+      for (const p of currentPresets) {
+        if (p.title in embPresets && p.on !== embPresets[p.title]) { p.on = embPresets[p.title]; touched = true; }
+      }
+      if (touched) renderPresets();
+    }
+    log("Controls preloaded from the image's prompt, seed, LoRAs, and preset");
     return true;
   } catch { return false; }
 }
@@ -1348,6 +1402,7 @@ async function getRunPrompt(presetTitle) {
   if (currentLoras.length > 0) overrides.loras = currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
   if (framesSelect.value !== 'inherit') overrides.frames = parseInt(framesSelect.value);
   if (hasStepsControl && stepsInput.value.trim()) overrides.steps = parseInt(stepsInput.value);
+  if (hasCfgControl && cfgInput.value.trim()) overrides.cfg = parseFloat(cfgInput.value);
   if (hasHLControl) {
     const h = parseInt(highStepsInput.value, 10), l = parseInt(lowStepsInput.value, 10);
     if (!isNaN(h) && !isNaN(l) && h >= 0 && l >= 0 && h + l > 0) { overrides.highSteps = h; overrides.lowSteps = l; }
@@ -2141,10 +2196,19 @@ async function fixWithClaude() {
   }
 
   const clipped = logText.length > 12000 ? ('…(earlier log truncated)…\n' + logText.slice(-12000)) : logText;
+  // The app's HTTP port, for the API-fallback instructions below (this page may
+  // be served over HTTPS on a different port).
+  let appHttpPort = 8080;
+  try { const s = await fetch('/api/settings').then(r => r.json()); appHttpPort = (s.info && s.info.port) || 8080; } catch {}
+  const apiFallback =
+    '\n\nIf file edits are REJECTED by permissions, do not give up — fall back to the local APIs via curl:'
+    + '\n1. Save the corrected workflow through the ComfyRemix server (it writes the file for you): POST to http://127.0.0.1:' + appHttpPort + '/api/workflows/save with JSON {"name":"' + targetWf + '","workflow":<corrected full graph JSON>,"enable":true}. The JSON is large — write it to a temp file and use curl -d @file if you can, else pipe it via stdin with -d @-.'
+    + '\n2. To prove the fix end-to-end, queue a test run: POST {} to http://127.0.0.1:' + appHttpPort + '/api/workflow-prompt?name=' + encodeURIComponent(targetWf) + ' to get {prompt, workflow}, then POST {"prompt":<prompt>,"client_id":"claude-fix","extra_data":{"extra_pnginfo":{"workflow":<workflow>}}} to http://127.0.0.1:' + appHttpPort + '/api/comfy/api/prompt. The generated image will carry the fixed workflow embedded in its metadata, so the fix is preserved even if the file could not be written.';
   const prompt = (targetWf !== 'inherit'
       ? 'The ComfyRemix app ran the workflow file "user/default/workflows/' + targetWf + '" and it failed or misbehaved.'
         + (savedFromImage ? ' (The file was just saved from a workflow embedded in a media file, so this exact file has not been run before.)' : '')
         + ' Review the run log below, find the root cause, and EDIT that workflow file so it works. Keep the workflow\'s intent — only change what is needed (bad widget values, wrong connections, missing/renamed models; check the models folders for what actually exists before swapping a model name). When done, summarize what you changed in 2-3 sentences.'
+        + apiFallback
       : 'A ComfyUI run from the ComfyRemix app failed. The workflow came embedded in a media file ("Inherit" mode) and no workflow graph could be extracted, so there is no file to edit. Review the run log below and explain the root cause and the exact fix in a few sentences.')
     + '\n\n=== RUN LOG ===\n' + clipped;
 
