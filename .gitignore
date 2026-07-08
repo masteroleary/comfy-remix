@@ -1,5 +1,9 @@
-# Media content (large files, user-specific)
-Media/
+# Media content (large files, user-specific).
+# Everything is ignored except the bundled demo image — new files dropped in
+# _Favorites (or anywhere else under Media/) stay untracked.
+Media/**
+!Media/_Favorites/
+!Media/_Favorites/Anima_Demo.png
 
 # Config with API keys
 config.json
