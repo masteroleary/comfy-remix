@@ -89,6 +89,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 }
 .filter-bar::-webkit-scrollbar{display:none}
 
+.file-tabs{
+  display:flex;gap:4px;
+  padding:8px calc(12px + var(--safe-l)) 0 calc(12px + var(--safe-l));
+  border-bottom:1px solid var(--surface2);
+}
+.file-tab{
+  flex:1;min-width:0;
+  background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--text2);font-size:14px;font-weight:600;
+  padding:9px 6px;cursor:pointer;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.file-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.file-tab:active{opacity:.6}
+
 .filter-chip{
   flex-shrink:0;display:flex;align-items:center;gap:5px;
   background:var(--surface2);border:1px solid var(--border);
@@ -562,6 +577,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">☐ Select</button>
 </div>
 
+<!-- Files & Media tabs (shown only inside the combined Files view, hidden while searching) -->
+<div class="file-tabs" id="fileTabs" style="display:none"></div>
+
 <!-- Stats -->
 <div class="stats"><span id="statsTxt"></span><span id="pageInfoTxt"></span></div>
 
@@ -603,36 +621,50 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- Settings -->
 <div class="confirm-overlay" id="settingsOverlay" style="align-items:center">
   <div class="confirm-sheet" style="border-radius:var(--r);max-height:88vh;overflow:auto">
-    <div style="display:flex;align-items:center;margin-bottom:14px">
+    <div style="display:flex;align-items:center;margin-bottom:10px">
       <div class="confirm-title" style="margin:0">Settings</div>
       <button id="settingsCloseBtn" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer">✕</button>
     </div>
 
-    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">API Keys</div>
-    <div class="set-field" data-key="anthropicApiKey"><label>Claude (Anthropic)</label>
-      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
-    <div class="set-field" data-key="xaiApiKey"><label>Grok (xAI)</label>
-      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
-    <div class="set-field" data-key="civitaiApiKey"><label>Civitai</label>
-      <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+    <div class="file-tabs" id="settingsTabs" style="margin-bottom:14px">
+      <button class="file-tab active" data-settab="config">Config</button>
+      <button class="file-tab" data-settab="privacy">Privacy</button>
+    </div>
 
-    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Service URLs</div>
-    <div class="set-field" data-url="comfyUrl"><label>ComfyUI API</label>
-      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
-    <div class="set-field" data-url="ollamaUrl"><label>Ollama</label>
-      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:11434"></div></div>
-    <div class="set-field" data-url="voxtralUrl"><label>Voxtral</label>
-      <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
+    <div id="settingsTabConfig">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">API Keys</div>
+      <div class="set-field" data-key="anthropicApiKey"><label>Claude (Anthropic)</label>
+        <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+      <div class="set-field" data-key="xaiApiKey"><label>Grok (xAI)</label>
+        <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
+      <div class="set-field" data-key="civitaiApiKey"><label>Civitai</label>
+        <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
 
-    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Paths</div>
-    <div class="set-field" data-path="comfyDir"><label>ComfyUI install folder <span id="comfyDirState" style="font-weight:400"></span></label>
-      <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">Drives the workflow list, run controls, and the Claude assistant.</div></div>
-    <div class="set-field" data-path="comfyOutput"><label>ComfyUI output folder <span id="comfyOutputState" style="font-weight:400"></span></label>
-      <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\output"><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Service URLs</div>
+      <div class="set-field" data-url="comfyUrl"><label>ComfyUI API</label>
+        <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
+      <div class="set-field" data-url="ollamaUrl"><label>Ollama</label>
+        <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:11434"></div></div>
+      <div class="set-field" data-url="voxtralUrl"><label>Voxtral</label>
+        <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
 
-    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Read-only <span style="text-transform:none;letter-spacing:0">— edit config.json + restart to change</span></div>
-    <div id="settingsInfo" style="font-size:12px;color:var(--text2);line-height:1.7;word-break:break-all"></div>
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Paths</div>
+      <div class="set-field" data-path="comfyDir"><label>ComfyUI install folder <span id="comfyDirState" style="font-weight:400"></span></label>
+        <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Drives the workflow list, run controls, and the Claude assistant.</div></div>
+      <div class="set-field" data-path="comfyOutput"><label>ComfyUI output folder <span id="comfyOutputState" style="font-weight:400"></span></label>
+        <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\output"><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
+    </div>
+
+    <div id="settingsTabPrivacy" style="display:none">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🛡 safe-mode shield hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <input id="nsfwAddInp" type="text" autocomplete="off" placeholder="Add a tag…" style="flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
+        <button class="btn-ok" id="nsfwAddBtn" style="background:var(--accent);white-space:nowrap">Add</button>
+      </div>
+      <div id="nsfwList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
 
     <div class="confirm-btns" style="margin-top:18px">
       <button class="btn-cancel" id="settingsCancel">Cancel</button>
@@ -977,7 +1009,8 @@ safeToggle.onclick = () => {
   S.safeMode = !S.safeMode;
   localStorage.setItem('archiveSafeMode', S.safeMode ? '1' : '0');
   safeToggle.classList.toggle('active', S.safeMode);
-  loadDir(S.dir, 1, false); // re-fetch with/without the filter
+  // On the home landing there's no file list to filter — don't navigate into one.
+  if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
 };
 
 // Auto-relock: when the tab is hidden (switched away / minimized), re-enable the
@@ -1025,6 +1058,7 @@ $('searchClear').onclick = () => {
 
 // ── Load directory ────────────────────────────────────────────────────────
 async function loadDir(dir, page = 1, pushStack = true) {
+  S.onHome = false;
   // Dismiss any open card action menu
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
@@ -1042,6 +1076,9 @@ async function loadDir(dir, page = 1, pushStack = true) {
   S.dir = dir; S.page = page; S.search = searchInp.value.trim();
   $('searchClear').style.display = searchInp.value ? 'block' : 'none';
 
+  // Inside the Files & Media view, a search spans all three tabs at once.
+  const filesSearchAll = S.filesMode && !!S.search;
+
   try {
     const q = new URLSearchParams({
       dir: dir || '',
@@ -1052,34 +1089,86 @@ async function loadDir(dir, page = 1, pushStack = true) {
       type: S.type,
       safe: S.safeMode ? '1' : '0',
     });
+    if (filesSearchAll) q.set('scope', 'all');
     const data = await fetch('/api/list?' + q).then(r => r.json());
     if (data.error) throw new Error(data.error);
 
     S.total = data.total; S.pages = data.pages; S.items = data.items;
-    S.parent = data.parent; S.favDir = data.favoritesDir;
+    S.parent = data.parent; S.favDir = data.favoritesDir; S.root = data.root;
+    if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
 
     renderHeader(data);
     renderGrid(data.items);
     renderPager(data);
+    renderFileTabs();
   } catch (err) {
     gridWrap.innerHTML = `<div class="err-msg">⚠ ${esc(err.message)}</div>`;
   }
+}
+
+// ── Files & Media combined view (tabs: ComfyUI Output / Favorites) ──
+// Favorites is the media root itself (favDir === ROOT after merge).
+const FILE_TABS = [
+  { id: 'comfy', label: 'ComfyUI Output', dir: () => S.comfyOutputDir || '' },
+  { id: 'fav', label: 'Favorites', dir: () => S.favDir || '' },
+];
+function openFilesPanel() {
+  S.filesMode = true;
+  S.navStack = [];
+  // Default to ComfyUI Output; fall back to Favorites if its folder isn't configured
+  loadFilesTab(S.comfyOutputDir ? 'comfy' : 'fav');
+}
+function loadFilesTab(tabId) {
+  S.filesTab = tabId;
+  S.navStack = [];
+  searchInp.value = '';
+  const t = FILE_TABS.find(x => x.id === tabId) || FILE_TABS[0];
+  loadDir(t.dir(), 1, false);
+}
+const _norm = s => (s || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+// Which Files tab's tree a folder belongs to: ComfyUI output is its own root,
+// everything else lives under the Favorites (media) root.
+function filesTabForDir(gdir) {
+  const g = _norm(gdir);
+  if (S.comfyOutputDir && g.startsWith(_norm(S.comfyOutputDir))) return 'comfy';
+  return 'fav';
+}
+// Human label for a cross-root search-result group: "<Tab> / <relative path>".
+function filesGroupLabel(gdir) {
+  const full = gdir.replace(/\\/g, '/');
+  const roots = { comfy: [S.comfyOutputDir, 'ComfyUI Output'], fav: [S.favDir, 'Favorites'] };
+  const [base, label] = roots[filesTabForDir(gdir)];
+  let rel = full;
+  if (base && _norm(full).startsWith(_norm(base))) rel = full.slice(base.replace(/\\/g, '/').replace(/\/+$/, '').length).replace(/^\//, '');
+  return rel ? label + ' / ' + rel : label;
+}
+function renderFileTabs() {
+  const el = $('fileTabs');
+  if (!S.filesMode || S.search) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = '';
+  FILE_TABS.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'file-tab' + (S.filesTab === t.id ? ' active' : '');
+    b.textContent = t.label;
+    b.onclick = () => { if (S.filesTab !== t.id) loadFilesTab(t.id); };
+    el.appendChild(b);
+  });
 }
 
 // Feature registry: home tiles grouped by opt-in feature. `ready` judges the
 // /api/status services map — `configured` for set-once items (folders, keys,
 // CLI), `running` for services that must be live to be usable at all.
 const FEATURES = [
+  // Archive/Favorites/ComfyUI-Output are surfaced together as one "Files & Media"
+  // tile (rendered specially below, since it spans both the media and comfy
+  // features). These entries keep the media/comfy features in the setup wizard.
   { id: 'media', name: 'Media library', icon: '📂', desc: 'Browse archive media & favorites',
     ready: sv => !!(sv.media && sv.media.configured),
-    tiles: [
-      { id: 'hlArchive', icon: '📂', text: 'Archive Media', sub: 'Browse saved media files' },
-      { id: 'hlFav', icon: '⭐', text: 'Favorites', sub: 'Saved favorites' },
-    ] },
+    tiles: [] },
   { id: 'comfy', name: 'ComfyUI', icon: '🎨', desc: 'Browse output, run workflows, watch jobs',
     ready: sv => !!(sv.comfy && sv.comfy.configured),
     tiles: [
-      { id: 'hlComfy', icon: '🎨', text: 'ComfyUI Output', sub: 'Browse generated output files' },
       { id: 'hlJobs', icon: '⚡', text: 'Jobs', sub: 'Running and completed jobs' },
     ] },
   { id: 'claude', name: 'Claude Code', icon: '🤖', desc: 'AI assistant for ComfyUI & workflows',
@@ -1110,6 +1199,9 @@ async function getHomeStatus(force) {
 async function showHomeLanding(forceStatus) {
   searchInp.value = '';
   S.navStack = [];
+  S.onHome = true;
+  S.filesMode = false;
+  renderFileTabs();
   S.dir = '';
   pathTxt.innerHTML = '<b>Home</b>';
   backBtn.disabled = true;
@@ -1135,8 +1227,21 @@ async function showHomeLanding(forceStatus) {
   const tile = t => '<div class="home-folder" id="' + t.id + '"><div class="home-folder-icon">' + t.icon + '</div><div><div class="home-folder-text">' + t.text + '</div><div class="home-folder-sub">' + t.sub + '</div></div></div>';
   const pending = [];   // selected but failing their status check → hidden
   let html = tile({ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' });
+
+  // Combined Files & Media tile — Favorites is the local media root (always
+  // present) and the ComfyUI Output tab uses the ComfyUI output folder. Shown
+  // whenever either root is available; ComfyUI is a required feature.
+  const filesOk = !st || (st.services.media && st.services.media.configured) || (st.services.comfy && st.services.comfy.configured);
+  if (filesOk) {
+    html += tile({ id: 'hlFiles', icon: '📂', text: 'Files & Media', sub: 'ComfyUI output & favorites' });
+  } else {
+    pending.push('Files & Media');
+  }
+
   FEATURES.forEach(f => {
+    if (f.id === 'media') return;   // folded into the Files & Media tile above
     if (!selected.includes(f.id)) return;
+    if (!f.tiles.length) return;
     if (st && !f.ready(st.services)) { pending.push(f.name); return; }
     html += f.tiles.map(tile).join('');
   });
@@ -1156,9 +1261,7 @@ async function showHomeLanding(forceStatus) {
   }).catch(() => {});
 
   const wire = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
-  wire('hlArchive', () => loadDir('', 1, false));
-  wire('hlComfy', () => { if (S.comfyOutputDir) loadDir(S.comfyOutputDir, 1, false); });
-  wire('hlFav', () => { if (S.favDir) loadDir(S.favDir, 1, false); });
+  wire('hlFiles', openFilesPanel);
   wire('hlJobs', () => { location.href = '/jobs'; });
   wire('hlClaude', openClaudePanel);
   wire('hlStatus', openStatusPanel);
@@ -1180,10 +1283,19 @@ function renderHeader(data) {
   const dirNorm = (data.dir || '').replace(/\\/g, '/');
   const rel = dirNorm.startsWith(rootNorm) ? dirNorm.slice(rootNorm.length).replace(/^\//, '') : dirNorm;
   const parts = rel.split('/').filter(Boolean);
-  const disp = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : parts.join('/') || 'Home';
+  let disp = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : parts.join('/') || 'Home';
+  // In the Files view, label the crumb by tab (ComfyUI output isn't under ROOT,
+  // so the generic relative path would show its full absolute path otherwise).
+  if (S.filesMode && !S.search) {
+    const tabLabel = (FILE_TABS.find(t => t.id === S.filesTab) || {}).label || 'Files';
+    const sub = filesGroupLabel(data.dir);
+    disp = sub.includes(' / ') ? sub : tabLabel;
+  }
   pathTxt.innerHTML = `<b>${esc(disp)}</b>`;
 
-  backBtn.disabled = !S.navStack.length && !data.parent;
+  // At a Files tab root, Back returns Home rather than trying to leave the roots.
+  const filesAtTabRoot = S.filesMode && !S.navStack.length;
+  backBtn.disabled = !S.navStack.length && !data.parent && !S.filesMode;
   backBtn.onclick = () => {
     if (S.navStack.length) {
       const prev = S.navStack.pop();
@@ -1194,6 +1306,8 @@ function renderHeader(data) {
       });
       S.type = prev.type || 'all';
       loadDir(prev.dir, prev.page, false);
+    } else if (filesAtTabRoot) {
+      showHomeLanding();
     } else if (data.parent) {
       searchInp.value = '';
       loadDir(data.parent, 1, false);
@@ -1255,11 +1369,21 @@ function renderGrid(items) {
       for (const [gdir, entries] of groups) {
         const hdr = document.createElement('div');
         hdr.className = 'search-group-hdr';
-        let rel = gdir.replace(/\\/g, '/');
-        if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)';
+        let rel;
+        if (S.filesMode) {
+          // Cross-root results: prefix with which tab's tree they came from.
+          rel = filesGroupLabel(gdir);
+        } else {
+          rel = gdir.replace(/\\/g, '/');
+          if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)';
+        }
         hdr.innerHTML = '📁 ' + esc(rel) + ' <span style="color:var(--text3);font-weight:400">(' + entries.length + ')</span>';
         hdr.title = 'Open this folder';
-        hdr.onclick = () => { searchInp.value = ''; loadDir(gdir, 1); };
+        hdr.onclick = () => {
+          searchInp.value = '';
+          if (S.filesMode) S.filesTab = filesTabForDir(gdir);   // keep the right tab highlighted
+          loadDir(gdir, 1);
+        };
         gridWrap.appendChild(hdr);
         const grid = document.createElement('div');
         grid.className = 'grid';
@@ -2006,12 +2130,17 @@ $('statusFeatures').onclick = () => {
 
   window.openSetupWizard = function(pre) {
     const chosen = Array.isArray(pre) ? pre : FEATURES.map(f => f.id);
-    $('setupStep1').innerHTML = FEATURES.map(f =>
-      '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--surface2);cursor:pointer">'
-      + '<input type="checkbox" data-feat="' + f.id + '"' + (chosen.includes(f.id) ? ' checked' : '') + ' style="margin-top:3px;accent-color:var(--accent)">'
-      + '<div><div style="font-size:14px;font-weight:600;color:var(--text)">' + f.icon + ' ' + esc(f.name) + '</div>'
-      + '<div style="font-size:12px;color:var(--text2)">' + esc(f.desc) + '</div></div></label>'
-    ).join('');
+    // Media library isn't a separate feature anymore (Favorites is folded into the
+    // always-present Files & Media view). ComfyUI is required and can't be turned off.
+    $('setupStep1').innerHTML = FEATURES.filter(f => f.id !== 'media').map(f => {
+      const required = f.id === 'comfy';
+      const checked = required || chosen.includes(f.id);
+      return '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--surface2);cursor:' + (required ? 'default' : 'pointer') + '">'
+        + '<input type="checkbox" data-feat="' + f.id + '"' + (checked ? ' checked' : '') + (required ? ' disabled' : '') + ' style="margin-top:3px;accent-color:var(--accent)">'
+        + '<div><div style="font-size:14px;font-weight:600;color:var(--text)">' + f.icon + ' ' + esc(f.name)
+        + (required ? ' <span style="font-size:11px;font-weight:400;color:var(--text3)">— required</span>' : '') + '</div>'
+        + '<div style="font-size:12px;color:var(--text2)">' + esc(f.desc) + '</div></div></label>';
+    }).join('');
     // Prefill step 2 from current settings
     fetch('/api/settings').then(r => r.json()).then(s => {
       document.querySelectorAll('#setupStep2 .set-field[data-wurl] input').forEach(inp => {
@@ -2032,8 +2161,11 @@ $('statusFeatures').onclick = () => {
     ov.classList.add('open');
   };
 
-  const selectedFeatures = () =>
-    Array.from(document.querySelectorAll('#setupStep1 input[data-feat]:checked')).map(c => c.dataset.feat);
+  const selectedFeatures = () => {
+    const sel = Array.from(document.querySelectorAll('#setupStep1 input[data-feat]:checked')).map(c => c.dataset.feat);
+    if (!sel.includes('comfy')) sel.push('comfy');   // required, always saved
+    return sel;
+  };
 
   async function finish() {
     const payload = { setupDone: true, features: selectedFeatures() };
@@ -2132,7 +2264,41 @@ $('statusFeatures').onclick = () => {
   const escHtml = s => { const d=document.createElement('div'); d.textContent = s==null?'':s; return d.innerHTML; };
   const close = () => overlay.classList.remove('open');
 
+  // ── Privacy tab: editable NSFW tag list (displayed plaintext, stored encoded) ──
+  let nsfwTerms = [];
+  function renderNsfw(){
+    const el = $('nsfwList');
+    el.innerHTML = '';
+    if (!nsfwTerms.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px">No tags — safe mode won\'t hide anything.</div>'; return; }
+    // Display alphabetically (stored order is unaffected).
+    nsfwTerms.slice().sort((a, b) => a.localeCompare(b)).forEach((t) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:5px 6px 5px 11px;font-size:13px;color:var(--text)';
+      chip.innerHTML = '<span></span><button title="Remove" style="background:none;border:none;color:var(--text3);font-size:15px;line-height:1;cursor:pointer;padding:0 2px">✕</button>';
+      chip.querySelector('span').textContent = t;
+      chip.querySelector('button').onclick = () => { const idx = nsfwTerms.indexOf(t); if (idx > -1) nsfwTerms.splice(idx, 1); renderNsfw(); };
+      el.appendChild(chip);
+    });
+  }
+  function addNsfw(){
+    const inp = $('nsfwAddInp');
+    const v = inp.value.trim().toLowerCase();
+    if (v && !nsfwTerms.includes(v)) { nsfwTerms.push(v); renderNsfw(); }
+    inp.value = ''; inp.focus();
+  }
+  $('nsfwAddBtn').onclick = addNsfw;
+  $('nsfwAddInp').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addNsfw(); } });
+
+  // ── Tab switching (Config | Privacy) ──
+  function setTab(name){
+    document.querySelectorAll('#settingsTabs .file-tab').forEach(b => b.classList.toggle('active', b.dataset.settab === name));
+    $('settingsTabConfig').style.display = name === 'config' ? '' : 'none';
+    $('settingsTabPrivacy').style.display = name === 'privacy' ? '' : 'none';
+  }
+  document.querySelectorAll('#settingsTabs .file-tab').forEach(b => { b.onclick = () => setTab(b.dataset.settab); });
+
   function open(){
+    setTab('config');
     fetch('/api/settings').then(r=>r.json()).then(s=>{
       document.querySelectorAll('.set-field[data-key]').forEach(f=>{
         const info = (s.keys||{})[f.dataset.key] || {};
@@ -2154,12 +2320,10 @@ $('statusFeatures').onclick = () => {
           state.style.color = p.exists && p.hasWorkflows !== false ? 'var(--green)' : 'var(--amber)';
         }
       });
-      const i = s.info || {};
-      $('settingsInfo').innerHTML = [
-        ['HTTP port', i.port], ['HTTPS port', i.httpsPort], ['Media dir', i.mediaDir]
-      ].map(([a,b])=>'<div><b style="color:var(--text)">'+a+':</b> '+escHtml(b)+'</div>').join('');
       overlay.classList.add('open');
     }).catch(e=>showToast('Settings load failed: '+e.message));
+    // Load NSFW tags for the Privacy tab (decoded server-side for display)
+    fetch('/api/nsfw-terms').then(r=>r.json()).then(d=>{ nsfwTerms = Array.isArray(d.terms) ? d.terms.slice() : []; renderNsfw(); }).catch(()=>{ nsfwTerms = []; renderNsfw(); });
   }
 
   $('settingsBtn').onclick = open;
@@ -2193,8 +2357,13 @@ $('statusFeatures').onclick = () => {
     try {
       const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       const d = await r.json();
-      if (d.ok) { showToast(d.warning ? '⚠ Saved — ' + d.warning : '✓ Settings saved', d.warning ? 5000 : 2200); close(); }
-      else showToast('Save failed: ' + (d.error || r.status));
+      if (!d.ok) { showToast('Save failed: ' + (d.error || r.status)); return; }
+      // Persist the NSFW tag list (server encodes it). Sent plaintext; stored encoded.
+      const nr = await fetch('/api/nsfw-terms', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ terms: nsfwTerms }) });
+      const nd = await nr.json();
+      if (!nd.ok) { showToast('Tags save failed: ' + (nd.error || nr.status)); return; }
+      showToast(d.warning ? '⚠ Saved — ' + d.warning : '✓ Settings saved', d.warning ? 5000 : 2200);
+      close();
     } catch(e){ showToast('Error: ' + e.message); }
   };
 

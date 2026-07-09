@@ -10,7 +10,9 @@ const config = fs.existsSync(CONFIG_PATH) ? JSON.parse(fs.readFileSync(CONFIG_PA
 
 const PORT = parseInt(process.argv[2], 10) || config.port || 8080;
 const ROOT = process.argv[3] ? path.resolve(process.argv[3]) : (config.mediaDir || path.join(__dirname, 'Media'));
-const FAVORITES_DIR = path.join(ROOT, '_Favorites');
+// The media root IS the Favorites collection — favoriting moves files here and
+// the app exposes it as the single "Favorites" tab (no separate Archive tab).
+const FAVORITES_DIR = ROOT;
 
 let COMFY_OUTPUT = config.comfyOutput || 'D:\\ComfyUI-Easy-Install\\ComfyUI\\output';
 let COMFY_DIR = config.comfyDir || 'D:\\ComfyUI-Easy-Install\\ComfyUI';
@@ -44,6 +46,7 @@ function reloadConfig() {
   CIVITAI_API_KEY = config.civitaiApiKey || '';
   if (config.comfyDir) { COMFY_DIR = config.comfyDir; WORKFLOWS_DIR = path.join(COMFY_DIR, 'user', 'default', 'workflows'); }
   if (config.comfyOutput) COMFY_OUTPUT = config.comfyOutput;
+  if (typeof buildNsfwRe === 'function') NSFW_RE = buildNsfwRe(); // list may have changed
   return true;
 }
 const GROK_VOICES = ['eve', 'ara', 'rex', 'sal', 'leo'];
@@ -395,11 +398,31 @@ function embedVideoText(filePath, comment, cb) {
 const PROMPT_INDEX_PATH = path.join(__dirname, 'app-prompt-index.json');
 const PROMPT_INDEX_VERSION = 5; // bump to force a full re-extract after extractor changes (v5: ffprobe was unresolvable under SYSTEM, so all videos indexed empty)
 
-// NSFW tagging: indexed prompt text is matched against this term list (stored
+// NSFW tagging: indexed prompt text is matched against a term list (stored
 // base64-encoded — same repo-hygiene pattern as SANITIZE_RULES). An entry that
 // matches gets n:1 and is omitted entirely when the client requests safe=1.
-const NSFW_TERMS_B64 = ["bnNmdw==","cG9ybg==","aGVudGFp","bnVkZQ==","bmFrZWQ=","dG9wbGVzcw==","c2V4","cGVuaXM=","Y29jaw==","ZGljaw==","cHVzc3k=","dmFnaW5h","Y3Vt","Y3Vtc2hvdA==","Ymxvd2pvYg==","ZGVlcHRocm9hdA==","ZmVsbGF0aW8=","Y3VubmlsaW5ndXM=","YW5hbA==","Y3JlYW1waWU=","bmlwcGxlcw==","YXJlb2xh","YWhlZ2Fv","bWFzdHVyYmF0aW9u","b3JnYXNt","ZXJlY3Rpb24=","Z2FuZ2Jhbmc=","dGhyZWVzb21l","c3BpdHJvYXN0","YnVra2FrZQ==","aGFuZGpvYg==","Zm9vdGpvYg==","ZmluZ2VyaW5n","c3F1aXJ0aW5n","Ym9uZGFnZQ==","YmRzbQ==","YnJlYXN0cw==","Ym9vYnM=","dGl0cw==","cHViaWM=","Z2VuaXRhbHM=","cGVuZXRyYXRpb24=","ZG9nZ3lzdHlsZQ=="];
-const NSFW_RE = new RegExp('\\b(' + NSFW_TERMS_B64.map(s => Buffer.from(s, 'base64').toString('utf8')).join('|') + ')\\b', 'i');
+// The list is user-editable via the Settings > Privacy tab; this hardcoded set
+// is only the default, seeded into config.json on first run.
+const DEFAULT_NSFW_TERMS_B64 = ["bnNmdw==","cG9ybg==","aGVudGFp","bnVkZQ==","bmFrZWQ=","dG9wbGVzcw==","c2V4","cGVuaXM=","Y29jaw==","ZGljaw==","cHVzc3k=","dmFnaW5h","Y3Vt","Y3Vtc2hvdA==","Ymxvd2pvYg==","ZGVlcHRocm9hdA==","ZmVsbGF0aW8=","Y3VubmlsaW5ndXM=","YW5hbA==","Y3JlYW1waWU=","bmlwcGxlcw==","YXJlb2xh","YWhlZ2Fv","bWFzdHVyYmF0aW9u","b3JnYXNt","ZXJlY3Rpb24=","Z2FuZ2Jhbmc=","dGhyZWVzb21l","c3BpdHJvYXN0","YnVra2FrZQ==","aGFuZGpvYg==","Zm9vdGpvYg==","ZmluZ2VyaW5n","c3F1aXJ0aW5n","Ym9uZGFnZQ==","YmRzbQ==","YnJlYXN0cw==","Ym9vYnM=","dGl0cw==","cHViaWM=","Z2VuaXRhbHM=","cGVuZXRyYXRpb24=","ZG9nZ3lzdHlsZQ==","bG9saQ==","dGVlbg==","Z2Fn","Z2FnZ2luZw==","dGl0dHk=","dGl0","ZmFjaWFs","bmlwcGxl","dGhyb2F0ZnVjaw==","ZGlsZG8=","dG9ydHVyZQ==","ZWxlY3Ryb2N1dGlvbg==","ZWxlY3RyaWMgc2hvY2s=","Ymxvb2Q=","Z29yZQ==","cGFpbg==","cGFpbmZ1bA=="];
+// Seed the config on first run so the list is persisted and editable.
+if (!Array.isArray(config.nsfwTermsB64)) {
+  config.nsfwTermsB64 = DEFAULT_NSFW_TERMS_B64.slice();
+  try {
+    let cur = {}; try { cur = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch {}
+    cur.nsfwTermsB64 = config.nsfwTermsB64;
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cur, null, 2));
+  } catch (e) { console.log('[NSFW] could not seed default terms:', e.message); }
+}
+function nsfwTermsDecoded() {
+  return (config.nsfwTermsB64 || []).map(s => { try { return Buffer.from(s, 'base64').toString('utf8'); } catch { return ''; } }).filter(Boolean);
+}
+function buildNsfwRe() {
+  const terms = nsfwTermsDecoded();
+  if (!terms.length) return /(?!)/; // matches nothing
+  const esc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('\\b(' + terms.map(esc).join('|') + ')\\b', 'i');
+}
+let NSFW_RE = buildNsfwRe();
 let promptIndex = { v: PROMPT_INDEX_VERSION, files: {} };
 let promptIndexing = false;
 try {
@@ -498,6 +521,20 @@ function savePromptIndex() {
   promptIndexSaveTimer = setTimeout(() => {
     try { fs.writeFileSync(PROMPT_INDEX_PATH, JSON.stringify(promptIndex)); } catch {}
   }, 1500);
+}
+
+// Recompute the NSFW n-flag for every already-indexed file against the current
+// NSFW_RE — cheap (no re-extraction), used after the tag list is edited.
+function retagNsfw() {
+  let changed = 0;
+  for (const k in promptIndex.files) {
+    const rec = promptIndex.files[k];
+    if (!rec || typeof rec.t !== 'string') continue;
+    const n = NSFW_RE.test(rec.t) ? 1 : 0;
+    if (rec.n !== n) { rec.n = n; changed++; }
+  }
+  if (changed) savePromptIndex();
+  return changed;
 }
 
 // Immediate index updates on delete / move so search never shows ghosts
@@ -1554,11 +1591,17 @@ runTests();
   if (pn === '/api/list' && req.method === 'GET') {
     const rawDir = url.searchParams.get('dir');
     const dir = (rawDir && rawDir.trim()) ? path.resolve(decodeURIComponent(rawDir)) : ROOT;
-    // Prevent navigating outside allowed directories (normalize slashes for Windows)
-    const normDir = dir.replace(/\\/g, '/').toLowerCase();
+    // scope=all searches across BOTH media roots at once (ComfyUI output + the
+    // media/favorites tree) — used by the Files & Media search box, which spans
+    // all three tabs. Plain browsing stays scoped to a single dir.
+    const scopeAll = url.searchParams.get('scope') === 'all';
     const normRoot = ROOT.replace(/\\/g, '/').toLowerCase();
     const normComfy = COMFY_OUTPUT.replace(/\\/g, '/').toLowerCase();
-    if (!normDir.startsWith(normRoot) && !normDir.startsWith(normComfy)) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+    if (!scopeAll) {
+      // Prevent navigating outside allowed directories (normalize slashes for Windows)
+      const normDir = dir.replace(/\\/g, '/').toLowerCase();
+      if (!normDir.startsWith(normRoot) && !normDir.startsWith(normComfy)) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+    }
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
     const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '48', 10)));
     const search = (url.searchParams.get('search') || '').toLowerCase().trim();
@@ -1567,10 +1610,13 @@ runTests();
     const typeFilter = url.searchParams.get('type') || 'all'; // all | video | image | audio | folder
     const safeMode = url.searchParams.get('safe') === '1'; // omit NSFW-tagged items entirely
 
-    // A search spans the whole subtree; plain browsing lists one directory.
-    const deep = !!search;
+    // A search (or scope=all) spans the whole subtree; plain browsing lists one directory.
+    const deep = !!search || scopeAll;
     const items = [];
-    const scanQueue = [dir];
+    // scope=all seeds both roots (skipping ComfyUI output if it nests under ROOT).
+    const scanQueue = scopeAll
+      ? (normComfy.startsWith(normRoot) ? [ROOT] : [ROOT, COMFY_OUTPUT])
+      : [dir];
     let first = true;
     while (scanQueue.length) {
       const d = scanQueue.shift();
@@ -1650,10 +1696,10 @@ runTests();
       const start = (page - 1) * limit;
       const pageItems = items.slice(start, start + limit);
       const parentDir = path.dirname(dir);
-      const isRoot = dir === ROOT || dir === parentDir;
+      const isRoot = scopeAll || dir === ROOT || dir === parentDir;
 
       jsonRes(res, {
-        dir, root: ROOT, parent: isRoot ? null : parentDir,
+        dir: scopeAll ? ROOT : dir, root: ROOT, parent: isRoot ? null : parentDir,
         page, limit, total, pages: Math.ceil(total / limit) || 1,
         items: pageItems,
         favoritesDir: FAVORITES_DIR,
@@ -2022,6 +2068,40 @@ runTests();
       catch (e) { jsonRes(res, { error: 'Write failed: ' + e.message }, 500); return; }
       reloadConfig();
       jsonRes(res, warning ? { ok: true, warning } : { ok: true });
+    });
+    return;
+  }
+
+  // API: NSFW tag list — read (decoded for display) / write (encoded to config).
+  if (pn === '/api/nsfw-terms' && req.method === 'GET') {
+    jsonRes(res, { terms: nsfwTermsDecoded() });
+    return;
+  }
+  if (pn === '/api/nsfw-terms' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', c => bodyStr += c);
+    req.on('end', () => {
+      let body;
+      try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      if (!Array.isArray(body.terms)) { jsonRes(res, { error: 'terms must be an array' }, 400); return; }
+      // Normalize: trim, lowercase, drop empties, dedupe — then store base64-encoded.
+      const seen = new Set(), clean = [];
+      for (const t of body.terms) {
+        if (typeof t !== 'string') continue;
+        const w = t.trim().toLowerCase();
+        if (!w || seen.has(w)) continue;
+        seen.add(w); clean.push(w);
+      }
+      const b64 = clean.map(w => Buffer.from(w, 'utf8').toString('base64'));
+      let cur = {};
+      try { cur = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch {}
+      cur.nsfwTermsB64 = b64;
+      try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(cur, null, 2)); }
+      catch (e) { jsonRes(res, { error: 'Write failed: ' + e.message }, 500); return; }
+      config.nsfwTermsB64 = b64;
+      NSFW_RE = buildNsfwRe();
+      const retagged = retagNsfw();  // recompute the n-flag on already-indexed files
+      jsonRes(res, { ok: true, count: clean.length, retagged });
     });
     return;
   }
