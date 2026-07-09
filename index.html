@@ -169,18 +169,18 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ext-badge{
   position:absolute;top:5px;right:5px;
   background:rgba(0,0,0,.72);border-radius:4px;
-  padding:2px 5px;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  padding:2px 5px;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
 }
 
 .card-info-text{flex:1;min-width:0}
 .meta-badge{
-  flex-shrink:0;background:none;border:none;
-  padding:4px;color:var(--text3);cursor:pointer;
+  flex-shrink:0;background:var(--surface2);border:none;border-radius:6px;
+  padding:4px 6px;color:var(--accent);cursor:pointer;
   display:flex;align-items:center;
   -webkit-tap-highlight-color:transparent;
 }
-.meta-badge:hover{color:var(--accent)}
-.meta-badge svg{width:14px;height:14px;fill:currentColor}
+.meta-badge:hover{color:#fff;background:var(--accent)}
+.meta-badge svg{width:15px;height:15px;fill:currentColor}
 
 /* Long-press action menu */
 .card-actions{
@@ -201,8 +201,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .act-btn:active{transform:scale(.9)}
 
 .card-info{padding:5px 8px 7px;display:flex;align-items:center}
-.card-name{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
-.card-meta{font-size:10px;color:var(--text3);margin-top:1px}
+.card-name{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.card-meta{font-size:12px;color:var(--text3);margin-top:1px}
 
 /* ── FOLDER ROW ── */
 .folder-row{
@@ -355,7 +355,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 /* ── CLAUDE PANEL ── */
 .blur-on .card-thumb img{filter:blur(20px);transform:scale(1.1)}
 .card-tags{position:absolute;top:4px;left:4px;display:flex;gap:3px;z-index:2;pointer-events:none}
-.card-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:6px;background:rgba(0,0,0,.65);color:#c8c8cd;letter-spacing:.3px}
+.card-tag{font-size:12px;font-weight:700;padding:2px 5px;border-radius:6px;background:rgba(0,0,0,.65);color:#c8c8cd;letter-spacing:.3px}
 .card-tag.nsfw{background:rgba(120,20,20,.85);color:#ffd7d7}
 #safeToggle.active{background:var(--green,#30d158);color:#fff}
 .blur-btn{
@@ -480,7 +480,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .claude-convo-item:active{background:var(--surface2)}
 .claude-convo-info{flex:1;min-width:0}
 .claude-convo-title{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.claude-convo-meta{font-size:11px;color:var(--text3);margin-top:2px}
+.claude-convo-meta{font-size:12px;color:var(--text3);margin-top:2px}
 .claude-convo-del{
   flex-shrink:0;background:none;border:none;color:var(--text3);
   font-size:16px;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);
@@ -554,13 +554,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🏷</button>
     <button class="sort-btn" id="sortBtn">Date ↓</button>
   </div>
-  <div class="hdr-row2" id="bulkBar" style="display:none">
-    <span id="bulkCount" style="color:#8e8e93;font-size:13px;white-space:nowrap">0 selected</span>
-    <button class="filter-chip" id="bulkSelAll" style="margin-left:auto;font-size:11px">Select All</button>
-    <button class="filter-chip" id="bulkSelFiles" style="font-size:11px">Select Files</button>
-    <button class="filter-chip" id="bulkDelBtn" style="font-size:11px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
-    <button class="filter-chip" id="bulkCancelBtn" style="font-size:11px">Cancel</button>
-  </div>
 </div>
 
 <!-- Filter chips -->
@@ -572,9 +565,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="filter-chip" data-type="audio">🎵 Audio</button>
 </div>
 
-<!-- Multi-select toggle -->
+<!-- Multi-select toggle + bulk actions (revealed right after the Select button) -->
 <div class="filter-bar" id="selectRow">
   <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">☐ Select</button>
+  <div id="bulkBar" style="display:none;gap:6px;align-items:center">
+    <span id="bulkCount" style="color:#8e8e93;font-size:13px;white-space:nowrap">0 selected</span>
+    <button class="filter-chip" id="bulkSelAll" style="font-size:12px">Select All</button>
+    <button class="filter-chip" id="bulkSelFiles" style="font-size:12px">Select Files</button>
+    <button class="filter-chip" id="bulkFavBtn" style="font-size:12px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
+    <button class="filter-chip" id="bulkDelBtn" style="font-size:12px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
+    <button class="filter-chip" id="bulkCancelBtn" style="font-size:12px">Cancel</button>
+  </div>
 </div>
 
 <!-- Files & Media tabs (shown only inside the combined Files view, hidden while searching) -->
@@ -632,7 +633,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
 
     <div id="settingsTabConfig">
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">API Keys</div>
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">API Keys</div>
       <div class="set-field" data-key="anthropicApiKey"><label>Claude (Anthropic)</label>
         <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
       <div class="set-field" data-key="xaiApiKey"><label>Grok (xAI)</label>
@@ -640,7 +641,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="set-field" data-key="civitaiApiKey"><label>Civitai</label>
         <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"><button class="set-clr" title="Clear">✕</button></div></div>
 
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Service URLs</div>
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Service URLs</div>
       <div class="set-field" data-url="comfyUrl"><label>ComfyUI API</label>
         <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
       <div class="set-field" data-url="ollamaUrl"><label>Ollama</label>
@@ -648,16 +649,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="set-field" data-url="voxtralUrl"><label>Voxtral</label>
         <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
 
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Paths</div>
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Paths</div>
       <div class="set-field" data-path="comfyDir"><label>ComfyUI install folder <span id="comfyDirState" style="font-weight:400"></span></label>
         <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Drives the workflow list, run controls, and the Claude assistant.</div></div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Drives the workflow list, run controls, and the Claude assistant.</div></div>
       <div class="set-field" data-path="comfyOutput"><label>ComfyUI output folder <span id="comfyOutputState" style="font-weight:400"></span></label>
         <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\output"><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
     </div>
 
     <div id="settingsTabPrivacy" style="display:none">
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
+      <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🛡 safe-mode shield hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <input id="nsfwAddInp" type="text" autocomplete="off" placeholder="Add a tag…" style="flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
@@ -678,7 +679,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="confirm-sheet" style="border-radius:var(--r);max-height:88vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <div class="confirm-title" style="margin:0;font-size:15px">Status / Setup</div>
-      <button class="filter-chip" id="statusRefresh" style="font-size:11px">↻ Refresh</button>
+      <button class="filter-chip" id="statusRefresh" style="font-size:12px">↻ Refresh</button>
       <button id="statusClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer">✕</button>
     </div>
     <div id="statusList" style="flex:1;overflow:auto"></div>
@@ -700,11 +701,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div id="setupStep1"></div>
     <div id="setupStep2" style="display:none">
       <div class="setup-group" data-group="media" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Media library</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Media library</div>
         <div id="setupMediaInfo" style="font-size:12px;color:var(--text2);word-break:break-all"></div>
       </div>
       <div class="setup-group" data-group="comfy" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">ComfyUI</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">ComfyUI</div>
         <div class="set-field" data-wpath="comfyDir"><label>ComfyUI install folder</label>
           <div class="set-row"><input type="text" autocomplete="off" placeholder="D:\ComfyUI\..."><button class="set-clr set-browse" title="Browse server folders">📁</button></div></div>
         <div class="set-field" data-wpath="comfyOutput"><label>ComfyUI output folder</label>
@@ -713,23 +714,23 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
           <div class="set-row"><input type="text" autocomplete="off" placeholder="http://127.0.0.1:8188"></div></div>
       </div>
       <div class="setup-group" data-group="claude" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Claude Code</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Claude Code</div>
         <div class="set-field" data-wkey="anthropicApiKey"><label>Claude (Anthropic) API key</label>
           <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"></div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">Also needs the CLI: npm install -g @anthropic-ai/claude-code</div></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">Also needs the CLI: npm install -g @anthropic-ai/claude-code</div></div>
       </div>
       <div class="setup-group" data-group="ollama" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local LLM</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local LLM</div>
         <div class="set-field" data-wurl="ollamaUrl"><label>Ollama address</label>
           <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:11434"></div></div>
       </div>
       <div class="setup-group" data-group="voxtral" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local TTS</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Local TTS</div>
         <div class="set-field" data-wurl="voxtralUrl"><label>Voxtral address</label>
           <div class="set-row"><input type="text" autocomplete="off" placeholder="http://localhost:8091"></div></div>
       </div>
       <div class="setup-group" data-group="xai" style="display:none">
-        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Grok (xAI)</div>
+        <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Grok (xAI)</div>
         <div class="set-field" data-wkey="xaiApiKey"><label>Grok (xAI) API key</label>
           <div class="set-row"><input type="password" autocomplete="off" placeholder="not set"></div></div>
       </div>
@@ -746,7 +747,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="confirm-sheet" style="border-radius:var(--r);max-height:85vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <div class="confirm-title" style="margin:0;font-size:15px">Prompt words</div>
-      <span id="wordsCount" style="font-size:11px;color:var(--text3)"></span>
+      <span id="wordsCount" style="font-size:12px;color:var(--text3)"></span>
       <button id="wordsClose" style="margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer">✕</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
@@ -876,6 +877,7 @@ const bulkBar    = $('bulkBar');
 const bulkCount  = $('bulkCount');
 const bulkSelAll = $('bulkSelAll');
 const bulkSelFiles = $('bulkSelFiles');
+const bulkFavBtn = $('bulkFavBtn');
 const bulkDelBtn = $('bulkDelBtn');
 const bulkCancelBtn = $('bulkCancelBtn');
 
@@ -885,7 +887,6 @@ function toggleMultiSelect(on) {
   document.body.classList.toggle('multi-select-on', S.multiSelect);
   multiSelectBtn.classList.toggle('active', S.multiSelect);
   multiSelectBtn.textContent = S.multiSelect ? '☑ Select' : '☐ Select';
-  $('searchRow').style.display = S.multiSelect ? 'none' : 'flex';
   bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
   if (!S.multiSelect) {
     document.querySelectorAll('.ms-cb').forEach(cb => cb.checked = false);
@@ -915,6 +916,56 @@ bulkSelFiles.onclick = () => {
   const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
   cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card'); if (el) el.classList.toggle('ms-checked', !allChecked); });
   updateBulkBar();
+};
+
+// Delete the currently-open empty folder (server refuses if it holds real files).
+async function deleteEmptyFolder() {
+  const dir = S.dir, parent = S.parent;
+  confirm(
+    'Delete Empty Folder',
+    'Delete this empty folder?',
+    '🗑 Delete',
+    '',
+    async () => {
+      try {
+        const r = await fetch('/api/delete-folder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir }),
+        }).then(r => r.json());
+        if (!r.ok) { showToast('Delete failed: ' + (r.error || '')); return; }
+        showToast('🗑 Folder deleted');
+        if (parent) loadDir(parent, 1, false); else showHomeLanding();
+      } catch (e) { showToast('Error: ' + e.message); }
+    }
+  );
+}
+
+bulkFavBtn.onclick = async () => {
+  const checked = document.querySelectorAll('.ms-cb:checked');
+  if (!checked.length) return;
+  const paths = Array.from(checked).map(cb => cb.dataset.path);
+  confirm(
+    'Favorite Selected',
+    'Move ' + paths.length + ' item(s) to Favorites?',
+    '⭐ Favorite ' + paths.length,
+    '',
+    async () => {
+      let ok = 0;
+      for (const p of paths) {
+        try {
+          const r = await fetch('/api/favorite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath: p }),
+          }).then(r => r.json());
+          if (r.ok) ok++;
+        } catch {}
+      }
+      showToast('⭐ Moved ' + ok + ' item(s) to Favorites');
+      toggleMultiSelect(false);
+      refreshCurrentPage();
+    }
+  );
 };
 
 bulkDelBtn.onclick = async () => {
@@ -992,36 +1043,66 @@ const SORTS = [
   {label:'Date ↑',sort:'date',asc:true},
   {label:'Date ↓',sort:'date',asc:false},
 ];
-// Blur toggle (default: on)
-document.body.classList.add('blur-on');
-blurToggle.onclick = () => {
-  document.body.classList.toggle('blur-on');
-  blurToggle.classList.toggle('active');
-  blurToggle.textContent = document.body.classList.contains('blur-on') ? '🔒' : '👁';
-};
+// Censor / Hide (blur). Default ON; state is per-tab (sessionStorage) so
+// navigating — including the Back button — preserves an unlocked view, while
+// closing the tab resets to censored for the next session.
+function setCensor(on) {
+  document.body.classList.toggle('blur-on', on);
+  blurToggle.classList.toggle('active', on);
+  blurToggle.textContent = on ? '🔒' : '👁';
+  sessionStorage.setItem('censor', on ? '1' : '0');
+}
+setCensor(sessionStorage.getItem('censor') !== '0');   // default ON
+blurToggle.onclick = () => setCensor(!document.body.classList.contains('blur-on'));
 
 // Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter).
-// ON by default — only an explicit opt-out ('0') disables it.
+// ON by default; state is per-tab (sessionStorage) so navigating — including the
+// Back button — keeps your choice, while closing the tab resets it to ON.
 const safeToggle = $('safeToggle');
-S.safeMode = localStorage.getItem('archiveSafeMode') !== '0';
+S.safeMode = sessionStorage.getItem('safeMode') !== '0';
 safeToggle.classList.toggle('active', S.safeMode);
 safeToggle.onclick = () => {
   S.safeMode = !S.safeMode;
-  localStorage.setItem('archiveSafeMode', S.safeMode ? '1' : '0');
+  sessionStorage.setItem('safeMode', S.safeMode ? '1' : '0');
   safeToggle.classList.toggle('active', S.safeMode);
   // On the home landing there's no file list to filter — don't navigate into one.
   if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
 };
 
-// Auto-relock: when the tab is hidden (switched away / minimized), re-enable the
-// blur and close the full-screen viewer so returning to the tab shows nothing sensitive.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
-  document.body.classList.add('blur-on');
-  blurToggle.classList.add('active');
-  blurToggle.textContent = '🔒';
+// Censor / Hide (blur): re-engage only when the tab actually becomes hidden
+// (switched away / minimized) — not when focus moves to browser chrome like the
+// Back button — and close the viewer so returning shows nothing until unlocked.
+function censorNow() {
+  setCensor(true);
   if (modal.classList.contains('open')) closeModal();
-});
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) censorNow(); });
+
+// Face-down privacy: censor when the phone is placed screen-down. Uses the
+// accelerometer gravity vector — z ≈ -9.8 m/s² when the screen faces the floor,
+// independent of portrait/landscape. Requires a secure context (HTTPS 8443);
+// iOS 13+ additionally needs a one-time motion-permission grant from a tap.
+(function initFaceDownCensor(){
+  const DME = window.DeviceMotionEvent;
+  if (!DME) return;                       // no motion sensor / unsupported
+  let downSince = 0, censoredByFlip = false;
+  function onMotion(e){
+    const g = e.accelerationIncludingGravity;
+    if (!g || typeof g.z !== 'number') return;
+    if (g.z < -7) {                        // screen pointing down
+      if (!downSince) downSince = Date.now();
+      else if (!censoredByFlip && Date.now() - downSince > 400) { censoredByFlip = true; censorNow(); }
+    } else { downSince = 0; censoredByFlip = false; }
+  }
+  const start = () => window.addEventListener('devicemotion', onMotion);
+  if (typeof DME.requestPermission === 'function') {
+    // iOS: permission must be requested from a user gesture — grant on first tap.
+    const ask = () => { DME.requestPermission().then(s => { if (s === 'granted') start(); }).catch(()=>{}); };
+    document.addEventListener('pointerdown', ask, { once: true });
+  } else {
+    start();                               // Android/Chrome: works in a secure context
+  }
+})();
 
 let sortIdx = 5; // Date ↓
 sortBtn.onclick = () => {
@@ -1059,6 +1140,10 @@ $('searchClear').onclick = () => {
 // ── Load directory ────────────────────────────────────────────────────────
 async function loadDir(dir, page = 1, pushStack = true) {
   S.onHome = false;
+  // Restore the browsing controls hidden on the home landing.
+  $('searchRow').style.display = '';
+  filterBar.style.display = '';
+  const selRow = $('selectRow'); if (selRow) selRow.style.display = '';
   // Dismiss any open card action menu
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
@@ -1202,6 +1287,10 @@ async function showHomeLanding(forceStatus) {
   S.onHome = true;
   S.filesMode = false;
   renderFileTabs();
+  // The home landing has no list to search or filter — hide those controls.
+  $('searchRow').style.display = 'none';
+  filterBar.style.display = 'none';
+  const selRow = $('selectRow'); if (selRow) selRow.style.display = 'none';
   S.dir = '';
   pathTxt.innerHTML = '<b>Home</b>';
   backBtn.disabled = true;
@@ -1277,21 +1366,52 @@ async function showHomeLanding(forceStatus) {
   wire('homeFeatures', e => { e.preventDefault(); openSetupWizard(selected); });
 }
 
-function renderHeader(data) {
-  // Show path relative to media root
-  const rootNorm = (data.root || '').replace(/\\/g, '/').replace(/\/$/, '');
-  const dirNorm = (data.dir || '').replace(/\\/g, '/');
-  const rel = dirNorm.startsWith(rootNorm) ? dirNorm.slice(rootNorm.length).replace(/^\//, '') : dirNorm;
-  const parts = rel.split('/').filter(Boolean);
-  let disp = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : parts.join('/') || 'Home';
-  // In the Files view, label the crumb by tab (ComfyUI output isn't under ROOT,
-  // so the generic relative path would show its full absolute path otherwise).
-  if (S.filesMode && !S.search) {
-    const tabLabel = (FILE_TABS.find(t => t.id === S.filesTab) || {}).label || 'Files';
-    const sub = filesGroupLabel(data.dir);
-    disp = sub.includes(' / ') ? sub : tabLabel;
+// Build breadcrumb segments from the current dir: the containing root (labelled
+// by tab) followed by each subfolder, each with the dir to navigate to.
+function buildCrumbs(data) {
+  const norm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const curr = norm(data.dir);
+  const roots = [];
+  if (S.comfyOutputDir) roots.push([norm(S.comfyOutputDir), 'ComfyUI Output']);
+  roots.push([norm(S.favDir || data.root), 'Favorites']);
+  let base = null, label = null;
+  for (const [b, l] of roots) {
+    const bl = b.toLowerCase(), cl = curr.toLowerCase();
+    if (cl === bl || cl.startsWith(bl + '/')) { base = b; label = l; break; }
   }
-  pathTxt.innerHTML = `<b>${esc(disp)}</b>`;
+  if (!base) return [{ label: curr.split('/').pop() || 'Folder', dir: curr }]; // unknown root
+  const crumbs = [{ label, dir: base }];
+  if (curr.length > base.length) {
+    let acc = base;
+    curr.slice(base.length).replace(/^\//, '').split('/').filter(Boolean).forEach(p => {
+      acc = acc + '/' + p; crumbs.push({ label: p, dir: acc });
+    });
+  }
+  return crumbs;
+}
+
+function renderHeader(data) {
+  pathTxt.innerHTML = '';
+  if (S.search) {
+    // Search spans folders — a path breadcrumb doesn't apply.
+    const b = document.createElement('b');
+    b.textContent = 'Search: ' + S.search;
+    pathTxt.appendChild(b);
+  } else {
+    const crumbs = buildCrumbs(data);
+    crumbs.forEach((c, i) => {
+      if (i) { const sep = document.createElement('span'); sep.textContent = ' / '; sep.style.color = 'var(--text3)'; pathTxt.appendChild(sep); }
+      if (i === crumbs.length - 1) {
+        const b = document.createElement('b'); b.textContent = c.label; pathTxt.appendChild(b);
+      } else {
+        const a = document.createElement('span');
+        a.textContent = c.label;
+        a.style.cssText = 'color:var(--accent);cursor:pointer';
+        a.onclick = () => { searchInp.value = ''; loadDir(c.dir, 1); };
+        pathTxt.appendChild(a);
+      }
+    });
+  }
 
   // At a Files tab root, Back returns Home rather than trying to leave the roots.
   const filesAtTabRoot = S.filesMode && !S.navStack.length;
@@ -1325,7 +1445,18 @@ function renderHeader(data) {
 // ── Grid rendering ────────────────────────────────────────────────────────
 function renderGrid(items) {
   if (!items.length) {
-    gridWrap.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div></div>`;
+    let html = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div>`;
+    // Offer to delete a genuinely-empty subfolder (not a tab root, not search).
+    const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const cur = nrm(S.dir);
+    const isRoot = !cur || cur === nrm(S.comfyOutputDir) || cur === nrm(S.favDir) || cur === nrm(S.root);
+    if (!S.search && !S.onHome && S.dir && !isRoot) {
+      html += `<button class="btn-ok" id="delEmptyBtn" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>`;
+    }
+    html += `</div>`;
+    gridWrap.innerHTML = html;
+    const del = $('delEmptyBtn');
+    if (del) del.onclick = deleteEmptyFolder;
     return;
   }
 
@@ -1455,7 +1586,7 @@ function makeCard(item, idx) {
         <div class="card-name">${esc(item.name)}</div>
         ${item.size ? `<div class="card-meta">${item.size}</div>` : ''}
       </div>
-      ${(item.isImage || item.isVideo) ? `<div class="meta-badge" data-metapath="${esc(item.path)}" title="View workflow"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></div>` : ''}
+      ${(item.isImage || item.isVideo) ? `<div class="meta-badge" data-metapath="${esc(item.path)}" title="Remix this workflow"><svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></div>` : ''}
     </div>`;
 
   // Lazy load images
@@ -2091,9 +2222,9 @@ function loadStatus() {
       row.innerHTML = '<span style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:4px;background:' + color + '"></span>'
         + '<div style="flex:1;min-width:0">'
         + '<div style="font-size:14px;font-weight:600;color:var(--text)">' + esc(s.name)
-        + ' <span style="font-weight:400;font-size:11px;color:' + color + '">' + state + '</span></div>'
+        + ' <span style="font-weight:400;font-size:12px;color:' + color + '">' + state + '</span></div>'
         + '<div style="font-size:12px;color:var(--text2);word-break:break-word">' + esc(s.detail) + '</div>'
-        + '<div style="font-size:11px;color:var(--text3)">Needed for: ' + esc(s.affects) + '</div>'
+        + '<div style="font-size:12px;color:var(--text3)">Needed for: ' + esc(s.affects) + '</div>'
         + '</div>';
       list.appendChild(row);
     });
@@ -2138,7 +2269,7 @@ $('statusFeatures').onclick = () => {
       return '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--surface2);cursor:' + (required ? 'default' : 'pointer') + '">'
         + '<input type="checkbox" data-feat="' + f.id + '"' + (checked ? ' checked' : '') + (required ? ' disabled' : '') + ' style="margin-top:3px;accent-color:var(--accent)">'
         + '<div><div style="font-size:14px;font-weight:600;color:var(--text)">' + f.icon + ' ' + esc(f.name)
-        + (required ? ' <span style="font-size:11px;font-weight:400;color:var(--text3)">— required</span>' : '') + '</div>'
+        + (required ? ' <span style="font-size:12px;font-weight:400;color:var(--text3)">— required</span>' : '') + '</div>'
         + '<div style="font-size:12px;color:var(--text2)">' + esc(f.desc) + '</div></div></label>';
     }).join('');
     // Prefill step 2 from current settings

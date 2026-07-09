@@ -1188,6 +1188,56 @@ function resolveSeedNode(wf, mapping) {
   return (wf.nodes || []).find(n => n.type === 'Seed (rgthree)' && (n.mode || 0) === 0) || null;
 }
 
+// Read the enabled LoRA slots from a Power Lora Loader node's widgets_values.
+function extractLoras(node) {
+  const out = [];
+  const wv = (node && node.widgets_values) || [];
+  for (let i = 0; i < wv.length; i++) {
+    const v = wv[i];
+    if (v && typeof v === 'object' && v.lora) out.push({ slot: i, on: !!v.on, strength: v.strength || 1, lora: v.lora });
+  }
+  return out;
+}
+
+// Write on/strength overrides back onto a loader node by slot.
+function applyLoraOverrides(node, ovs) {
+  if (!node || !Array.isArray(ovs)) return;
+  const wv = node.widgets_values || [];
+  for (const o of ovs) {
+    if (o.slot != null && wv[o.slot] && typeof wv[o.slot] === 'object' && wv[o.slot].lora) {
+      if (o.on !== undefined) wv[o.slot].on = o.on;
+      if (o.strength !== undefined) wv[o.slot].strength = o.strength;
+    }
+  }
+}
+
+// Wan-style dual-sampler workflows carry two Power Lora Loaders — one per
+// (high/low)-noise pass. Map each to its pass by tracing the sampler's model
+// input back through the graph to a loader. Returns { high, low } or null.
+function findHighLowLoraLoaders(wf) {
+  const hl = findHighLowSamplers(wf);
+  if (!hl) return null;
+  const loaders = (wf.nodes || []).filter(n => (n.type || '').includes('Power Lora Loader') && n.mode !== 2 && n.mode !== 4);
+  if (loaders.length !== 2) return null;
+  const linkById = {};
+  for (const l of (wf.links || [])) if (Array.isArray(l)) linkById[l[0]] = l; // [id, from, fromSlot, to, toSlot, type]
+  const byId = {};
+  for (const n of (wf.nodes || [])) byId[String(n.id)] = n;
+  const loaderFeeding = (nodeId, depth) => {
+    if (depth > 16) return null;
+    const node = byId[String(nodeId)];
+    if (!node) return null;
+    if ((node.type || '').includes('Power Lora Loader')) return node;
+    const inp = (node.inputs || []).find(i => /model/i.test(i.name || ''));
+    if (!inp || inp.link == null) return null;
+    const link = linkById[inp.link];
+    return link ? loaderFeeding(link[1], depth + 1) : null;
+  };
+  const high = loaderFeeding(hl.high.id, 0), low = loaderFeeding(hl.low.id, 0);
+  if (!high || !low || String(high.id) === String(low.id)) return null;
+  return { high, low };
+}
+
 // CFG: an mxSlider titled "CFG" by convention, else the active KSampler-family
 // nodes (cfg widget index 3 on KSampler, 4 on KSamplerAdvanced). When multiple
 // samplers are active they must agree on the value — otherwise the workflow
@@ -1762,6 +1812,33 @@ runTests();
 
           jsonRes(res, { ok: true });
         });
+      } catch (e) { jsonRes(res, { error: e.message }, 400); }
+    });
+    return;
+  }
+
+  // API: delete an (effectively) empty folder. Refuses roots and any folder that
+  // still holds real content — only ignorable leftovers (desktop.ini, Thumbs.db,
+  // dotfiles) are allowed, and those are cleaned up with the folder.
+  if (pn === '/api/delete-folder' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { dir } = JSON.parse(body);
+        if (!dir) { jsonRes(res, { error: 'Missing dir' }, 400); return; }
+        const abs = path.resolve(dir);
+        const n = s => s.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+        const na = n(abs), nr = n(ROOT), nc = n(COMFY_OUTPUT);
+        if (!na.startsWith(nr) && !na.startsWith(nc)) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+        if (na === nr || na === nc) { jsonRes(res, { error: 'Cannot delete a root folder' }, 400); return; }
+        let st; try { st = fs.statSync(abs); } catch { jsonRes(res, { error: 'Folder not found' }, 404); return; }
+        if (!st.isDirectory()) { jsonRes(res, { error: 'Not a folder' }, 400); return; }
+        const ignorable = n => n.startsWith('.') || n === 'desktop.ini' || n === 'Thumbs.db';
+        const leftovers = fs.readdirSync(abs).filter(name => !ignorable(name));
+        if (leftovers.length) { jsonRes(res, { error: 'Folder is not empty' }, 400); return; }
+        fs.rmSync(abs, { recursive: true, force: true }); // clears ignorable files + the dir
+        jsonRes(res, { ok: true });
       } catch (e) { jsonRes(res, { error: e.message }, 400); }
     });
     return;
@@ -2520,15 +2597,14 @@ runTests();
         }
         // Style/quality preset groups (return title + on state; drop internal memberIds)
         config.presets = detectPresetGroups(wf).map(p => ({ title: p.title, on: p.on }));
-        const loraNodes = (wf.nodes || []).filter(n => (n.type || '').includes('Power Lora Loader'));
-        if (loraNodes.length > 0) {
-          const wv = loraNodes[0].widgets_values || [];
-          for (let i = 0; i < wv.length; i++) {
-            const v = wv[i];
-            if (v && typeof v === 'object' && v.lora) {
-              config.loras.push({ slot: i, on: !!v.on, strength: v.strength || 1, lora: v.lora });
-            }
-          }
+        // LoRAs: dual high/low lists for Wan dual-sampler workflows, else a single list.
+        const hlLoaders = findHighLowLoraLoaders(wf);
+        if (hlLoaders) {
+          config.lorasHigh = extractLoras(hlLoaders.high);
+          config.lorasLow = extractLoras(hlLoaders.low);
+        } else {
+          const loraNodes = (wf.nodes || []).filter(n => (n.type || '').includes('Power Lora Loader'));
+          if (loraNodes.length > 0) config.loras = extractLoras(loraNodes[0]);
         }
         jsonRes(res, config);
       } catch (e) {
@@ -2565,17 +2641,16 @@ runTests();
           }
 
           // Apply lora overrides to all Power Lora Loader nodes
-          if (overrides.loras && Array.isArray(overrides.loras)) {
-            const loraNodes = (wf.nodes || []).filter(n => (n.type || '').includes('Power Lora Loader'));
-            for (const node of loraNodes) {
-              const wv = node.widgets_values || [];
-              for (const loraOv of overrides.loras) {
-                if (loraOv.slot != null && wv[loraOv.slot] && typeof wv[loraOv.slot] === 'object' && wv[loraOv.slot].lora) {
-                  if (loraOv.on !== undefined) wv[loraOv.slot].on = loraOv.on;
-                  if (loraOv.strength !== undefined) wv[loraOv.slot].strength = loraOv.strength;
-                }
-              }
+          if (overrides.lorasHigh || overrides.lorasLow) {
+            // Dual high/low lists → apply each to its mapped loader node.
+            const hlLoaders = findHighLowLoraLoaders(wf);
+            if (hlLoaders) {
+              applyLoraOverrides(hlLoaders.high, overrides.lorasHigh);
+              applyLoraOverrides(hlLoaders.low, overrides.lorasLow);
             }
+          } else if (overrides.loras && Array.isArray(overrides.loras)) {
+            const loraNodes = (wf.nodes || []).filter(n => (n.type || '').includes('Power Lora Loader'));
+            for (const node of loraNodes) applyLoraOverrides(node, overrides.loras);
           }
 
           // Apply frames override to mxSlider "Frames" node

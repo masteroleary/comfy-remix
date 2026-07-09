@@ -65,7 +65,7 @@ body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text
 .reply-mode-btn.short{color:var(--accent);border-color:var(--accent)}
 .reply-mode-btn.descriptive{color:var(--amber);border-color:var(--amber)}
 .reply-mode-btn:active{opacity:.6}
-.auto-save-status{font-size:11px;color:var(--text3);white-space:nowrap;min-width:60px;text-align:right;transition:opacity .2s}
+.auto-save-status{font-size:12px;color:var(--text3);white-space:nowrap;min-width:60px;text-align:right;transition:opacity .2s}
 .auto-save-status.saving{color:var(--amber)}
 .auto-save-status.saved{color:var(--green)}
 
@@ -103,7 +103,7 @@ body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text
 .convo-card:active{transform:scale(.98)}
 .convo-card-info{flex:1;min-width:0}
 .convo-card-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
-.convo-card-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.convo-card-meta{font-size:12px;color:var(--text2);margin-top:2px}
 .convo-card-del{
   background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;
   padding:4px 6px;flex-shrink:0;
@@ -203,7 +203,7 @@ body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text
   font-family:inherit;
 }
 .settings-row textarea{resize:vertical}
-.settings-row .hint{font-size:11px;color:var(--text3);margin-top:2px}
+.settings-row .hint{font-size:12px;color:var(--text3);margin-top:2px}
 
 /* Start screen */
 .start-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px 20px;text-align:center}
@@ -239,7 +239,7 @@ body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text
     <div class="start-desc">Real-time speech-to-speech with Grok. Talk into your mic and get instant voice replies. &lt;1s latency, automatic turn-taking, barge-in support.</div>
     <button class="start-btn" onclick="startSession()">Start Session</button>
     <div class="start-err" id="startErr"></div>
-    <div class="start-desc" style="font-size:11px;color:var(--text3)">Cost: $0.05/min while connected. Auto-ends after 1 min of silence (idle timer), 30 min max session, or when you tap End.</div>
+    <div class="start-desc" style="font-size:12px;color:var(--text3)">Cost: $0.05/min while connected. Auto-ends after 1 min of silence (idle timer), 30 min max session, or when you tap End.</div>
     <div id="totalCost" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
     <div class="saved-convos" id="savedConvos"></div>
   </div>
@@ -311,7 +311,7 @@ body{color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text
       <textarea id="portraitPrompt" rows="5" style="min-height:100px" placeholder="e.g. Anime-style young adult woman, long auburn hair, green eyes, black leather jacket over a band tee, cel-shaded illustration, clean line art. Leave blank to let the agent invent one."></textarea>
       <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
         <button class="char-menu-btn" id="portraitGenBtn" title="Generate or regenerate the portrait image" style="width:auto;padding:0 14px;height:32px;font-size:14px;display:inline-flex;gap:6px">&#8634; Generate</button>
-        <span id="portraitGenStatus" style="font-size:11px;color:var(--text3)"></span>
+        <span id="portraitGenStatus" style="font-size:12px;color:var(--text3)"></span>
       </div>
       <img id="portraitImage" style="display:none;max-width:240px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="window.open(this.src,'_blank')">
       <div class="hint">Tap generate to create the character's portrait. Stored on the character so every session uses the same visual. Costs $0.02/image.</div>
@@ -1235,7 +1235,7 @@ function addImageBubble(url, caption) {
 
   if (caption) {
     const cap = document.createElement('div');
-    cap.style.cssText = 'font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word';
+    cap.style.cssText = 'font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word';
     const full = String(caption);
     cap.dataset.fullPrompt = full; // preserve full prompt even when collapsed
     const collapsed = full.length > 120 ? full.slice(0, 120) + '…' : full;

@@ -21,12 +21,12 @@ body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFo
 .node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
 .node-card{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px}
 .node-type{font-size:13px;font-weight:600;color:#0a84ff;margin-bottom:4px}
-.node-title{font-size:11px;color:#8e8e93;margin-bottom:6px}
-.node-input{font-size:11px;color:#b0b0b5;line-height:1.5}
+.node-title{font-size:12px;color:#8e8e93;margin-bottom:6px}
+.node-input{font-size:12px;color:#b0b0b5;line-height:1.5}
 .node-input .key{color:#bf5af2}.node-input .val{color:#f2f2f7}
 .loading{text-align:center;color:#8e8e93;padding:40px;font-size:14px}
 .summary-section{margin:12px 0}
-.summary-label{font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.summary-label{font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .summary-val{font-size:13px;color:#f2f2f7;margin-bottom:10px;line-height:1.5;word-break:break-word}
 .summary-val .tag{display:inline-block;background:#2c2c2e;border:1px solid #38383a;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:12px}
 .accordion{border:1px solid #38383a;border-radius:8px;margin:12px 0;overflow:hidden}
@@ -40,7 +40,7 @@ body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFo
 .progress-wrap{background:#1c1c1e;border-radius:6px;height:8px;overflow:hidden;margin:8px 0}
 .progress-fill{height:100%;background:#0a84ff;border-radius:6px;width:0%;transition:width .3s}
 .progress-fill.done{background:#30d158}.progress-fill.err{background:#ff453a}
-.exec-log{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px;font-size:11px;font-family:monospace;max-height:200px;overflow-y:auto;color:#b0b0b5;margin-top:8px;white-space:pre-wrap}
+.exec-log{background:#1c1c1e;border:1px solid #38383a;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;color:#b0b0b5;margin-top:8px;white-space:pre-wrap}
 .exec-log .log-done{color:#30d158}.exec-log .log-err{color:#ff453a}
 .tabs{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid #38383a}
 .tab{padding:10px 20px;background:none;border:none;color:#8e8e93;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -55,7 +55,7 @@ body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFo
 .node-card.edited{border-color:#30d158}
 .node-card.hidden{display:none}
 .node-edit-form{margin-top:8px;padding-top:8px;border-top:1px solid #38383a}
-.edit-label{display:block;font-size:11px;color:#8e8e93;margin-top:8px;margin-bottom:2px}
+.edit-label{display:block;font-size:12px;color:#8e8e93;margin-top:8px;margin-bottom:2px}
 .edit-input{width:100%;background:#0d0d0d;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:8px;font-size:13px;font-family:inherit}
 .edit-input:focus{outline:none;border-color:#0a84ff}
 textarea.edit-input{resize:vertical;line-height:1.4}
@@ -67,6 +67,14 @@ textarea.edit-input{resize:vertical;line-height:1.4}
 .lora-row input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#0a84ff}
 .lora-row input[type=number]{width:60px;background:#0d0d0d;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:4px 6px;font-size:12px;text-align:center}
 .lora-row.off label{color:#636366;text-decoration:line-through}
+.lora-hl-cols{display:flex;gap:16px}
+.lora-hl-col{flex:1;min-width:0}
+.lora-hl-label{font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+@media (max-width:640px){.lora-hl-cols{flex-direction:column;gap:8px}}
+.seed-switch{position:relative;width:58px;height:30px;border-radius:15px;border:1px solid #48484a;background:#2c2c2e;cursor:pointer;padding:0;flex:none;transition:background .15s,border-color .15s}
+.seed-switch.on{background:#0a84ff;border-color:#0a84ff}
+.seed-switch .thumb{position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#f2f2f7;display:flex;align-items:center;justify-content:center;font-size:14px;transition:left .15s}
+.seed-switch.on .thumb{left:30px}
 </style></head><body>
 <div class="top-bar" style="flex-direction:column;gap:4px">
   <h1 style="width:100%;font-size:13px;color:#8e8e93;font-weight:400" id="fileNameHdr"></h1>
@@ -101,55 +109,72 @@ textarea.edit-input{resize:vertical;line-height:1.4}
       <button class="btn btn-cancel" id="cancelBtn" style="display:none">■ Cancel</button>
       <span id="runProgress" style="font-size:13px;color:#8e8e93"></span>
     </div>
-    <div id="promptSection" style="display:none;margin:8px 0">
-      <textarea id="promptInput" rows="4" placeholder="Prompt text..." style="width:100%;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
-      <button class="btn" id="copyImgPromptBtn" style="display:none;margin-top:4px;font-size:12px;padding:6px 12px" title="Replace the workflow prompt with the prompt embedded in this image">📷 Use image's prompt</button>
-    </div>
-    <div id="genSection" style="display:none;margin:8px 0;display:none">
-      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-        <label id="seedField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Seed
-          <span style="display:flex;gap:6px;align-items:center">
-            <input type="number" id="seedInput" placeholder="random" min="0" step="1" style="width:150px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
-            <button class="btn" id="seedPinBtn" title="Pin seed (reuse this exact seed every run)" style="padding:8px 10px;opacity:.45">📌</button>
-            <button class="btn" id="seedRandomBtn" title="Randomize (new seed every run)" style="padding:8px 10px">🎲</button>
-          </span>
-        </label>
-        <label id="stepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Steps
-          <input type="number" id="stepsInput" min="1" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
-        </label>
-        <label id="highStepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">High steps
-          <input type="number" id="highStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
-        </label>
-        <label id="lowStepsField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Low steps
-          <input type="number" id="lowStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
-        </label>
-        <span id="hlTotalTxt" style="display:none;font-size:12px;color:#8e8e93;padding-bottom:9px"></span>
-        <label id="cfgField" style="display:none;flex-direction:column;gap:4px;font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">CFG
-          <input type="number" id="cfgInput" min="0" max="100" step="0.1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
-        </label>
-      </div>
-    </div>
-    <div id="presetSection" style="display:none;margin:8px 0">
-      <div style="font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Realism / Style Presets <span style="text-transform:none;letter-spacing:0">— each checked preset runs separately (Presets × Runs)</span></div>
-      <div id="presetList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-    </div>
-    <div id="loraSection" style="display:none;margin:8px 0">
-      <div style="font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">LoRAs</div>
-      <div id="loraList"></div>
-    </div>
     <details id="replaceSection" style="margin:8px 0;background:#1c1c1e;border:1px solid #38383a;border-radius:8px">
       <summary style="cursor:pointer;padding:9px 12px;font-size:12px;user-select:none">
         <span style="text-transform:uppercase;letter-spacing:.5px;color:#8e8e93">Prompt Replacements</span><span id="replaceSummary" style="color:#8e8e93"></span>
       </summary>
       <div style="padding:2px 12px 12px">
-        <div style="font-size:11px;color:#8e8e93;margin-bottom:8px">Enabled rules are applied to the prompt right before each run (case-insensitive, all matches). Edited words turn the ✕ into ✓ — tap to save.</div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#8e8e93;margin-bottom:8px;cursor:pointer;user-select:none">
+        <div style="font-size:12px;color:#8e8e93;margin-bottom:8px">Enabled rules are applied to the prompt right before each run (case-insensitive, all matches). Edited words turn the ✕ into ✓ — tap to save.</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;margin-bottom:8px;cursor:pointer;user-select:none">
           <input type="checkbox" id="replaceAllToggle" style="width:16px;height:16px;flex:none;accent-color:#0a84ff"> Toggle all on/off
         </label>
         <div id="replaceList"></div>
         <button class="btn" id="addReplaceBtn" style="margin-top:6px;font-size:12px;padding:6px 12px">+ Add replacement</button>
       </div>
     </details>
+    <div id="promptSection" style="display:none;margin:8px 0">
+      <textarea id="promptInput" rows="4" placeholder="Prompt text..." style="width:100%;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      <button class="btn" id="copyImgPromptBtn" style="display:none;margin-top:4px;font-size:12px;padding:6px 12px" title="Replace the workflow prompt with the prompt embedded in this image">📷 Use image's prompt</button>
+    </div>
+    <div id="genSection" style="display:none;margin:8px 0;display:none">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <label id="seedField" style="display:none;flex-direction:column;gap:4px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Seed
+          <span style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="seedInput" placeholder="random" min="0" step="1" style="width:150px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+            <button type="button" id="seedPinSwitch" role="switch" aria-checked="false" class="seed-switch" title="Off = new random seed each run · On = pin this exact seed"><span class="thumb">🎲</span></button>
+          </span>
+        </label>
+        <label id="stepsField" style="display:none;flex-direction:column;gap:4px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Steps
+          <input type="number" id="stepsInput" min="1" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+        <label id="cfgField" style="display:none;flex-direction:column;gap:4px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">CFG
+          <input type="number" id="cfgInput" min="0" max="100" step="0.1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+      </div>
+    </div>
+    <div id="presetSection" style="display:none;margin:8px 0">
+      <div style="font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Realism / Style Presets <span style="text-transform:none;letter-spacing:0">— each checked preset runs separately (Presets × Runs)</span></div>
+      <div id="presetList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+    <div id="hlStepsSection" style="display:none;margin:8px 0">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <label id="highStepsField" style="display:none;flex-direction:column;gap:4px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">High steps
+          <input type="number" id="highStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+        <label id="lowStepsField" style="display:none;flex-direction:column;gap:4px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px">Low steps
+          <input type="number" id="lowStepsInput" min="0" max="200" step="1" style="width:90px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px">
+        </label>
+        <span id="hlTotalTxt" style="display:none;font-size:12px;color:#8e8e93;padding-bottom:9px"></span>
+      </div>
+    </div>
+    <div id="loraSection" style="display:none;margin:8px 0">
+      <div id="loraSingleWrap">
+        <div style="font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">LoRAs</div>
+        <div id="loraList"></div>
+      </div>
+      <div id="loraHLWrap" style="display:none">
+        <div class="lora-hl-cols">
+          <div class="lora-hl-col">
+            <div class="lora-hl-label">High-noise LoRAs</div>
+            <div id="loraListHigh"></div>
+          </div>
+          <div class="lora-hl-col">
+            <div class="lora-hl-label">Low-noise LoRAs</div>
+            <div id="loraListLow"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="exec-panel" id="execPanel">
       <div class="progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
       <div class="exec-log" id="execLog"></div>
@@ -163,8 +188,8 @@ textarea.edit-input{resize:vertical;line-height:1.4}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <h3 style="font-size:14px;color:#8e8e93;margin:0">Generated Files</h3>
         <div id="outputBulkActions" style="display:none;margin-left:auto;display:flex;gap:6px">
-          <button class="btn" id="outputSaveSelBtn" title="Move selected to Favorites" style="font-size:11px;padding:4px 10px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
-          <button class="btn" id="outputDelSelBtn" style="font-size:11px;padding:4px 10px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
+          <button class="btn" id="outputSaveSelBtn" title="Move selected to Favorites" style="font-size:12px;padding:4px 10px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
+          <button class="btn" id="outputDelSelBtn" style="font-size:12px;padding:4px 10px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
         </div>
       </div>
       <div id="outputGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px"></div>
@@ -287,16 +312,23 @@ const promptInput = document.getElementById('promptInput');
 const promptSection = document.getElementById('promptSection');
 const loraSection = document.getElementById('loraSection');
 const loraList = document.getElementById('loraList');
+const loraSingleWrap = document.getElementById('loraSingleWrap');
+const loraHLWrap = document.getElementById('loraHLWrap');
+const loraListHigh = document.getElementById('loraListHigh');
+const loraListLow = document.getElementById('loraListLow');
 const framesSelect = document.getElementById('framesSelect');
 let currentLoras = [];
+let currentLorasHigh = [], currentLorasLow = [];   // Wan dual-sampler high/low LoRA lists
+let hasHLLoras = false;
 
 // Seed / steps / preset controls (populated per APP workflow config)
 const genSection = document.getElementById('genSection');
 const seedField = document.getElementById('seedField');
 const seedInput = document.getElementById('seedInput');
-const seedRandomBtn = document.getElementById('seedRandomBtn');
+const seedPinSwitch = document.getElementById('seedPinSwitch');
 const stepsField = document.getElementById('stepsField');
 const stepsInput = document.getElementById('stepsInput');
+const hlStepsSection = document.getElementById('hlStepsSection');
 const highStepsField = document.getElementById('highStepsField');
 const highStepsInput = document.getElementById('highStepsInput');
 const lowStepsField = document.getElementById('lowStepsField');
@@ -320,27 +352,29 @@ let hasSeedControl = false, hasStepsControl = false;
 // ── Seed pin mode ──
 // Explicit toggle: 📌 ON = reuse the exact seed in the box every run;
 // OFF = randomize every run (whatever is in the box is ignored).
-const seedPinBtn = document.getElementById('seedPinBtn');
 let seedPinMode = false;
 let lastUsedSeed = null; // last randomized seed actually submitted
 function isSeedPinned() {
   return hasSeedControl && seedPinMode && seedInput.value.trim() !== '' && parseInt(seedInput.value, 10) >= 0;
 }
 function reflectSeedPin() {
-  seedPinBtn.style.opacity = seedPinMode ? '1' : '.45';
-  seedPinBtn.style.background = seedPinMode ? '#0a84ff' : '';
+  seedPinSwitch.classList.toggle('on', seedPinMode);
+  seedPinSwitch.setAttribute('aria-checked', seedPinMode ? 'true' : 'false');
+  const thumb = seedPinSwitch.querySelector('.thumb');
+  if (thumb) thumb.textContent = seedPinMode ? '📌' : '🎲';
   seedInput.style.borderColor = isSeedPinned() ? '#0a84ff' : '#48484a';
   seedInput.title = seedPinMode ? 'Pinned — this exact seed is used every run' : 'Ignored while unpinned — runs use random seeds';
 }
-seedPinBtn.onclick = () => {
+// Single switch: OFF = random every run (clears the box); ON = pin this exact seed.
+seedPinSwitch.onclick = () => {
   seedPinMode = !seedPinMode;
-  if (seedPinMode && seedInput.value.trim() === '') {
-    // Pin needs a value: reuse the last run's seed if we have one, else roll one now
-    seedInput.value = lastUsedSeed !== null ? String(lastUsedSeed) : String(Math.floor(Math.random() * 2147483647));
+  if (seedPinMode) {
+    if (seedInput.value.trim() === '') seedInput.value = lastUsedSeed !== null ? String(lastUsedSeed) : String(Math.floor(Math.random() * 2147483647));
+  } else {
+    seedInput.value = '';
   }
   persistGen(); reflectSeedPin();
 };
-seedRandomBtn.onclick = () => { seedPinMode = false; seedInput.value = ''; persistGen(); reflectSeedPin(); };
 seedInput.addEventListener('input', () => { persistGen(); reflectSeedPin(); });
 stepsInput.addEventListener('input', persistGen);
 highStepsInput.addEventListener('input', () => { persistGen(); updateHLTotal(); });
@@ -394,6 +428,8 @@ function loadWorkflowConfig(name) {
       // Clear stale cached state so fresh workflow values are used
       localStorage.removeItem('archivePrompt_' + name);
       localStorage.removeItem('archiveLoras_' + name);
+      localStorage.removeItem('archiveLorasHigh_' + name);
+      localStorage.removeItem('archiveLorasLow_' + name);
       localStorage.setItem('archiveMtime_' + name, String(cfg.mtime));
     }
 
@@ -403,20 +439,33 @@ function loadWorkflowConfig(name) {
     promptSection.style.display = '';
     updateCopyPromptBtn();
 
-    // Show lora controls if any
-    if (cfg.loras && cfg.loras.length > 0) {
-      const savedLoras = localStorage.getItem('archiveLoras_' + name);
-      let loraState = null;
-      if (savedLoras) { try { loraState = JSON.parse(savedLoras); } catch {} }
-
-      currentLoras = cfg.loras.map(l => {
-        const saved = loraState && loraState.find(s => s.slot === l.slot);
-        return saved ? { ...l, on: saved.on, strength: saved.strength } : { ...l };
-      });
+    // Merge a cfg list with any saved on/strength state for this workflow.
+    const mergeSaved = (list, key) => {
+      let st = null; const saved = localStorage.getItem(key + name);
+      if (saved) { try { st = JSON.parse(saved); } catch {} }
+      return list.map(l => { const s = st && st.find(x => x.slot === l.slot); return s ? { ...l, on: s.on, strength: s.strength } : { ...l }; });
+    };
+    // LoRA controls: dual high/low lists (Wan video) take precedence over a single list.
+    if (cfg.lorasHigh && cfg.lorasLow && (cfg.lorasHigh.length || cfg.lorasLow.length)) {
+      hasHLLoras = true;
+      currentLoras = [];
+      currentLorasHigh = mergeSaved(cfg.lorasHigh, 'archiveLorasHigh_');
+      currentLorasLow = mergeSaved(cfg.lorasLow, 'archiveLorasLow_');
+      renderLorasHL();
+      loraSingleWrap.style.display = 'none';
+      loraHLWrap.style.display = '';
+      loraSection.style.display = '';
+    } else if (cfg.loras && cfg.loras.length > 0) {
+      hasHLLoras = false;
+      currentLorasHigh = []; currentLorasLow = [];
+      currentLoras = mergeSaved(cfg.loras, 'archiveLoras_');
       renderLoras();
+      loraSingleWrap.style.display = '';
+      loraHLWrap.style.display = 'none';
       loraSection.style.display = '';
     } else {
-      currentLoras = [];
+      hasHLLoras = false;
+      currentLoras = []; currentLorasHigh = []; currentLorasLow = [];
       loraSection.style.display = 'none';
     }
 
@@ -466,6 +515,7 @@ function loadWorkflowConfig(name) {
       lowStepsInput.value = savedL !== null ? savedL : String(cfg.highLowSteps.low);
       highStepsField.style.display = 'flex';
       lowStepsField.style.display = 'flex';
+      hlStepsSection.style.display = '';
       stepsField.style.display = 'none';
       hasStepsControl = false;   // total is high+low; don't also send a steps override
       updateHLTotal();
@@ -473,6 +523,7 @@ function loadWorkflowConfig(name) {
       highStepsField.style.display = 'none';
       lowStepsField.style.display = 'none';
       hlTotalTxt.style.display = 'none';
+      hlStepsSection.style.display = 'none';
     }
 
     // CFG control (mxSlider titled CFG, or the workflow's agreeing sampler nodes)
@@ -503,9 +554,9 @@ function loadWorkflowConfig(name) {
   }).catch(() => {});
 }
 
-function renderLoras() {
-  loraList.innerHTML = '';
-  currentLoras.forEach((l, idx) => {
+function renderLoraRows(arr, container) {
+  container.innerHTML = '';
+  arr.forEach((l) => {
     const row = document.createElement('div');
     row.className = 'lora-row' + (l.on ? '' : ' off');
     const shortName = l.lora.replace(/\.safetensors$/, '');
@@ -516,14 +567,21 @@ function renderLoras() {
     const numInp = row.querySelector('input[type=number]');
     cb.onchange = () => { l.on = cb.checked; row.className = 'lora-row' + (l.on ? '' : ' off'); saveLoras(); };
     numInp.onchange = () => { l.strength = parseFloat(numInp.value) || 0; saveLoras(); };
-    loraList.appendChild(row);
+    container.appendChild(row);
   });
 }
+function renderLoras() { renderLoraRows(currentLoras, loraList); }
+function renderLorasHL() { renderLoraRows(currentLorasHigh, loraListHigh); renderLoraRows(currentLorasLow, loraListLow); }
 
 function saveLoras() {
   const name = workflowSelect.value;
-  if (name !== 'inherit') {
-    localStorage.setItem('archiveLoras_' + name, JSON.stringify(currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }))));
+  if (name === 'inherit') return;
+  const pack = arr => JSON.stringify(arr.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })));
+  if (hasHLLoras) {
+    localStorage.setItem('archiveLorasHigh_' + name, pack(currentLorasHigh));
+    localStorage.setItem('archiveLorasLow_' + name, pack(currentLorasLow));
+  } else {
+    localStorage.setItem('archiveLoras_' + name, pack(currentLoras));
   }
 }
 
@@ -604,9 +662,11 @@ function setupInheritControls() {
   framesSelect.style.display = 'none';
   stepsField.style.display = 'none';
   cfgField.style.display = 'none';
+  hlStepsSection.style.display = 'none';
   currentPresets = [];
   hasStepsControl = false;
   hasCfgControl = false;
+  hasHLControl = false;
 
   // Prompt (from the image's own embedded prompt)
   const ref = extractImagePromptRef();
@@ -632,7 +692,9 @@ function setupInheritControls() {
     genSection.style.display = 'none';
   }
 
-  // LoRAs found in the embedded prompt
+  // LoRAs found in the embedded prompt (single list in inherit mode)
+  hasHLLoras = false; currentLorasHigh = []; currentLorasLow = [];
+  loraSingleWrap.style.display = ''; loraHLWrap.style.display = 'none';
   currentLoras = collectInheritLoras();
   if (currentLoras.length > 0) {
     renderLoras();
@@ -825,18 +887,18 @@ function renderManage() {
     let html = '<div style="display:flex;align-items:center;gap:8px">'
       + '<input type="checkbox" data-i="' + idx + '" class="mw-en"' + (it.enabled ? ' checked' : '') + '>'
       + '<input type="text" class="mw-label" data-i="' + idx + '" value="' + esc(it.label || '') + '" placeholder="label" style="' + inp + ';width:180px">'
-      + '<span style="font-size:11px;color:#8e8e93;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.name) + '</span>'
-      + (it.hasPresets ? '<span style="font-size:10px;color:#a1309b;border:1px solid #a1309b;border-radius:4px;padding:1px 5px">presets</span>' : '')
+      + '<span style="font-size:12px;color:#8e8e93;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.name) + '</span>'
+      + (it.hasPresets ? '<span style="font-size:12px;color:#a1309b;border:1px solid #a1309b;border-radius:4px;padding:1px 5px">presets</span>' : '')
       + '</div>';
     if (it.enabled) {
       const d = it.detected || {};
       html += '<div class="mw-maps" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;padding-left:26px">';
       if (it.candidates) {
-        html += '<label style="font-size:11px;color:#8e8e93">Prompt<br><select class="mw-map" data-i="' + idx + '" data-k="promptNodeId" style="' + inp + ';max-width:230px">' + nodeOptions(it.candidates.prompt, map.promptNodeId, d.promptNodeId) + '</select></label>';
-        html += '<label style="font-size:11px;color:#8e8e93">Steps<br><select class="mw-map" data-i="' + idx + '" data-k="stepsNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.steps, map.stepsNodeId, d.stepsNodeId) + '</select></label>';
-        html += '<label style="font-size:11px;color:#8e8e93">Seed<br><select class="mw-map" data-i="' + idx + '" data-k="seedNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.seed, map.seedNodeId, d.seedNodeId) + '</select></label>';
+        html += '<label style="font-size:12px;color:#8e8e93">Prompt<br><select class="mw-map" data-i="' + idx + '" data-k="promptNodeId" style="' + inp + ';max-width:230px">' + nodeOptions(it.candidates.prompt, map.promptNodeId, d.promptNodeId) + '</select></label>';
+        html += '<label style="font-size:12px;color:#8e8e93">Steps<br><select class="mw-map" data-i="' + idx + '" data-k="stepsNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.steps, map.stepsNodeId, d.stepsNodeId) + '</select></label>';
+        html += '<label style="font-size:12px;color:#8e8e93">Seed<br><select class="mw-map" data-i="' + idx + '" data-k="seedNodeId" style="' + inp + ';max-width:170px">' + nodeOptions(it.candidates.seed, map.seedNodeId, d.seedNodeId) + '</select></label>';
       } else {
-        html += '<span style="font-size:11px;color:#8e8e93">Loading node candidates…</span>';
+        html += '<span style="font-size:12px;color:#8e8e93">Loading node candidates…</span>';
       }
       html += '</div>';
     }
@@ -930,8 +992,10 @@ function applyEmbeddedConfig(wf) {
     promptSection.style.display = '';
   }
 
-  // Populate loras
+  // Populate loras (single list)
   if (embeddedLoras.length > 0) {
+    hasHLLoras = false; currentLorasHigh = []; currentLorasLow = [];
+    loraSingleWrap.style.display = ''; loraHLWrap.style.display = 'none';
     currentLoras = embeddedLoras;
     renderLoras();
     loraSection.style.display = '';
@@ -1040,6 +1104,9 @@ fetch(metaUrl)
         html += '</div>';
       }
       html += '</div>';
+
+      // Danger Zone: editing raw node values below can break the workflow.
+      html += '<div style="margin:18px 0 8px;font-size:12px;font-weight:700;color:#ff453a;text-transform:uppercase;letter-spacing:.5px">⚠ Danger Zone</div>';
 
       // Nodes section as collapsed accordion
       html += '<div class="accordion"><div class="accordion-hdr" onclick="this.parentElement.classList.toggle(\x27open\x27)"><h2>Nodes (' + entries.length + ')</h2><span class="accordion-arrow">▶</span></div><div class="accordion-body">';
@@ -1399,7 +1466,13 @@ async function getRunPrompt(presetTitle) {
     overrides.prompt = applyReplacements(promptInput.value);
     if (activeReplacements().length && overrides.prompt !== promptInput.value) log('Applied prompt replacement(s)');
   }
-  if (currentLoras.length > 0) overrides.loras = currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+  const packLoras = arr => arr.map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+  if (hasHLLoras) {
+    if (currentLorasHigh.length) overrides.lorasHigh = packLoras(currentLorasHigh);
+    if (currentLorasLow.length) overrides.lorasLow = packLoras(currentLorasLow);
+  } else if (currentLoras.length > 0) {
+    overrides.loras = packLoras(currentLoras);
+  }
   if (framesSelect.value !== 'inherit') overrides.frames = parseInt(framesSelect.value);
   if (hasStepsControl && stepsInput.value.trim()) overrides.steps = parseInt(stepsInput.value);
   if (hasCfgControl && cfgInput.value.trim()) overrides.cfg = parseFloat(cfgInput.value);
@@ -1636,7 +1709,9 @@ runBtn.onclick = async () => {
     workflowFile: workflowSelect.value,
     prompt: promptInput.value.substring(0, 200) || '(inherited)',
     fullPrompt: promptInput.value || '',
-    loras: currentLoras.length > 0 ? currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })) : null,
+    loras: hasHLLoras
+      ? [...currentLorasHigh, ...currentLorasLow].filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }))
+      : (currentLoras.length > 0 ? currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })) : null),
     frames: framesSelect.value !== 'inherit' ? framesSelect.value : null,
     sourceFile: currentFileName,
     sourcePath: currentImagePath,
@@ -1980,7 +2055,7 @@ function buildOutputCard(f, idx) {
   } else {
     card.innerHTML = cbHtml + '<img src="/file/' + encodeURIComponent(f.path) + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block" loading="lazy">';
   }
-  card.innerHTML += '<div style="padding:4px 6px;font-size:10px;color:#8e8e93;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</div>';
+  card.innerHTML += '<div style="padding:4px 6px;font-size:12px;color:#8e8e93;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</div>';
   card.onclick = (e) => { if (!e.target.classList.contains('output-cb')) openOverlay(idx); };
   return card;
 }
