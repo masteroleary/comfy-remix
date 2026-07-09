@@ -2392,7 +2392,7 @@ runTests();
       jsonRes(res, { error: 'Access denied' }, 403); return;
     }
     const wfStat = fs.statSync(wfPath, { throwIfNoEntry: false });
-    fs.readFile(wfPath, 'utf8', (err, raw) => {
+    fs.readFile(wfPath, 'utf8', async (err, raw) => {
       if (err) { jsonRes(res, { error: err.message }, 500); return; }
       try {
         const wf = JSON.parse(raw);
@@ -2415,9 +2415,21 @@ runTests();
           config.highLowSteps = { high, low: Math.max(0, total - high) };
         }
 
-        // CFG (slider convention or agreeing active samplers)
-        const cfgCtl = resolveCfg(wf);
-        if (cfgCtl) config.cfg = cfgCtl.get();
+        // CFG: read from the converted prompt — exact w.r.t. muted/pruned
+        // branches and slider/config-node indirection. Only exposed when every
+        // executing sampler agrees on the value. The graph heuristic is just a
+        // degraded-mode fallback (ComfyUI down = no widget mapping).
+        let converted = null;
+        try { converted = await workflowToPrompt(JSON.parse(JSON.stringify(wf))); } catch {}
+        const sampCfgs = converted ? Object.values(converted)
+          .filter(n => (n.class_type || '').startsWith('KSampler') && typeof (n.inputs || {}).cfg === 'number')
+          .map(n => n.inputs.cfg) : [];
+        if (sampCfgs.length) {
+          if (sampCfgs.every(v => v === sampCfgs[0])) config.cfg = sampCfgs[0];
+        } else {
+          const cfgCtl = resolveCfg(wf);
+          if (cfgCtl) config.cfg = cfgCtl.get();
+        }
 
         // Frames slider (mxSlider titled "Frames") — unchanged convention
         for (const node of wf.nodes || []) {
@@ -2527,13 +2539,6 @@ runTests();
             }
           }
 
-          // CFG override (slider convention or agreeing active samplers)
-          if (overrides.cfg !== undefined && overrides.cfg !== null) {
-            const cfgVal = parseFloat(overrides.cfg);
-            const cfgCtl = resolveCfg(wf);
-            if (!isNaN(cfgVal) && cfgVal >= 0 && cfgCtl) cfgCtl.set(cfgVal);
-          }
-
           // Pin seed on the resolved Seed node (omit/-1 = let the client randomize)
           if (overrides.seed !== undefined && overrides.seed !== null && Number(overrides.seed) >= 0) {
             const seedVal = Math.floor(Number(overrides.seed));
@@ -2556,6 +2561,28 @@ runTests();
           if (!Object.keys(prompt).length) {
             jsonRes(res, { error: 'Workflow resolves to no runnable output nodes (is ComfyUI running? are all savers muted/bypassed?)' }, 422);
             return;
+          }
+
+          // CFG override — applied to the CONVERTED prompt, which reflects the
+          // samplers that actually execute. Graph-level CFG sources are too
+          // ambiguous to write directly (sliders, rgthree config nodes, and
+          // per-sampler widgets can coexist, some feeding pruned branches).
+          if (overrides.cfg !== undefined && overrides.cfg !== null) {
+            const cfgVal = parseFloat(overrides.cfg);
+            if (!isNaN(cfgVal) && cfgVal >= 0) {
+              for (const [id, n] of Object.entries(prompt)) {
+                if (!(n.class_type || '').startsWith('KSampler') || typeof (n.inputs || {}).cfg !== 'number') continue;
+                n.inputs.cfg = cfgVal;
+                // Keep the returned graph (extra_pnginfo / embedded metadata) in step
+                const gn = (wf.nodes || []).find(x => String(x.id) === id);
+                if (gn && Array.isArray(gn.widgets_values)) {
+                  const idx = gn.type === 'KSamplerAdvanced' ? 4 : (gn.type === 'KSampler' ? 3 : -1);
+                  if (idx >= 0 && typeof gn.widgets_values[idx] === 'number') gn.widgets_values[idx] = cfgVal;
+                }
+              }
+              const ctl = resolveCfg(wf);
+              if (ctl) ctl.set(cfgVal);   // sliders/primitives stay visually consistent
+            }
           }
           // Return the (override-applied) visual graph too: the client submits it
           // as extra_data.extra_pnginfo.workflow, which graph-introspecting nodes
