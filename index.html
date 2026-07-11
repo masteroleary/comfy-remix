@@ -544,14 +544,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <button class="home-btn" id="homeBtn" title="Home">🏠</button>
+    <button class="home-btn" id="homeBtn" title="Home"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5h5v5"/></svg></button>
     <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
-    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items">🙈</button>
+    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 3 21 21"/><path d="M10.6 10.7a2 2 0 0 0 2.7 2.9"/><path d="M6.5 6.6C4.3 8 3 10 3 12c0 0 3.5 6 9 6 1.2 0 2.3-.2 3.3-.6M9.9 5.2A9 9 0 0 1 12 5c5.5 0 9 6 9 6a15 15 0 0 1-2.2 2.9"/></svg></button>
     <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
   </div>
   <div class="hdr-row2" id="searchRow">
     <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" readonly><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
-    <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🔤</button>
+    <button class="sort-btn" id="wordsBtn" title="Browse prompt words"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
     <button class="sort-btn" id="sortBtn">Date ↓</button>
   </div>
 </div>
@@ -566,7 +566,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="filter-chip" data-type="image">🖼 Images</button>
     <button class="filter-chip" data-type="audio">🎵 Audio</button>
   </div>
-  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">⬜ Select</button>
+  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg> Select</button>
 </div>
 
 <!-- Bulk actions (revealed when Select is active) -->
@@ -662,7 +662,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
     <div id="settingsTabPrivacy" style="display:none">
       <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🙈 safe-mode toggle hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The safe-mode toggle (top bar) hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <input id="nsfwAddInp" type="text" autocomplete="off" placeholder="Add a tag…" style="flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
         <button class="btn-ok" id="nsfwAddBtn" style="background:var(--accent);white-space:nowrap">Add</button>
@@ -889,7 +889,9 @@ function toggleMultiSelect(on) {
   S.multiSelect = on !== undefined ? on : !S.multiSelect;
   document.body.classList.toggle('multi-select-on', S.multiSelect);
   multiSelectBtn.classList.toggle('active', S.multiSelect);
-  multiSelectBtn.textContent = S.multiSelect ? '✅ Select' : '⬜ Select';
+  multiSelectBtn.innerHTML = (S.multiSelect
+    ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7.5 12.5l3 3 6-7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg>') + ' Select';
   bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
   const selRow = $('selectRow'); if (selRow) selRow.style.display = S.multiSelect ? '' : 'none';
   if (!S.multiSelect) {
@@ -2567,16 +2569,17 @@ $('statusFeatures').onclick = () => {
 </script>
 <!-- REMIX-DIALOG:START -->
 <style>
-  .rmx-overlay{position:fixed;inset:0;z-index:3000;background:#000b;display:flex;align-items:stretch;justify-content:center;padding:24px}
-  .rmx-dialog{background:#141416;border:1px solid #38383a;border-radius:16px;width:100%;max-width:1060px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #000c}
-  .rmx-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #2c2c2e}
+  body.rmx-noscroll{overflow:hidden !important;overscroll-behavior:none}
+  .rmx-overlay{position:fixed;inset:0;z-index:3000;background:#000b;display:flex;align-items:center;justify-content:center;padding:24px}
+  .rmx-dialog{background:#141416;border:1px solid #38383a;border-radius:16px;width:100%;max-width:1060px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #000c}
+  .rmx-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #2c2c2e;flex:none}
   .rmx-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f2f2f7}
   .rmx-x{margin-left:auto;background:none;border:none;color:#f2f2f7;font-size:22px;cursor:pointer}
   .rmx-x:disabled{opacity:.4;cursor:default}
-  .rmx-body{min-height:0;overflow:hidden}
-  .rmx-media{background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
-  .rmx-media img,.rmx-media video{max-width:100%;max-height:80vh;border-radius:8px}
-  .rmx-form{padding:16px;overflow:auto;max-height:82vh}
+  .rmx-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .rmx-media{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
+  .rmx-media img,.rmx-media video{max-width:100%;max-height:100%;border-radius:8px}
+  .rmx-form{flex:1;min-height:0;padding:16px;overflow:auto}
   .rmx-inp{background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
   select.rmx-inp{cursor:pointer}
   .rmx-grid{display:flex;flex-wrap:wrap;gap:14px}
@@ -2685,7 +2688,7 @@ $('statusFeatures').onclick = () => {
   .mb-words-list{overflow:auto;display:flex;flex-direction:column}
   .mb-word{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #2c2c2e;color:#c7c7cc}
   .mb-word:hover{background:#0a84ff1a;color:#fff}
-  @media (max-width:760px){.rmx-body{grid-template-columns:1fr}.rmx-media{max-height:34vh}.rmx-form{max-height:none}}
+  @media (max-width:640px){.rmx-overlay{padding:0}.rmx-dialog{max-width:100%;max-height:100%;height:100%;border-radius:0;border:0}.rmx-picker-overlay{padding:0}.rmx-picker{max-width:100%;max-height:100%;height:100%;border-radius:0}}
 </style>
 <script src="/vendor/vue.global.prod.js"></script>
 <script>
@@ -3041,7 +3044,7 @@ $('statusFeatures').onclick = () => {
             <button :class="{on: activeRoot==='favorites'}" @click="switchRoot('favorites')" :disabled="!roots.favorites">Favorites</button>
           </div>
           <input class="rmx-inp mb-search" type="search" placeholder="Search names & prompts…" v-model="search" @input="onSearch">
-          <button class="rmx-btn2" @click="openWords" title="Browse prompt words">🔤</button>
+          <button class="rmx-btn2" @click="openWords" title="Browse prompt words"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
           <button class="rmx-btn2" @click="cycleSort" :title="'Sort: ' + sortLabel">{{ sortLabel }}</button>
           <button v-if="state.parent && !search" class="rmx-btn2" @click="load(state.parent)">↑ Up</button>
           <span class="rmx-mut" style="margin-left:auto;font-size:12px">{{ search ? 'search results' : dirName }}</span>
@@ -3168,8 +3171,8 @@ $('statusFeatures').onclick = () => {
       }
       function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
-      onMounted(() => window.addEventListener('keydown', onKey));
-      onUnmounted(() => window.removeEventListener('keydown', onKey));
+      onMounted(() => { window.addEventListener('keydown', onKey); document.body.classList.add('rmx-noscroll'); });
+      onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.classList.remove('rmx-noscroll'); });
       const outUrl = f => (isVideoName(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
 
       // Log actions (parity with the classic inspect page).
