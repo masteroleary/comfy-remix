@@ -2664,14 +2664,23 @@ $('statusFeatures').onclick = () => {
   @media (max-width:640px){.rmx-lora-cols{flex-direction:column;gap:8px}}
   .rmx-nodegroup-title{font-size:10px;color:#7d7d82;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;border-bottom:1px solid #2c2c2e;padding-bottom:3px}
   .rmx-picker-overlay{position:fixed;inset:0;z-index:3100;background:#000c;display:flex;align-items:center;justify-content:center;padding:24px}
-  .rmx-picker{background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
-  .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px}
-  .rmx-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:12px;overflow:auto}
-  .rmx-picker-cell{position:relative;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:10px;overflow:hidden;cursor:pointer;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
-  .rmx-picker-cell:hover{border-color:#0a84ff}
-  .rmx-picker-cell img{width:100%;height:100%;object-fit:cover}
-  .rmx-picker-folder{font-size:34px}
-  .rmx-picker-cap{position:absolute;left:0;right:0;bottom:0;padding:3px 5px;font-size:10px;background:linear-gradient(transparent,#000d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rmx-picker{position:relative;background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:1000px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+  .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;text-transform:capitalize}
+  .mb{display:flex;flex-direction:column;min-height:0;flex:1}
+  .mb-toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #2c2c2e;flex:none}
+  .mb-search{flex:1;min-width:80px}
+  .mb-grid{display:flex;flex-wrap:wrap;gap:6px;padding:12px;overflow:auto;align-content:flex-start;flex:1;min-height:0}
+  .mb-cell{position:relative;height:150px;border:1px solid #2c2c2e;border-radius:8px;overflow:hidden;cursor:pointer;background:#1c1c1e;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .mb-cell:hover{border-color:#0a84ff}
+  .mb-cell img{height:100%;width:auto;display:block}
+  .mb-cell.folder{width:130px}
+  .mb-folder-ico{font-size:34px}
+  .mb-cap{position:absolute;left:0;right:0;bottom:0;padding:2px 6px;font-size:10px;background:linear-gradient(transparent,#000d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+  .mb-words{position:absolute;inset:0;background:#000b;display:flex;align-items:flex-start;justify-content:center;padding:56px 16px 16px;z-index:2}
+  .mb-words-panel{background:#1c1c1e;border:1px solid #38383a;border-radius:12px;width:100%;max-width:440px;max-height:72vh;display:flex;flex-direction:column;padding:12px}
+  .mb-words-list{overflow:auto;display:flex;flex-direction:column}
+  .mb-word{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #2c2c2e;color:#c7c7cc}
+  .mb-word:hover{background:#0a84ff1a;color:#fff}
   @media (max-width:760px){.rmx-body{grid-template-columns:1fr}.rmx-media{max-height:34vh}.rmx-form{max-height:none}}
 </style>
 <script src="/vendor/vue.global.prod.js"></script>
@@ -2942,9 +2951,9 @@ $('statusFeatures').onclick = () => {
         <div v-else-if="offCount" class="rmx-lora-more" @click="loraExpanded=!loraExpanded"><span>{{ loraExpanded ? 'Hide disabled loras' : ('＋ ' + offCount + ' more lora' + (offCount===1?'':'s')) }}</span><span class="rmx-lora-arrow" :class="{open: loraExpanded}">▾</span></div>
       </div>
       <span v-else-if="t==='image' || t==='video' || t==='audio'" class="rmx-imgf">
-        <img v-if="t==='image' && field.value" :src="'/file/' + encodeURIComponent(field.value)" @error="$event.target.style.display='none'">
         <input type="text" class="rmx-inp" style="width:200px" v-model="field.value">
         <button v-if="openPicker && t==='image'" type="button" class="rmx-btn2" @click="openPicker(field)">🖼 Browse</button>
+        <img v-if="t==='image' && field.value" :key="field.value" :src="'/file/' + encodeURIComponent(field.value)" @error="$event.target.style.display='none'" title="Selected image">
       </span>
       <input v-else type="text" class="rmx-inp" style="width:280px;max-width:100%" v-model="field.value">
     `,
@@ -2973,8 +2982,79 @@ $('statusFeatures').onclick = () => {
     }
   }
 
+  // Reusable media browser (search names+prompts, prompt-word directory, sort,
+  // folder navigation, justified uniform-height thumbnails). Emits 'pick' with a path.
+  const MB_SORTS = [{ s: 'date', a: false, l: 'Newest' }, { s: 'date', a: true, l: 'Oldest' }, { s: 'name', a: true, l: 'A–Z' }, { s: 'name', a: false, l: 'Z–A' }, { s: 'size', a: false, l: 'Largest' }];
+  const MediaBrowser = {
+    props: { type: { type: String, default: 'image' } },
+    emits: ['pick'],
+    setup(props, { emit }) {
+      const state = reactive({ items: [], parent: null, dir: '', loading: false });
+      const search = ref('');
+      const sortIdx = ref(0);
+      const words = reactive({ open: false, list: [], filter: '', loading: false });
+      let timer = null;
+      async function load(dir) {
+        state.loading = true;
+        try {
+          const p = new URLSearchParams(); p.set('limit', '200');
+          const so = MB_SORTS[sortIdx.value]; p.set('sort', so.s); p.set('asc', so.a ? 'true' : 'false');
+          if (search.value.trim()) { p.set('search', search.value.trim()); p.set('scope', 'all'); }
+          else if (dir != null) p.set('dir', dir);
+          const r = await fetch('/api/list?' + p.toString()).then(x => x.json());
+          const t = props.type;
+          state.items = (r.items || []).filter(it => it.isDir || (t === 'image' ? it.isImage : t === 'video' ? it.isVideo : it.isAudio));
+          state.parent = r.parent; state.dir = r.dir || '';
+        } catch (e) {}
+        state.loading = false;
+      }
+      onMounted(() => load(''));
+      function onSearch() { clearTimeout(timer); timer = setTimeout(() => load(search.value.trim() ? null : state.dir), 350); }
+      function clickItem(it) { if (it.isDir) { search.value = ''; load(it.path); } else emit('pick', it.path); }
+      const thumb = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
+      const dirName = computed(() => (state.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'Media');
+      const sortLabel = computed(() => MB_SORTS[sortIdx.value].l);
+      function cycleSort() { sortIdx.value = (sortIdx.value + 1) % MB_SORTS.length; load(search.value.trim() ? null : state.dir); }
+      async function openWords() { words.open = true; if (words.list.length) return; words.loading = true; try { const d = await fetch('/api/prompt-words?safe=0').then(r => r.json()); words.list = d.words || []; } catch (e) {} words.loading = false; }
+      const filteredWords = computed(() => { const f = words.filter.trim().toLowerCase(); const l = f ? words.list.filter(w => w.t.includes(f)) : words.list; return l.slice().sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)).slice(0, 400); });
+      function pickWord(w) { words.open = false; search.value = w.t; load(null); }
+      return { state, search, words, load, onSearch, clickItem, thumb, dirName, sortLabel, cycleSort, openWords, filteredWords, pickWord };
+    },
+    template: `
+      <div class="mb">
+        <div class="mb-toolbar">
+          <input class="rmx-inp mb-search" type="search" placeholder="Search names & prompts…" v-model="search" @input="onSearch">
+          <button class="rmx-btn2" @click="openWords" title="Browse prompt words">🏷</button>
+          <button class="rmx-btn2" @click="cycleSort" :title="'Sort: ' + sortLabel">{{ sortLabel }}</button>
+          <button v-if="state.parent && !search" class="rmx-btn2" @click="load(state.parent)">↑ Up</button>
+          <span class="rmx-mut" style="margin-left:auto;font-size:12px">{{ search ? 'search results' : dirName }}</span>
+        </div>
+        <div v-if="state.loading" class="rmx-mut" style="padding:16px">Loading…</div>
+        <div v-else-if="!state.items.length" class="rmx-mut" style="padding:16px">Nothing here.</div>
+        <div v-else class="mb-grid">
+          <div v-for="it in state.items" :key="it.path" class="mb-cell" :class="{folder: it.isDir}" @click="clickItem(it)" :title="it.name">
+            <span v-if="it.isDir" class="mb-folder-ico">📁</span>
+            <img v-else-if="thumb(it)" :src="thumb(it)" loading="lazy" @error="$event.target.style.visibility='hidden'">
+            <span v-else class="mb-folder-ico">🎞️</span>
+            <span class="mb-cap">{{ it.name }}</span>
+          </div>
+        </div>
+        <div v-if="words.open" class="mb-words" @click.self="words.open=false">
+          <div class="mb-words-panel">
+            <input class="rmx-inp" type="search" placeholder="Filter prompt words…" v-model="words.filter" style="width:100%;margin-bottom:8px">
+            <div v-if="words.loading" class="rmx-mut">Loading…</div>
+            <div v-else class="mb-words-list">
+              <div v-for="w in filteredWords" :key="w.t" class="mb-word" @click="pickWord(w)"><span>{{ w.t }}</span><span class="rmx-mut">{{ w.n }}</span></div>
+              <div v-if="!filteredWords.length" class="rmx-mut" style="padding:12px">No matches</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+  };
+
   const RemixDialog = {
-    components: { FieldControl },
+    components: { FieldControl, MediaBrowser },
     setup() {
       const workflows = ref([]); const wf = ref('');
       const cfg = reactive({ fields: [], presets: [], loading: true, error: '' });
@@ -3120,21 +3200,14 @@ $('statusFeatures').onclick = () => {
       });
       const nodeInputs = n => Object.entries(n.inputs || {}).map(([k, v]) => [k, Array.isArray(v) ? ('← [' + v[0] + ']') : (typeof v === 'string' ? v : JSON.stringify(v))]);
 
-      // Gallery picker for image/video/audio fields (browse the app's Media).
-      const picker = reactive({ open: false, type: 'image', dir: '', items: [], parent: null, loading: false });
+      // Gallery picker — opens a reusable MediaBrowser over the dialog.
+      const picker = reactive({ open: false, type: 'image' });
       let pickerField = null;
-      async function pickerLoad(dir) {
-        picker.loading = true;
-        try { const q = dir ? ('?limit=500&dir=' + enc(dir)) : '?limit=500'; const r = await fetch('/api/list' + q).then(x => x.json()); picker.items = (r.items || []).filter(it => it.isDir || (picker.type === 'image' ? it.isImage : picker.type === 'video' ? it.isVideo : it.isAudio)); picker.parent = r.parent; picker.dir = r.dir || ''; } catch (e) {}
-        picker.loading = false;
-      }
-      function openPicker(field) { pickerField = field; const k = field.kind; picker.type = k === 'video_input' ? 'video' : k === 'audio_input' ? 'audio' : 'image'; picker.open = true; pickerLoad(''); }
-      function pickerClick(it) { if (it.isDir) pickerLoad(it.path); else { if (pickerField) pickerField.value = it.path; picker.open = false; } }
-      const pickerThumb = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
-      const pickerDirName = computed(() => (picker.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'Media');
+      function openPicker(field) { pickerField = field; const k = field.kind; picker.type = k === 'video_input' ? 'video' : k === 'audio_input' ? 'audio' : 'image'; picker.open = true; }
+      function onPick(path) { if (pickerField) pickerField.value = path; picker.open = false; }
       provide('openPicker', openPicker);
 
-      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, pickerLoad, pickerClick, pickerThumb, pickerDirName };
+      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3219,21 +3292,8 @@ $('statusFeatures').onclick = () => {
       </div>
       <div v-if="picker.open" class="rmx-picker-overlay" @click.self="picker.open=false">
         <div class="rmx-picker">
-          <div class="rmx-picker-head">
-            <b>Pick image</b>
-            <button v-if="picker.parent" class="rmx-btn2" @click="pickerLoad(picker.parent)">↑ Up</button>
-            <span class="rmx-mut">{{ pickerDirName }}</span>
-            <button class="rmx-x" style="margin-left:auto" @click="picker.open=false">✕</button>
-          </div>
-          <div v-if="picker.loading" class="rmx-mut" style="padding:16px">Loading…</div>
-          <div v-else class="rmx-picker-grid">
-            <div v-for="it in picker.items" :key="it.path" class="rmx-picker-cell" @click="pickerClick(it)" :title="it.name">
-              <span v-if="it.isDir" class="rmx-picker-folder">📁</span>
-              <img v-else-if="pickerThumb(it)" :src="pickerThumb(it)" loading="lazy">
-              <span v-else class="rmx-picker-folder">🎞️</span>
-              <span class="rmx-picker-cap">{{ it.name }}</span>
-            </div>
-          </div>
+          <div class="rmx-picker-head"><b>Pick {{ picker.type }}</b><button class="rmx-x" style="margin-left:auto" @click="picker.open=false">✕</button></div>
+          <media-browser :type="picker.type" @pick="onPick"></media-browser>
         </div>
       </div>
     `,
