@@ -544,14 +544,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <button class="home-btn" id="homeBtn" title="Home">⌂</button>
+    <button class="home-btn" id="homeBtn" title="Home">🏠</button>
     <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
-    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items">🛡</button>
+    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items">🙈</button>
     <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
   </div>
   <div class="hdr-row2" id="searchRow">
     <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" readonly><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
-    <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🏷</button>
+    <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🔤</button>
     <button class="sort-btn" id="sortBtn">Date ↓</button>
   </div>
 </div>
@@ -566,7 +566,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="filter-chip" data-type="image">🖼 Images</button>
     <button class="filter-chip" data-type="audio">🎵 Audio</button>
   </div>
-  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">☐ Select</button>
+  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">⬜ Select</button>
 </div>
 
 <!-- Bulk actions (revealed when Select is active) -->
@@ -662,7 +662,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
     <div id="settingsTabPrivacy" style="display:none">
       <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🛡 safe-mode shield hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🙈 safe-mode toggle hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <input id="nsfwAddInp" type="text" autocomplete="off" placeholder="Add a tag…" style="flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
         <button class="btn-ok" id="nsfwAddBtn" style="background:var(--accent);white-space:nowrap">Add</button>
@@ -889,7 +889,7 @@ function toggleMultiSelect(on) {
   S.multiSelect = on !== undefined ? on : !S.multiSelect;
   document.body.classList.toggle('multi-select-on', S.multiSelect);
   multiSelectBtn.classList.toggle('active', S.multiSelect);
-  multiSelectBtn.textContent = S.multiSelect ? '☑ Select' : '☐ Select';
+  multiSelectBtn.textContent = S.multiSelect ? '✅ Select' : '⬜ Select';
   bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
   const selRow = $('selectRow'); if (selRow) selRow.style.display = S.multiSelect ? '' : 'none';
   if (!S.multiSelect) {
@@ -2667,7 +2667,11 @@ $('statusFeatures').onclick = () => {
   .rmx-picker{position:relative;background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:1000px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
   .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;text-transform:capitalize}
   .mb{display:flex;flex-direction:column;min-height:0;flex:1}
-  .mb-toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #2c2c2e;flex:none}
+  .mb-toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #2c2c2e;flex:none;flex-wrap:wrap}
+  .mb-roots{display:flex;gap:2px;background:#0a0a0a;border:1px solid #2c2c2e;border-radius:8px;padding:2px;flex:none}
+  .mb-roots button{background:none;border:none;color:#8e8e93;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px}
+  .mb-roots button.on{background:#2c2c2e;color:#f2f2f7}
+  .mb-roots button:disabled{opacity:.4;cursor:default}
   .mb-search{flex:1;min-width:80px}
   .mb-grid{display:flex;flex-wrap:wrap;gap:6px;padding:12px;overflow:auto;align-content:flex-start;flex:1;min-height:0}
   .mb-cell{position:relative;height:150px;border:1px solid #2c2c2e;border-radius:8px;overflow:hidden;cursor:pointer;background:#1c1c1e;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
@@ -2990,6 +2994,8 @@ $('statusFeatures').onclick = () => {
     emits: ['pick'],
     setup(props, { emit }) {
       const state = reactive({ items: [], parent: null, dir: '', loading: false });
+      const roots = reactive({ output: '', favorites: '' });
+      const activeRoot = ref('output');
       const search = ref('');
       const sortIdx = ref(0);
       const words = reactive({ open: false, list: [], filter: '', loading: false });
@@ -3004,11 +3010,18 @@ $('statusFeatures').onclick = () => {
           const r = await fetch('/api/list?' + p.toString()).then(x => x.json());
           const t = props.type;
           state.items = (r.items || []).filter(it => it.isDir || (t === 'image' ? it.isImage : t === 'video' ? it.isVideo : it.isAudio));
+          roots.output = r.comfyOutputDir || roots.output; roots.favorites = r.favoritesDir || roots.favorites;
           state.parent = r.parent; state.dir = r.dir || '';
         } catch (e) {}
         state.loading = false;
       }
-      onMounted(() => load(''));
+      function switchRoot(which) { activeRoot.value = which; search.value = ''; load(which === 'output' ? roots.output : roots.favorites); }
+      onMounted(async () => {
+        // Discover the two roots, then default to ComfyUI Output (like the main page).
+        try { const r = await fetch('/api/list?limit=1').then(x => x.json()); roots.output = r.comfyOutputDir || ''; roots.favorites = r.favoritesDir || ''; } catch (e) {}
+        activeRoot.value = roots.output ? 'output' : 'favorites';
+        load(activeRoot.value === 'output' ? roots.output : (roots.favorites || ''));
+      });
       function onSearch() { clearTimeout(timer); timer = setTimeout(() => load(search.value.trim() ? null : state.dir), 350); }
       function clickItem(it) { if (it.isDir) { search.value = ''; load(it.path); } else emit('pick', it.path); }
       const thumb = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
@@ -3018,13 +3031,17 @@ $('statusFeatures').onclick = () => {
       async function openWords() { words.open = true; if (words.list.length) return; words.loading = true; try { const d = await fetch('/api/prompt-words?safe=0').then(r => r.json()); words.list = d.words || []; } catch (e) {} words.loading = false; }
       const filteredWords = computed(() => { const f = words.filter.trim().toLowerCase(); const l = f ? words.list.filter(w => w.t.includes(f)) : words.list; return l.slice().sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)).slice(0, 400); });
       function pickWord(w) { words.open = false; search.value = w.t; load(null); }
-      return { state, search, words, load, onSearch, clickItem, thumb, dirName, sortLabel, cycleSort, openWords, filteredWords, pickWord };
+      return { state, roots, activeRoot, switchRoot, search, words, load, onSearch, clickItem, thumb, dirName, sortLabel, cycleSort, openWords, filteredWords, pickWord };
     },
     template: `
       <div class="mb">
         <div class="mb-toolbar">
+          <div class="mb-roots">
+            <button :class="{on: activeRoot==='output'}" @click="switchRoot('output')" :disabled="!roots.output">Output</button>
+            <button :class="{on: activeRoot==='favorites'}" @click="switchRoot('favorites')" :disabled="!roots.favorites">Favorites</button>
+          </div>
           <input class="rmx-inp mb-search" type="search" placeholder="Search names & prompts…" v-model="search" @input="onSearch">
-          <button class="rmx-btn2" @click="openWords" title="Browse prompt words">🏷</button>
+          <button class="rmx-btn2" @click="openWords" title="Browse prompt words">🔤</button>
           <button class="rmx-btn2" @click="cycleSort" :title="'Sort: ' + sortLabel">{{ sortLabel }}</button>
           <button v-if="state.parent && !search" class="rmx-btn2" @click="load(state.parent)">↑ Up</button>
           <span class="rmx-mut" style="margin-left:auto;font-size:12px">{{ search ? 'search results' : dirName }}</span>
