@@ -2707,26 +2707,11 @@ $('statusFeatures').onclick = () => {
   @media (max-width:640px){.rmx-overlay{padding:0}.rmx-dialog{max-width:100%;max-height:100%;height:100%;border-radius:0;border:0}.rmx-picker-overlay{padding:0}.rmx-picker{max-width:100%;max-height:100%;height:100%;border-radius:0}}
 </style>
 <script src="/vendor/vue.global.prod.js"></script>
-<script src="/vendor/vue-router.global.prod.js"></script>
 <script>
 (function () {
   if (!window.Vue) { console.warn('[remix] Vue not loaded'); return; }
   const { createApp, reactive, ref, computed, watch, onMounted, onUnmounted, provide, inject } = Vue;
   const enc = encodeURIComponent;
-  // Router: hash history keeps Vue's routes (#/inspect, #/jobs) isolated from the
-  // server's real paths and the vanilla browser's URLs. Degrades gracefully to the
-  // old flag-based dialogs if vue-router failed to load.
-  const VR = window.VueRouter || null;
-  const router = VR ? VR.createRouter({
-    history: VR.createWebHashHistory(),
-    routes: [
-      { path: '/', name: 'home' },
-      { path: '/inspect', name: 'inspect' },
-      { path: '/jobs', name: 'jobs' },
-      { path: '/:rest(.*)*', name: 'other' },
-    ],
-  }) : null;
-  const goHome = () => { if (router) router.push('/'); };
   const WIDE = new Set(['prompt', 'negative_prompt', 'lora_list', 'image_input', 'video_input', 'audio_input']);
   const loraLast = (a, b) => (/^lora/.test(a.kind) ? 1 : 0) - (/^lora/.test(b.kind) ? 1 : 0);
   const shortLora = s => String(s == null ? '' : s).split(/[\\/]/).pop().replace(/\.safetensors$/i, '');
@@ -3047,11 +3032,7 @@ $('statusFeatures').onclick = () => {
 
   // Remix launcher dialog — builds field values and launches a job into the store.
   const S = reactive({ open: false, path: '', name: '', type: '' });
-  window.openRemix = (item) => {
-    const type = item.isVideo ? 'video' : (item.isImage ? 'image' : 'audio');
-    if (router) { router.push({ name: 'inspect', query: { p: item.path, n: item.name || '', t: type } }); return; }
-    S.path = item.path; S.name = item.name; S.type = type; S.open = true;
-  };
+  window.openRemix = (item) => { S.path = item.path; S.name = item.name; S.type = item.isVideo ? 'video' : (item.isImage ? 'image' : 'audio'); S.open = true; };
 
   // Read the values a media was actually generated with (loras, steps, cfg, size,
   // prompt…) out of its embedded litegraph and write them onto the field config.
@@ -3256,7 +3237,7 @@ $('statusFeatures').onclick = () => {
         const edits = Object.keys(nodeEdits).length ? JSON.parse(JSON.stringify(nodeEdits)) : null;
         startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits });
       }
-      function close() { if (router) { goHome(); return; } S.open = false; }
+      function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
       onMounted(() => { window.addEventListener('keydown', onKey); document.body.classList.add('rmx-noscroll'); });
       onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.classList.remove('rmx-noscroll'); });
@@ -3457,13 +3438,13 @@ $('statusFeatures').onclick = () => {
 
   // Jobs dialog — reads the central store (replaces the /jobs page navigation).
   const jobsOpen = ref(false);
-  window.openJobs = () => { if (router) { router.push({ name: 'jobs' }); return; } jobsOpen.value = true; };
+  window.openJobs = () => { jobsOpen.value = true; };
   const JobsDialog = {
     setup() {
       const list = computed(() => store.list.slice().sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.startTime - a.startTime));
       const outUrl = f => (isVideoName(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
       const rerun = (j) => { if (j._params) { launchJob(Object.assign({}, j._params)); } else { window.openRemix({ path: j.sourcePath, name: j.sourceFile, isVideo: isVideoName(j.sourceFile || ''), isImage: !isVideoName(j.sourceFile || '') }); } };
-      const close = () => { if (router) { goHome(); return; } jobsOpen.value = false; };
+      const close = () => { jobsOpen.value = false; };
       const onKey = e => { if (e.key === 'Escape') close(); };
       onMounted(() => window.addEventListener('keydown', onKey));
       onUnmounted(() => window.removeEventListener('keydown', onKey));
@@ -3499,16 +3480,9 @@ $('statusFeatures').onclick = () => {
 
   const host = document.createElement('div');
   document.body.appendChild(host);
-  // Reflect the active route into the dialog flags (deep-link, refresh, back-button).
-  function syncFromRoute(r) {
-    if (!r) return;
-    if (r.name === 'inspect') { if (r.query.p) { S.path = r.query.p; S.name = r.query.n || ''; S.type = r.query.t || 'image'; } S.open = true; jobsOpen.value = false; }
-    else if (r.name === 'jobs') { jobsOpen.value = true; S.open = false; }
-    else { S.open = false; jobsOpen.value = false; }
-  }
-  const app = createApp({
+  createApp({
     components: { RemixDialog, JobsDialog },
-    setup() { return { S, jobsOpen, runningCount, leadPct, openJobs: () => window.openJobs() }; },
+    setup() { return { S, jobsOpen, runningCount, leadPct, openJobs: () => jobsOpen.value = true }; },
     template: `
       <div v-if="runningCount>0 && !jobsOpen" class="rmx-topbar" @click="openJobs" :title="runningCount + ' job(s) running — click for Jobs'">
         <div class="rmx-topbar-fill" :class="{indet: leadPct===0}" :style="leadPct>0 ? {width: leadPct + '%'} : {}"></div>
@@ -3517,13 +3491,7 @@ $('statusFeatures').onclick = () => {
       <jobs-dialog v-if="jobsOpen"></jobs-dialog>
       <button v-if="runningCount>0 && !jobsOpen" class="rmx-fab" @click="openJobs" title="Running jobs">⚡ {{ runningCount }}</button>
     `,
-  });
-  if (router) {
-    app.use(router);
-    router.afterEach((to) => syncFromRoute(to));
-    router.isReady().then(() => syncFromRoute(router.currentRoute.value)).catch(() => {});
-  }
-  app.mount(host);
+  }).mount(host);
 })();
 
 </script>
