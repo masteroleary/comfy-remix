@@ -2657,10 +2657,26 @@ $('statusFeatures').onclick = () => {
   .rmx-node>summary::before{content:'▸ ';color:#636366}
   .rmx-node[open]>summary::before{content:'▾ '}
   .rmx-node-body{padding:2px 10px 10px;font-size:11px;display:flex;flex-direction:column;gap:3px}
-  .rmx-node-inp{display:flex;gap:8px}
+  .rmx-node-inp{display:flex;gap:8px;align-items:center}
   .rmx-node-k{color:#8e8e93;min-width:96px;flex:none}
   .rmx-node-v{color:#c7c7cc;word-break:break-word;overflow-wrap:anywhere}
+  .rmx-node-edit{flex:1;min-width:0;padding:3px 6px;font-size:11px}
+  .rmx-node-edit.edited{border-color:#0a84ff;background:#0a2540;color:#eaf3ff}
+  .rmx-node.edited>summary{color:#5ac8fa}
   .rmx-raw{margin:0;padding:8px 10px;font:11px/1.4 ui-monospace,monospace;color:#a8b3c7;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
+  .rmx-repl{margin-top:14px;background:#1c1c1e;border:1px solid #38383a;border-radius:10px}
+  .rmx-repl>summary{list-style:none;cursor:pointer;padding:10px 12px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
+  .rmx-repl>summary::-webkit-details-marker{display:none}
+  .rmx-repl>summary::before{content:'▸';display:inline-block;margin-right:6px;transition:transform .12s}
+  .rmx-repl[open]>summary::before{transform:rotate(90deg)}
+  .rmx-repl-body{padding:2px 12px 12px}
+  .rmx-repl-all{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;margin-bottom:8px;cursor:pointer;user-select:none}
+  .rmx-repl-all input,.rmx-repl-row input[type=checkbox]{width:16px;height:16px;flex:none;accent-color:#0a84ff}
+  .rmx-repl-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .rmx-repl-row input[type=text]{flex:1;min-width:0}
+  .rmx-repl-swap{flex:none;padding:6px 9px;color:#0a84ff}
+  .rmx-repl-del{flex:none;width:30px;padding:6px 0;background:#3a1e1e;color:#e06c6c;border:1px solid #5a2a2a;border-radius:8px;cursor:pointer;font-size:12px}
+  .rmx-repl-del:hover{border-color:#e06c6c}
   .rmx-nodegroup{margin:2px 0 10px}
   .rmx-lora-cols{display:flex;gap:16px;margin-top:6px}
   .rmx-lora-col{flex:1;min-width:0}
@@ -2702,6 +2718,50 @@ $('statusFeatures').onclick = () => {
   const ctype = f => (f.control && f.control.type) || 'text';
   const isVideoName = p => /\.(mp4|webm|mkv|mov|m4v)$/i.test(p || '');
   const timeAgo = ts => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
+
+  // ── Prompt Replacements ── global find→replace rules with toggles, applied to
+  // prompt/negative field values right before each run (case-insensitive, all
+  // matches). Shared with the inspect page via /api/replacements; localStorage
+  // gives an instant paint before the server copy arrives.
+  const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const replacements = reactive([]);
+  const replAllOn = ref(false);
+  function syncReplAll() { replAllOn.value = replacements.length > 0 && replacements.every(r => r.on); }
+  function activeReplacements() { return replacements.filter(r => r.on && r.from && String(r.from).trim()); }
+  function saveReplacements() {
+    const plain = replacements.map(r => ({ from: r.from, to: r.to, on: !!r.on }));
+    try { localStorage.setItem('archiveReplacements', JSON.stringify(plain)); } catch (e) {}
+    fetch('/api/replacements', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replacements: plain }) }).catch(() => {});
+    syncReplAll();
+  }
+  try { const c = JSON.parse(localStorage.getItem('archiveReplacements') || '[]'); if (Array.isArray(c)) replacements.push(...c); } catch (e) {}
+  syncReplAll();
+  fetch('/api/replacements').then(r => r.json()).then(d => {
+    const server = Array.isArray(d.replacements) ? d.replacements : [];
+    if (server.length === 0 && replacements.length > 0) { saveReplacements(); }
+    else { replacements.splice(0, replacements.length, ...server); try { localStorage.setItem('archiveReplacements', JSON.stringify(server)); } catch (e) {} }
+    syncReplAll();
+  }).catch(() => {});
+  function applyReplacements(text) {
+    if (typeof text !== 'string') return text;
+    let out = text;
+    for (const r of activeReplacements()) out = out.replace(new RegExp(escRe(r.from), 'gi'), r.to == null ? '' : r.to);
+    return out;
+  }
+  // For nodes: only touch prompt-ish string inputs, skipping model/sampler/file/numeric keys.
+  const REPL_SKIP_KEY = /_name$|name$|filename|ckpt|lora|vae|sampler|scheduler|model|path|url|format|extension|seed|width|height|steps|cfg/i;
+  function applyReplacementsToNodes(prompt) {
+    if (!activeReplacements().length) return prompt;
+    for (const node of Object.values(prompt)) {
+      if (!node || !node.inputs) continue;
+      for (const key of Object.keys(node.inputs)) {
+        if (typeof node.inputs[key] !== 'string') continue;
+        if (REPL_SKIP_KEY.test(key)) continue;
+        node.inputs[key] = applyReplacements(node.inputs[key]);
+      }
+    }
+    return prompt;
+  }
 
   function mainPromptOf(promptObj) {
     if (!promptObj || typeof promptObj !== 'object') return '';
@@ -2922,6 +2982,10 @@ $('statusFeatures').onclick = () => {
       if (data.error) { log('error: ' + data.error, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
       (data.fieldWarnings || []).forEach(w => log('field: ' + w, 'warn'));
       const graph = data.workflow || null; const prompt = data.prompt || data;
+      // Prompt Replacements: rewrite prompt-ish text across the built graph.
+      if (activeReplacements().length) { applyReplacementsToNodes(prompt); log('Applied ' + activeReplacements().length + ' prompt replacement(s)'); }
+      // Danger-zone node edits: apply by node id + key when the built graph has them.
+      if (p.nodeEdits) { let n = 0; for (const [nid, kv] of Object.entries(p.nodeEdits)) { const node = prompt[nid]; if (node && node.inputs) for (const [k, val] of Object.entries(kv)) { node.inputs[k] = val; n++; } } if (n) log('Applied ' + n + ' node edit(s)'); }
       if (uploadedName) for (const n of Object.values(prompt)) { const t = (n._meta && n._meta.title || '').toUpperCase(); if (t.includes('MAIN IMAGE') && n.inputs) n.inputs.image = uploadedName; }
       for (const n of Object.values(prompt)) { if (n.inputs && !p.seedPinned) for (const k of Object.keys(n.inputs)) { if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = Math.floor(Math.random() * 2147483647); } if (n.is_changed) delete n.is_changed; }
       const ok = await execWs(job, prompt, graph, log);
@@ -3170,7 +3234,8 @@ $('statusFeatures').onclick = () => {
         const label = wf.value.replace(/^APP /, '').replace(/\.json$/, '');
         // Image fields set to a Media path (via the picker) need uploading at run.
         const mediaFields = cfg.fields.filter(f => f.enabled && f.kind === 'image_input' && f.value && /[\\/]/.test(String(f.value))).map(f => ({ id: f.id, value: f.value, type: 'image' }));
-        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? pf.value : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields });
+        const edits = Object.keys(nodeEdits).length ? JSON.parse(JSON.stringify(nodeEdits)) : null;
+        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits });
       }
       function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
@@ -3215,13 +3280,34 @@ $('statusFeatures').onclick = () => {
       }
 
       // Read-only node inspector for the source media's embedded workflow.
+      // Danger-zone node edits: nodeId -> {key: value}. Applied to the built prompt
+      // at run by matching node id + key (see launchJob).
+      const nodeEdits = reactive({});
+      const editVal = (id, k, orig) => (nodeEdits[id] && k in nodeEdits[id]) ? nodeEdits[id][k] : orig;
+      function setEdit(id, k, orig, val) {
+        let v = val;
+        if (typeof orig === 'number') { const num = Number(val); if (!Number.isNaN(num) && String(val).trim() !== '') v = Number.isInteger(orig) ? Math.round(num) : num; }
+        if (String(v) === String(orig)) { if (nodeEdits[id]) { delete nodeEdits[id][k]; if (!Object.keys(nodeEdits[id]).length) delete nodeEdits[id]; } return; }
+        if (!nodeEdits[id]) nodeEdits[id] = {};
+        nodeEdits[id][k] = v;
+      }
+      // Prompt Replacements UI (state + helpers are module-level singletons).
+      const replActiveCount = computed(() => replacements.filter(r => r.on && r.from && String(r.from).trim()).length);
+      const addRepl = () => replacements.push({ from: '', to: '', on: true });
+      const delRepl = i => { replacements.splice(i, 1); saveReplacements(); };
+      const swapRepl = r => { const a = r.from; r.from = r.to; r.to = a; saveReplacements(); };
+      const toggleReplAll = () => { const on = !replAllOn.value; replacements.forEach(r => r.on = on); saveReplacements(); };
       const nodeEntries = computed(() => meta.embedded ? Object.entries(meta.embedded) : []);
       const filteredNodes = computed(() => {
         const q = nodeFilter.value.trim().toLowerCase();
         const arr = nodeEntries.value.slice().sort((a, b) => { const at = ((a[1]._meta && a[1]._meta.title) || '').toUpperCase().startsWith('MAIN') ? 0 : 1; const bt = ((b[1]._meta && b[1]._meta.title) || '').toUpperCase().startsWith('MAIN') ? 0 : 1; return at - bt || (parseInt(a[0]) - parseInt(b[0])); });
         return q ? arr.filter(([id, n]) => (id + ' ' + (n.class_type || '') + ' ' + ((n._meta && n._meta.title) || '')).toLowerCase().includes(q)) : arr;
       });
-      const nodeInputs = n => Object.entries(n.inputs || {}).map(([k, v]) => [k, Array.isArray(v) ? ('← [' + v[0] + ']') : (typeof v === 'string' ? v : JSON.stringify(v))]);
+      const nodeInputs = n => Object.entries(n.inputs || {}).map(([k, v]) => {
+        if (Array.isArray(v)) return [k, { editable: false, disp: '← [' + v[0] + ']' }];
+        const editable = typeof v === 'string' || typeof v === 'number';
+        return [k, { editable, raw: v, num: typeof v === 'number', disp: typeof v === 'string' ? v : JSON.stringify(v) }];
+      });
 
       // Gallery picker — opens a reusable MediaBrowser over the dialog.
       const picker = reactive({ open: false, type: 'image' });
@@ -3230,7 +3316,8 @@ $('statusFeatures').onclick = () => {
       function onPick(path) { if (pickerField) pickerField.value = path; picker.open = false; }
       provide('openPicker', openPicker);
 
-      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick };
+      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
+        replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3287,6 +3374,21 @@ $('statusFeatures').onclick = () => {
                 <div v-if="cfg.presets.length" style="margin-top:12px"><label class="rmx-lbl" style="margin-bottom:5px">Style preset</label>
                   <select class="rmx-inp" v-model="selectedPreset"><option value="">— none —</option><option v-for="p in cfg.presets" :key="p.title" :value="p.title">{{ p.title }}</option></select>
                 </div>
+                <details class="rmx-repl">
+                  <summary>Prompt Replacements<span class="rmx-mut" v-if="replActiveCount"> — {{ replActiveCount }} active</span><span class="rmx-mut" v-else-if="replacements.length"> — {{ replacements.length }} off</span></summary>
+                  <div class="rmx-repl-body">
+                    <div class="rmx-mut" style="font-size:12px;margin-bottom:8px">Applied to the prompt right before each run (case-insensitive, all matches). Shared with the inspect page.</div>
+                    <label class="rmx-repl-all"><input type="checkbox" :checked="replAllOn" @change="toggleReplAll"> Toggle all on/off</label>
+                    <div v-for="(r,i) in replacements" :key="i" class="rmx-repl-row">
+                      <input type="checkbox" v-model="r.on" @change="saveReplacements" title="Enable this rule">
+                      <input type="text" class="rmx-inp" placeholder="find" v-model="r.from" @change="saveReplacements">
+                      <button type="button" class="rmx-btn2 rmx-repl-swap" title="Swap words" @click="swapRepl(r)">⇄</button>
+                      <input type="text" class="rmx-inp" placeholder="replace with" v-model="r.to" @change="saveReplacements">
+                      <button type="button" class="rmx-repl-del" title="Delete rule" @click="delRepl(i)">✕</button>
+                    </div>
+                    <button type="button" class="rmx-btn2" style="margin-top:6px" @click="addRepl">＋ Add replacement</button>
+                  </div>
+                </details>
                 <details class="rmx-hidden" v-if="hiddenFields.length"><summary>{{ hiddenFields.length }} hidden field{{ hiddenFields.length===1?'':'s' }}</summary>
                   <div class="rmx-field" v-for="f in hiddenFields" :key="f.id"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" @change="f.enabled=true" title="Show field"> {{ f.label }} <span class="rmx-mut" style="text-transform:none">· {{ f.kind }}</span></label><field-control :field="f"></field-control></div>
                 </details>
@@ -3308,11 +3410,17 @@ $('statusFeatures').onclick = () => {
                 <summary>Source workflow · {{ Object.keys(meta.embedded).length }} nodes</summary>
                 <div style="padding:6px 12px 12px">
                   <input class="rmx-inp" style="width:100%;margin-bottom:8px" placeholder="Filter nodes…" v-model="nodeFilter">
-                  <details v-for="[id,n] in filteredNodes" :key="id" class="rmx-node">
+                  <div class="rmx-mut" style="font-size:11px;margin-bottom:6px">Edit a value to override it on the next run (applied when the node is in the built graph). ⚠ can break the workflow.</div>
+                  <details v-for="[id,n] in filteredNodes" :key="id" class="rmx-node" :class="{edited: nodeEdits[id]}">
                     <summary>[{{id}}] {{ n.class_type }}<span v-if="n._meta&&n._meta.title" class="rmx-mut"> · {{ n._meta.title }}</span></summary>
-                    <div class="rmx-node-body"><div v-for="[k,v] in nodeInputs(n)" :key="k" class="rmx-node-inp"><span class="rmx-node-k">{{k}}</span><span class="rmx-node-v">{{ v }}</span></div></div>
+                    <div class="rmx-node-body"><div v-for="[k,v] in nodeInputs(n)" :key="k" class="rmx-node-inp">
+                      <span class="rmx-node-k">{{k}}</span>
+                      <input v-if="v.editable" class="rmx-inp rmx-node-edit" :class="{edited: nodeEdits[id] && k in nodeEdits[id]}" :type="v.num ? 'number' : 'text'" :step="v.num ? 'any' : null" :value="editVal(id,k,v.raw)" @change="setEdit(id,k,v.raw,$event.target.value)" :title="'node '+id+' · '+k">
+                      <span v-else class="rmx-node-v">{{ v.disp }}</span>
+                    </div></div>
                   </details>
                   <details class="rmx-node"><summary>Raw prompt JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embedded, null, 2) }}</pre></details>
+                  <details v-if="meta.embeddedWf" class="rmx-node"><summary>Raw workflow JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embeddedWf, null, 2) }}</pre></details>
                 </div>
               </details>
             </div>
