@@ -3133,16 +3133,19 @@ $('statusFeatures').onclick = () => {
       // Group the non-lora controls by the graph node they came from (each group
       // on its own line under a small node-title heading). LoRAs stay separate.
       const nodeGroups = computed(() => {
-        const out = [], byKey = new Map();
+        const byKey = new Map();
         for (const f of enabledFields.value) {
           if (/^lora/.test(f.kind)) continue;
           const t = (f.targets || [])[0] || {};
           const key = String(t.nodeId) + '|' + (t.title || t.class || '');
           let g = byKey.get(key);
-          if (!g) { g = { key, title: t.title || t.class || ('#' + t.nodeId), fields: [] }; byKey.set(key, g); out.push(g); }
+          if (!g) { g = { key, title: t.title || t.class || ('#' + t.nodeId), fields: [] }; byKey.set(key, g); }
           g.fields.push(f);
         }
-        return out;
+        const all = [...byKey.values()];
+        // Titled group only for nodes with 2+ controls; single-control nodes flow
+        // together in one row (so e.g. separate Width/Height primitives sit side by side).
+        return { titled: all.filter(g => g.fields.length >= 2), loose: all.filter(g => g.fields.length < 2).flatMap(g => g.fields) };
       });
       const enabledLoras = computed(() => enabledFields.value.filter(f => /^lora/.test(f.kind)));
       const loraHigh = computed(() => enabledLoras.value.filter(f => f.variant === 'high'));
@@ -3249,7 +3252,13 @@ $('statusFeatures').onclick = () => {
               <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
               <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
               <div v-else>
-                <div v-for="g in nodeGroups" :key="g.key" class="rmx-nodegroup">
+                <div v-if="nodeGroups.loose.length" class="rmx-grid">
+                  <div v-for="f in nodeGroups.loose" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
+                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                    <field-control :field="f"></field-control>
+                  </div>
+                </div>
+                <div v-for="g in nodeGroups.titled" :key="g.key" class="rmx-nodegroup">
                   <div class="rmx-nodegroup-title">{{ g.title }}</div>
                   <div class="rmx-grid">
                     <div v-for="f in g.fields" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
