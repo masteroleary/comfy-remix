@@ -4,6 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 
+// Import-time "field config" generator (docs/field-config): scans a workflow and
+// emits the user-facing fields the generate form should offer. Prototype/design
+// lives under docs/field-config/; required here as the runtime module.
+let fieldConfigGen = null;
+try { fieldConfigGen = require('./docs/field-config/gen_field_config.js'); }
+catch (e) { console.log('[FieldConfig] generator unavailable:', e.message); }
+
 // Load config
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const config = fs.existsSync(CONFIG_PATH) ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) : {};
@@ -1078,8 +1085,9 @@ let WORKFLOWS_DIR = path.join(COMFY_DIR, 'user', 'default', 'workflows');
 const WF_STORE_PATH = path.join(__dirname, 'app-workflows.json');
 
 function loadWfStore() {
-  let store = { enabled: [], mappings: {}, labels: {} };
+  let store = { enabled: [], mappings: {}, labels: {}, fieldConfigs: {} };
   try { store = Object.assign(store, JSON.parse(fs.readFileSync(WF_STORE_PATH, 'utf8'))); } catch {}
+  if (!store.fieldConfigs) store.fieldConfigs = {};
   // First-run migration: seed the allowlist from legacy "APP *.json" files.
   if (!store._migrated) {
     try {
@@ -1094,6 +1102,16 @@ function loadWfStore() {
 function saveWfStore(store) {
   try { fs.writeFileSync(WF_STORE_PATH, JSON.stringify(store, null, 2)); return true; } catch { return false; }
 }
+
+// Field-config runtime (build + apply). Extracted to field-config-runtime.js so
+// the logic is unit-testable without the HTTP server; deps injected here.
+const fieldConfigRuntime = require('./field-config-runtime.js')({
+  generator: fieldConfigGen,
+  loadStore: loadWfStore,
+  detectPresetGroups: (wf) => detectPresetGroups(wf),
+});
+const buildFieldConfig = fieldConfigRuntime.buildFieldConfig;
+const applyFieldConfigOverrides = fieldConfigRuntime.applyFieldConfigOverrides;
 
 // First-run bootstrap: copy the bundled starter workflows (default-workflows/)
 // into the ComfyUI install and enable them, so a fresh clone has working
@@ -1393,6 +1411,24 @@ const server = http.createServer((req, res) => {
   if ((pn === '/common.css' || pn === '/key-prompt.js') && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-cache');
     serveFile(path.join(__dirname, pn.slice(1)), req, res); return;
+  }
+
+  // SPA pilot (Vue 3 + Vue Router, hash routing). Client-side routes live under
+  // /app#/... so the server only serves the shell here.
+  if (pn === '/app' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    serveFile(path.join(__dirname, 'spa.html'), req, res); return;
+  }
+  // Vendored front-end libs (Vue, Vue Router). Allowlisted .js only, path-safe.
+  if (pn.startsWith('/vendor/') && req.method === 'GET') {
+    const rel = pn.slice('/vendor/'.length);
+    const dir = path.join(__dirname, 'vendor');
+    const fp = path.join(dir, rel);
+    if (/^[a-z0-9._-]+\.js$/i.test(rel) && path.resolve(fp).startsWith(path.resolve(dir))) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      serveFile(fp, req, res); return;
+    }
+    res.writeHead(404); res.end('Not found'); return;
   }
 
   if (pn === '/jobs') {
@@ -2477,6 +2513,44 @@ runTests();
     return;
   }
 
+  // API: Generate the field config for a workflow (detected fields + user edits).
+  if (pn === '/api/workflow-field-config' && req.method === 'GET') {
+    const wfName = url.searchParams.get('name');
+    if (!wfName) { jsonRes(res, { error: 'Missing name' }, 400); return; }
+    const wfPath = path.join(WORKFLOWS_DIR, wfName);
+    if (!path.resolve(wfPath).startsWith(path.resolve(WORKFLOWS_DIR))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+    fs.readFile(wfPath, 'utf8', (err, raw) => {
+      if (err) { jsonRes(res, { error: err.message }, 500); return; }
+      let wf; try { wf = JSON.parse(raw.replace(/^﻿/, '')); } catch (e) { jsonRes(res, { error: 'Parse error: ' + e.message }, 500); return; }
+      try {
+        const st = fs.statSync(wfPath, { throwIfNoEntry: false });
+        jsonRes(res, buildFieldConfig(wf, wfName, st ? st.mtimeMs : 0));
+      } catch (e) { jsonRes(res, { error: 'Field config error: ' + e.message }, 500); }
+    });
+    return;
+  }
+
+  // API: Persist field-config user edits (enable/label/value + manual fields).
+  // POST { name, edits: {<fieldId>:{enabled?,label?,value?}}, manual?: [field...] }
+  if (pn === '/api/workflow-field-config' && req.method === 'POST') {
+    let bodyStr = '';
+    req.on('data', c => bodyStr += c);
+    req.on('end', () => {
+      let body; try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      if (!body.name) { jsonRes(res, { error: 'Missing name' }, 400); return; }
+      const store = loadWfStore();
+      if (!store.fieldConfigs) store.fieldConfigs = {};
+      const entry = store.fieldConfigs[body.name] || { edits: {}, manual: [] };
+      if (body.edits && typeof body.edits === 'object') entry.edits = body.edits;
+      if (Array.isArray(body.manual)) entry.manual = body.manual;
+      if (body.reset) { delete store.fieldConfigs[body.name]; }
+      else store.fieldConfigs[body.name] = entry;
+      const ok = saveWfStore(store);
+      jsonRes(res, ok ? { ok: true } : { error: 'Save failed' }, ok ? 200 : 500);
+    });
+    return;
+  }
+
   // API: Save a workflow JSON into the app workflows dir. Used by "Fix with
   // Claude" to materialize an image-embedded workflow as a file so it can be
   // debugged/edited, and optionally enable it for the workflow dropdown.
@@ -2634,6 +2708,16 @@ runTests();
           const wf = JSON.parse(raw);
           const mapping = (loadWfStore().mappings || {})[wfName] || null;
 
+          // New-style generic field overrides: { fieldValues: {<id>: value} }.
+          // Applied to the raw graph before conversion; coexists with the legacy
+          // keys below (the field panel sends only fieldValues, so those are skipped).
+          let fieldWarnings = [];
+          if (overrides.fieldValues && typeof overrides.fieldValues === 'object') {
+            const st = fs.statSync(wfPath, { throwIfNoEntry: false });
+            const cfg = buildFieldConfig(JSON.parse(JSON.stringify(wf)), wfName, st ? st.mtimeMs : 0);
+            fieldWarnings = applyFieldConfigOverrides(wf, cfg, overrides.fieldValues).warnings;
+          }
+
           // Apply prompt override (mapped node, or MAIN PROMPT / best-guess)
           if (overrides.prompt !== undefined) {
             const promptNode = resolvePromptNode(wf, mapping);
@@ -2742,7 +2826,7 @@ runTests();
           // Return the (override-applied) visual graph too: the client submits it
           // as extra_data.extra_pnginfo.workflow, which graph-introspecting nodes
           // (WidgetToString etc.) require at execution time.
-          jsonRes(res, { prompt, workflow: wf });
+          jsonRes(res, { prompt, workflow: wf, fieldWarnings });
         } catch (e) {
           jsonRes(res, { error: 'Parse error: ' + e.message }, 500);
         }

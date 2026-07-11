@@ -1,0 +1,546 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComfyRemix · SPA</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #000; color: #f2f2f7; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  .muted { color: #8e8e93; }
+  .warn { color: #ff9f0a; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  .gtop { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: #0a84ff22; cursor: pointer; overflow: hidden; }
+  .gtop-fill { height: 100%; background: linear-gradient(90deg, #0a84ff, #5ac8fa); width: 0; transition: width .3s; }
+  .gtop-fill.indet { width: 35%; animation: indet 1.15s ease-in-out infinite; }
+  @keyframes indet { 0% { transform: translateX(-120%); } 100% { transform: translateX(340%); } }
+  .topbar { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid #2c2c2e; background: #0a0a0aee; flex: none; }
+  .brand { font-weight: 700; margin-right: 8px; }
+  .beta { font-size: 10px; color: #0a84ff; border: 1px solid #0a84ff; border-radius: 6px; padding: 1px 5px; vertical-align: middle; }
+  .nav { color: #8e8e93; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .nav:hover { color: #f2f2f7; background: #1c1c1e; }
+  .nav.router-link-active { color: #0a84ff; background: #0a84ff1a; }
+  .nav .pill { background: #0a84ff; color: #fff; border-radius: 10px; padding: 0 6px; font-size: 11px; margin-left: 5px; }
+  .view { flex: 1; overflow: auto; min-height: 0; }
+  .spa-frame { width: 100%; height: calc(100vh - 52px); border: 0; display: block; background: #000; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .cell { position: relative; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 10px; overflow: hidden; cursor: pointer; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; transition: border-color .12s; }
+  .cell:hover { border-color: #0a84ff; }
+  .cell img { width: 100%; height: 100%; object-fit: cover; }
+  .cell .folder { font-size: 40px; }
+  .cell .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 6px; font-size: 11px; background: linear-gradient(transparent, #000c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell .badge { position: absolute; top: 4px; right: 4px; font-size: 10px; background: #000a; border-radius: 5px; padding: 1px 4px; display: flex; align-items: center; }
+  .fc-input { background: #1c1c1e; color: #f2f2f7; border: 1px solid #48484a; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+  select.fc-input { cursor: pointer; }
+  .fields-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .fc-field { display: flex; flex-direction: column; gap: 5px; }
+  .fc-field.wide { flex-basis: 100%; }
+  .fc-lbl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: .4px; }
+  .fc-hidden-tgl { width: 15px; height: 15px; accent-color: #0a84ff; cursor: pointer; }
+  .seed-wrap { display: flex; gap: 8px; align-items: center; }
+  .seed-switch { position: relative; width: 58px; height: 30px; border-radius: 15px; border: 1px solid #48484a; background: #2c2c2e; cursor: pointer; padding: 0; flex: none; transition: background .15s, border-color .15s; }
+  .seed-switch.on { background: #0a84ff; border-color: #0a84ff; }
+  .seed-switch .thumb { position: absolute; top: 2px; left: 2px; width: 26px; height: 26px; border-radius: 50%; background: #f2f2f7; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: left .15s; }
+  .seed-switch.on .thumb { left: 30px; }
+  .lora-rows { display: flex; flex-direction: column; gap: 4px; }
+  .lora-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .lora-row.off { opacity: .5; }
+  .lora-row label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c7c7cc; }
+  .lora-row input[type=number] { width: 80px; background: #1c1c1e; color: #f2f2f7; border: 1px solid #48484a; border-radius: 6px; padding: 4px 6px; }
+  .lora-more { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; padding: 5px 9px; margin-top: 2px; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 8px; font-size: 12px; color: #8e8e93; user-select: none; }
+  .lora-more:hover { border-color: #0a84ff; color: #c7c7cc; }
+  .lora-arrow { transition: transform .12s; }
+  .lora-arrow.open { transform: rotate(180deg); }
+  .img-field { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .img-field img { height: 44px; border-radius: 6px; border: 1px solid #48484a; }
+  .hidden-box { margin-top: 14px; background: #1c1c1e; border: 1px solid #38383a; border-radius: 10px; }
+  .hidden-box summary { list-style: none; cursor: pointer; padding: 10px 12px; font-size: 12px; color: #8e8e93; display: flex; align-items: center; gap: 6px; }
+  .hidden-box summary::-webkit-details-marker { display: none; }
+  .hidden-box summary::before { content: '▸'; transition: transform .12s; }
+  .hidden-box[open] summary::before { transform: rotate(90deg); }
+  .hidden-box .fc-field { padding: 6px 12px; }
+  .btn { background: #2c2c2e; color: #f2f2f7; border: 1px solid #48484a; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: #0a84ff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.go { background: #2d5a1e; border-color: #3a7a28; color: #a8e06c; font-weight: 600; }
+  .btn.cancel { background: #5a1e1e; border-color: #7a2828; color: #ff9d9d; font-weight: 600; }
+  .btn.primary { background: #0a84ff; border-color: #0a84ff; font-weight: 600; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 4px; }
+  .log { margin-top: 8px; max-height: 150px; overflow: auto; background: #0a0a0a; border: 1px solid #2c2c2e; border-radius: 8px; padding: 8px; font: 11px/1.5 ui-monospace, monospace; color: #c7c7cc; }
+  .log .err { color: #ff6b6b; } .log .done { color: #a8e06c; } .log .warn { color: #ffcf6b; }
+  /* Jobs */
+  .jobs-list { display: flex; flex-direction: column; gap: 10px; }
+  .job { display: flex; gap: 12px; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 10px; }
+  .job-src { width: 66px; height: 66px; flex: none; border-radius: 8px; overflow: hidden; background: #000; }
+  .job-src img { width: 100%; height: 100%; object-fit: cover; }
+  .job-main { flex: 1; min-width: 0; }
+  .job-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #8e8e93; }
+  .dot.running { background: #0a84ff; animation: pulse 1s infinite; }
+  .dot.done, .dot.complete { background: #30d158; }
+  .dot.error { background: #ff453a; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .job-prompt { font-size: 12px; color: #c7c7cc; margin: 3px 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .prog { height: 6px; background: #2c2c2e; border-radius: 3px; overflow: hidden; margin: 6px 0; }
+  .prog-fill { height: 100%; background: linear-gradient(90deg, #0a84ff, #5ac8fa); width: 0; transition: width .3s; }
+  .prog-fill.indet { width: 35%; animation: indet 1.15s ease-in-out infinite; }
+  .out-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; margin-top: 6px; }
+  .out { display: block; border: 1px solid #38383a; border-radius: 8px; overflow: hidden; aspect-ratio: 1; }
+  .out img { width: 100%; height: 100%; object-fit: cover; }
+  .job-acts { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  .mini { background: #2c2c2e; border: 1px solid #48484a; border-radius: 8px; color: #f2f2f7; cursor: pointer; padding: 5px 9px; font-size: 13px; }
+  .mini:hover { border-color: #0a84ff; }
+  /* Inspect dialog over the (still-mounted) browser */
+  .overlay { position: fixed; inset: 0; z-index: 50; background: #000b; display: flex; align-items: stretch; justify-content: center; padding: 24px; }
+  .dialog { background: #141416; border: 1px solid #38383a; border-radius: 16px; width: 100%; max-width: 1040px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px #000c; }
+  .dialog-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #2c2c2e; }
+  .dialog-body { display: grid; grid-template-columns: minmax(0, 44%) minmax(0, 56%); overflow: hidden; min-height: 0; }
+  .media-pane { background: #000; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: auto; }
+  .media-pane img, .media-pane video { max-width: 100%; max-height: 70vh; border-radius: 8px; }
+  .form-pane { padding: 16px; overflow: auto; border-left: 1px solid #2c2c2e; }
+  .x { margin-left: auto; background: none; border: none; color: #f2f2f7; font-size: 22px; cursor: pointer; }
+  @media (max-width: 760px) { .dialog-body { grid-template-columns: 1fr; } .media-pane { max-height: 34vh; } }
+</style>
+<div id="app"></div>
+
+<script src="/vendor/vue.global.prod.js"></script>
+<script src="/vendor/vue-router.global.prod.js"></script>
+<script>
+const { createApp, reactive, ref, computed, watch, onMounted, onUnmounted } = Vue;
+const { createRouter, createWebHashHistory, useRoute, useRouter } = VueRouter;
+
+const enc = encodeURIComponent;
+const WIDE = new Set(['prompt', 'negative_prompt', 'lora_list', 'image_input', 'video_input', 'audio_input']);
+const loraLast = (a, b) => (/^lora/.test(a.kind) ? 1 : 0) - (/^lora/.test(b.kind) ? 1 : 0);
+const shortLora = s => String(s == null ? '' : s).split(/[\\/]/).pop().replace(/\.safetensors$/i, '');
+const ctype = f => (f.control && f.control.type) || 'text';
+const isImg = p => /\.(png|jpe?g|webp|gif|bmp)$/i.test(p || '');
+const isVid = p => /\.(mp4|webm|mkv|mov|m4v)$/i.test(p || '');
+const timeAgo = ts => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
+const WF_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><circle cx="4.5" cy="12" r="2.3"/><circle cx="19" cy="6" r="2.3"/><circle cx="19" cy="18" r="2.3"/><path d="M6.8 12H11M11 6V18M11 6H16.7M11 18H16.7"/></svg>';
+
+function mainPromptOf(promptObj) {
+  if (!promptObj || typeof promptObj !== 'object') return '';
+  const tiers = [[], [], []];
+  for (const n of Object.values(promptObj)) {
+    if (!n || !n.inputs) continue;
+    const title = (n._meta && n._meta.title) || '';
+    if (/negative|neg\b/i.test(title)) continue;
+    let text = '';
+    for (const v of Object.values(n.inputs)) if (typeof v === 'string' && v.length > text.length) text = v;
+    if (!text.trim()) continue;
+    if (/main/i.test(title) && /prompt/i.test(title)) tiers[0].push(text);
+    else if (/pos/i.test(title) && /prompt/i.test(title)) tiers[1].push(text);
+    else if (text.length > 20) tiers[2].push(text);
+  }
+  for (const t of tiers) if (t.length) return t.sort((a, b) => b.length - a.length)[0];
+  return '';
+}
+function firstVideoFrameBlob(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    let settled = false;
+    const finish = (fn, arg) => { if (!settled) { settled = true; v.removeAttribute('src'); v.load(); fn(arg); } };
+    v.onerror = () => finish(reject, new Error('could not decode video'));
+    v.onloadeddata = () => { try { v.currentTime = 0.001; } catch (e) {} };
+    v.onseeked = () => { if (settled) return; try { const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; if (!c.width || !c.height) return finish(reject, new Error('video has no dimensions')); c.getContext('2d').drawImage(v, 0, 0); c.toBlob(b => b ? finish(resolve, b) : finish(reject, new Error('canvas export failed')), 'image/png'); } catch (e) { finish(reject, e); } };
+    setTimeout(() => finish(reject, new Error('timed out decoding video')), 20000);
+    v.src = videoUrl;
+  });
+}
+async function uploadBlob(blob, ext) { const uploadName = 'app_input_' + Date.now() + '.' + (ext || 'png'); const fd = new FormData(); fd.append('image', blob, uploadName); fd.append('overwrite', 'true'); const r = await fetch('/api/comfy/upload/image', { method: 'POST', body: fd }); if (!r.ok) return null; const j = await r.json(); return j.name || uploadName; }
+async function uploadImagePath(p) { const r = await fetch('/file/' + enc(p)); if (!r.ok) return null; const blob = await r.blob(); const name = p.split(/[\\/]/).pop(); return uploadBlob(blob, name.includes('.') ? name.split('.').pop() : 'png'); }
+
+// Shared IndexedDB job store (same 'comfyJobs' DB the classic app uses).
+const JobDB = {
+  _db: null,
+  open() { if (this._db) return Promise.resolve(this._db); return new Promise((res, rej) => { const r = indexedDB.open('comfyJobs', 1); r.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains('jobs')) { const s = db.createObjectStore('jobs', { keyPath: 'id' }); s.createIndex('startTime', 'startTime'); } }; r.onsuccess = () => { this._db = r.result; res(this._db); }; r.onerror = () => rej(r.error); }); },
+  async getAll() { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readonly'); const r = tx.objectStore('jobs').getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }); },
+  async put(job) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put(job); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); },
+  async del(id) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readwrite'); tx.objectStore('jobs').delete(id); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); },
+};
+const jobChannel = (() => { try { return new BroadcastChannel('comfy-jobs'); } catch (e) { return null; } })();
+
+// ── Central store: one reactive source of truth shared by every view. ──
+const store = reactive({
+  browser: { dir: '', items: [], parent: null, loading: false, loaded: false },
+  workflows: [], workflowsLoaded: false,
+  jobs: [], jobsLoaded: false,
+});
+const byId = id => store.jobs.find(j => j.id === id);
+const runningCount = computed(() => store.jobs.filter(j => j.status === 'running').length);
+const leadPct = computed(() => { const r = store.jobs.filter(j => j.status === 'running'); return r.length ? Math.max.apply(null, r.map(j => j._pct || 0)) : 0; });
+function persist(job) { const c = {}; for (const k in job) if (k[0] !== '_') c[k] = job[k]; JobDB.put(JSON.parse(JSON.stringify(c))).catch(() => {}); }
+
+// Run engine — owns the WebSocket run; lives in the store so a job keeps going
+// regardless of which route/view is mounted.
+function execWs(job, prompt, graph, log) {
+  return new Promise((resolve) => {
+    const totalNodes = Object.keys(prompt).length; let done = 0;
+    const nodeMap = {}; Object.entries(prompt).forEach(([id, n]) => nodeMap[id] = (n._meta && n._meta.title) || n.class_type || id);
+    const clientId = (crypto.randomUUID ? crypto.randomUUID() : 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    let ws = null, submitted = false, reconnects = 0, cur = null;
+    job._interrupt = () => { try { fetch('/api/comfy/api/interrupt', { method: 'POST' }); } catch (e) {} };
+    const finish = (ok) => { job._pct = 100; if (ws) { try { ws.close(); } catch (e) {} ws = null; } resolve(ok); };
+    function post(type, extra) { if (jobChannel && cur) jobChannel.postMessage(Object.assign({ type, promptId: cur }, extra || {})); }
+    function onMsg(evt) {
+      if (typeof evt.data !== 'string') return; let msg; try { msg = JSON.parse(evt.data); } catch (e) { return; }
+      const d = msg.data || {}; if (d.prompt_id && d.prompt_id !== cur) return;
+      switch (msg.type) {
+        case 'execution_start': job._node = 'Running…'; log('Execution started'); break;
+        case 'execution_cached': if (d.nodes) { done += d.nodes.length; job._pct = Math.round(done / totalNodes * 100); } break;
+        case 'executing': if (d.node == null) break; job._node = nodeMap[d.node] || d.node; post('executing', { node: job._node }); break;
+        case 'executed': done++; job._pct = Math.round(done / totalNodes * 100); break;
+        case 'progress': if (d.max > 0) { job._pct = Math.round(d.value / d.max * 100); job._node = 'Step ' + d.value + '/' + d.max; post('progress', { pct: job._pct }); } break;
+        case 'execution_success': log('Completed', 'done'); finish(true); break;
+        case 'execution_error': log('Error in node ' + d.node_id + ': ' + (d.exception_message || ''), 'err'); finish(false); break;
+        case 'execution_interrupted': log('Interrupted', 'err'); finish(false); break;
+      }
+    }
+    function connect() {
+      try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/comfy-ws?clientId=' + clientId); ws.binaryType = 'arraybuffer'; } catch (e) { log('WS error: ' + e.message, 'err'); finish(false); return; }
+      ws.onmessage = onMsg; ws.onerror = () => log('WebSocket error', 'err');
+      ws.onclose = () => { if (cur && reconnects < 3) { reconnects++; setTimeout(connect, 1000); } else if (cur) finish(false); };
+      ws.onopen = async () => {
+        if (submitted) return; submitted = true; job._node = 'Queueing…'; log('Submitting (' + totalNodes + ' nodes)…');
+        try {
+          const payload = { prompt, client_id: clientId }; if (graph) payload.extra_data = { extra_pnginfo: { workflow: graph } };
+          const res = await fetch('/api/comfy/api/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json());
+          if (res.error) { log('Error: ' + (res.error.message || JSON.stringify(res.error)), 'err'); finish(false); return; }
+          if (res.node_errors && Object.keys(res.node_errors).length) { log('ComfyUI rejected ' + Object.keys(res.node_errors).length + ' node(s):', 'err'); for (const [nid, ne] of Object.entries(res.node_errors)) for (const e of (ne.errors || [])) log('  [' + nid + '] ' + e.message, 'err'); finish(false); return; }
+          cur = res.prompt_id; job.promptIds.push(cur); persist(job); job._node = 'Queued'; log('Queued ' + String(cur).slice(0, 8));
+        } catch (e) { log('Error: ' + e.message, 'err'); finish(false); }
+      };
+    }
+    connect();
+  });
+}
+// Attribute outputs to THIS job by filename from its own prompt history — safe
+// with concurrent jobs (a time-window diff would grab another job's files).
+async function collectOutputs(job) {
+  const names = new Set();
+  for (const pid of job.promptIds) { try { const data = await fetch('/api/comfy/api/history/' + pid).then(r => r.ok ? r.json() : null); const e = data && data[pid]; if (e && e.outputs) for (const nodeOut of Object.values(e.outputs)) for (const items of Object.values(nodeOut)) if (Array.isArray(items)) for (const it of items) if (it.filename) names.add(it.filename); } catch (e) {} }
+  if (!names.size) return;
+  for (const delay of [0, 1200, 3000]) { if (delay) await new Promise(r => setTimeout(r, delay)); try { const files = await fetch('/api/recent-outputs?since=' + (job.startTime - 3600000)).then(r => r.json()); const seen = new Set(job.results.map(o => o.path)); for (const f of files) if (names.has(f.name) && !seen.has(f.path)) job.results.push({ path: f.path, name: f.name, thumbPath: f.thumbPath }); } catch (e) {} if (job.results.length >= names.size) break; }
+  persist(job);
+}
+async function recoverJob(job) {
+  if (job._recovering) return; job._recovering = true;
+  try {
+    if (Date.now() - job.startTime > 7200000) { job.status = 'error'; job.endTime = job.startTime; job._pct = 100; persist(job); return; }
+    if (!job.promptIds || !job.promptIds.length) { if (Date.now() - job.startTime > 300000) { job.status = 'error'; job.endTime = job.startTime; persist(job); } return; }
+    let completed = 0, errored = false; const names = new Set();
+    for (const pid of job.promptIds) { try { const data = await fetch('/api/comfy/api/history/' + pid).then(r => r.ok ? r.json() : null); const entry = data && data[pid]; if (!entry) continue; if (entry.status && entry.status.status_str === 'error') { errored = true; break; } if (entry.status && entry.status.completed) { completed++; const outs = entry.outputs || {}; for (const nodeOut of Object.values(outs)) for (const items of Object.values(nodeOut)) if (Array.isArray(items)) for (const it of items) if (it.filename) names.add(it.filename); } } catch (e) {} }
+    if (errored) { job.status = 'error'; job.endTime = Date.now(); job._pct = 100; persist(job); return; }
+    if (completed >= (job.runs || 1)) { if (names.size) { try { const files = await fetch('/api/recent-outputs?since=' + job.startTime).then(r => r.json()); const seen = new Set(job.results.map(o => o.path)); for (const f of files) if (names.has(f.name) && !seen.has(f.path)) job.results.push({ path: f.path, name: f.name, thumbPath: f.thumbPath }); } catch (e) {} } job.status = 'done'; job.endTime = Date.now(); job._pct = 100; persist(job); }
+  } finally { job._recovering = false; }
+}
+function launchJob(p) {
+  const id = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const job = reactive({ id, workflow: p.workflowLabel, workflowFile: p.workflowFile, prompt: (p.promptText || '').slice(0, 200), fullPrompt: p.promptText || '', loras: p.loras || null, sourceFile: p.source.name, sourcePath: p.source.path, sourceImageUrl: '/file/' + enc(p.source.path), status: 'running', runs: 1, presets: p.preset ? [p.preset] : [], startTime: Date.now(), endTime: null, promptIds: [], results: [], _pct: 0, _node: 'Preparing…', _log: [], _params: p, _live: true });
+  store.jobs.unshift(job); persist(job);
+  (async () => {
+    const log = (m, cls) => { job._log.push({ m, cls: cls || '' }); if (job._log.length > 200) job._log.shift(); };
+    let uploadedName = null;
+    try { if (p.source.type === 'image') { job._node = 'Uploading image…'; uploadedName = await uploadImagePath(p.source.path); } else if (p.source.type === 'video') { job._node = 'Extracting frame…'; const b = await firstVideoFrameBlob('/file/' + enc(p.source.path)); uploadedName = await uploadBlob(b, 'png'); } } catch (e) { log('input upload: ' + e.message, 'err'); }
+    if (uploadedName) log('Input uploaded as ' + uploadedName);
+    job._node = 'Applying fields…';
+    let data;
+    try { data = await fetch('/api/workflow-prompt?name=' + enc(p.workflowFile), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldValues: p.fieldValues }) }).then(r => r.json()); } catch (e) { log('build prompt: ' + e.message, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
+    if (data.error) { log('error: ' + data.error, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
+    (data.fieldWarnings || []).forEach(w => log('field: ' + w, 'warn'));
+    const graph = data.workflow || null; const prompt = data.prompt || data;
+    if (uploadedName) for (const n of Object.values(prompt)) { const t = (n._meta && n._meta.title || '').toUpperCase(); if (t.includes('MAIN IMAGE') && n.inputs) n.inputs.image = uploadedName; }
+    for (const n of Object.values(prompt)) { if (n.inputs && !p.seedPinned) for (const k of Object.keys(n.inputs)) { if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = Math.floor(Math.random() * 2147483647); } if (n.is_changed) delete n.is_changed; }
+    const ok = await execWs(job, prompt, graph, log);
+    job.status = ok ? 'done' : 'error'; job.endTime = Date.now(); job._pct = 100; persist(job);
+    if (jobChannel && job.promptIds[0]) jobChannel.postMessage({ type: 'done', promptId: job.promptIds[0], ok });
+    if (ok) { job._node = 'Scanning outputs…'; await collectOutputs(job); }
+  })();
+  return id;
+}
+function cancelJob(job) { if (job && job._interrupt) job._interrupt(); if (job) job._node = 'Interrupting…'; }
+async function deleteJob(job) { const i = store.jobs.indexOf(job); if (i >= 0) store.jobs.splice(i, 1); try { await JobDB.del(job.id); } catch (e) {} }
+
+const actions = {
+  async loadDir(dir) { store.browser.loading = true; try { const q = dir ? ('?limit=300&dir=' + enc(dir)) : '?limit=300'; const r = await fetch('/api/list' + q).then(x => x.json()); store.browser.items = r.items || []; store.browser.parent = r.parent; store.browser.dir = r.dir || ''; store.browser.loaded = true; } catch (e) {} store.browser.loading = false; },
+  async loadWorkflows() { if (!store.workflowsLoaded) { try { store.workflows = await fetch('/api/workflows').then(r => r.json()); store.workflowsLoaded = true; } catch (e) {} } return store.workflows; },
+  launchJob, cancelJob, deleteJob,
+};
+
+// Hydrate jobs from IndexedDB once, resolve orphaned running jobs, and merge in
+// jobs created by other tabs/pages without clobbering this tab's live jobs.
+async function hydrateJobs() {
+  try {
+    const all = await JobDB.getAll(); all.sort((a, b) => b.startTime - a.startTime);
+    for (const j of all) { if (byId(j.id)) continue; j._pct = (j.status === 'done' || j.status === 'complete') ? 100 : 0; j._node = j.status === 'running' ? 'reconnecting…' : ''; j._log = []; j._live = false; store.jobs.push(reactive(j)); }
+    store.jobs.sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.startTime - a.startTime);
+    store.jobsLoaded = true;
+  } catch (e) {}
+  // Poll /history for every queued running job (incl. live ones) — a WebSocket
+  // can miss the completion message, and without this backstop such a job would
+  // spin forever. /history is authoritative, so it's safe alongside a live WS.
+  for (const j of store.jobs.filter(x => x.status === 'running' && x.promptIds && x.promptIds.length && !x._recovering)) recoverJob(j);
+}
+hydrateJobs();
+setInterval(hydrateJobs, 8000);
+if (jobChannel) jobChannel.addEventListener('message', (evt) => {
+  const m = evt.data || {}; if (!m || !m.promptId) return;
+  const j = store.jobs.find(x => (x.promptIds || []).includes(m.promptId)); if (!j) return;
+  if (m.type === 'progress' && m.pct != null) j._pct = m.pct;
+  else if (m.type === 'executing') { if (m.node) j._node = m.node; if (m.pct != null) j._pct = m.pct; }
+  else if (m.type === 'done') { j.status = m.ok ? 'done' : 'error'; j._pct = 100; }
+});
+
+const FieldControl = {
+  props: ['field'],
+  setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount }; },
+  template: `
+    <textarea v-if="t==='multiline'" class="fc-input" style="width:100%;resize:vertical" rows="3" v-model="field.value"></textarea>
+    <span v-else-if="field.kind==='seed'" class="seed-wrap">
+      <input type="number" class="fc-input" style="width:160px" v-model="field.value" placeholder="random" min="0">
+      <button type="button" class="seed-switch" :class="{on: field._pin}" @click="field._pin = !field._pin"><span class="thumb">{{ field._pin ? '📌' : '🎲' }}</span></button>
+    </span>
+    <input v-else-if="t==='boolean'" type="checkbox" v-model="field.value" style="width:16px;height:16px;accent-color:#0a84ff">
+    <input v-else-if="t==='int' || t==='float'" type="number" class="fc-input" style="width:120px" :step="t==='float' ? '0.01' : '1'" v-model="field.value">
+    <select v-else-if="t==='combo'" class="fc-input" v-model="field.value"><option :value="field.value">{{ field.value }}</option></select>
+    <div v-else-if="t==='lora_rows'" class="lora-rows">
+      <div v-for="(r,i) in field.value" :key="i" v-show="r.on || loraExpanded" class="lora-row" :class="{off: !r.on}"><input type="checkbox" v-model="r.on"><label :title="r.lora">{{ shortLora(r.lora) }}</label><input type="number" step="0.05" v-model.number="r.strength"></div>
+      <div v-if="!field.value.length" class="muted" style="font-size:12px">no lora slots</div>
+      <div v-else-if="offCount" class="lora-more" @click="loraExpanded=!loraExpanded"><span>{{ loraExpanded ? 'Hide disabled loras' : ('＋ ' + offCount + ' more lora' + (offCount===1?'':'s')) }}</span><span class="lora-arrow" :class="{open: loraExpanded}">▾</span></div>
+    </div>
+    <span v-else-if="t==='image' || t==='video' || t==='audio'" class="img-field">
+      <img v-if="t==='image' && field.value" :src="'/file/' + encodeURIComponent(field.value)" @error="$event.target.style.display='none'">
+      <input type="text" class="fc-input" style="width:220px" v-model="field.value">
+    </span>
+    <input v-else type="text" class="fc-input" style="width:280px;max-width:100%" v-model="field.value">
+  `,
+};
+
+// Detected-fields form + real remix (launches a job into the central store).
+const FieldsForm = {
+  props: { name: String, source: Object, prefillPrompt: String, prefillSeed: [Number, String] },
+  components: { FieldControl },
+  setup(props) {
+    const state = reactive({ fields: [], presets: [], loading: true, error: '' });
+    const selectedPreset = ref(''); const msg = ref(''); const startedId = ref(null);
+    const job = computed(() => startedId.value ? byId(startedId.value) : null);
+    async function load() {
+      state.loading = true; startedId.value = null; msg.value = '';
+      try {
+        const cfg = await fetch('/api/workflow-field-config?name=' + enc(props.name)).then(r => r.json());
+        if (cfg.error || !Array.isArray(cfg.fields)) { state.error = cfg.error || 'No config'; state.fields = []; state.presets = []; }
+        else {
+          state.error = ''; state.presets = cfg.presets || [];
+          for (const f of cfg.fields) { if (f.kind === 'seed') { if (Number(f.value) < 0) f.value = ''; f._pin = false; } if (ctype(f) === 'lora_rows' && !Array.isArray(f.value)) f.value = []; if (ctype(f) === 'boolean') f.value = !!f.value; }
+          if (props.prefillPrompt) { const pf = cfg.fields.find(f => f.kind === 'prompt' && !f.variant); if (pf) pf.value = props.prefillPrompt; }
+          if (props.prefillSeed != null && Number(props.prefillSeed) >= 0) { const sf = cfg.fields.find(f => f.kind === 'seed'); if (sf) sf.value = props.prefillSeed; }
+          state.fields = cfg.fields;
+        }
+      } catch (e) { state.error = String(e.message || e); }
+      state.loading = false;
+    }
+    onMounted(load); watch(() => props.name, load);
+    const enabledFields = computed(() => state.fields.filter(f => f.enabled).slice().sort(loraLast));
+    const hiddenFields = computed(() => state.fields.filter(f => !f.enabled).slice().sort(loraLast));
+    const isWide = f => WIDE.has(f.kind);
+    function collectFieldValues() {
+      const fv = {};
+      for (const f of state.fields) { if (!f.enabled) continue; const t = ctype(f);
+        if (f.kind === 'seed') { if (f._pin && String(f.value).trim() !== '') fv[f.id] = parseInt(f.value, 10); continue; }
+        if (t === 'lora_rows') { fv[f.id] = (f.value || []).map(r => ({ slot: r.slot, on: r.on, strength: r.strength })); continue; }
+        if (t === 'boolean') { fv[f.id] = !!f.value; continue; }
+        if (f.value !== '' && f.value != null) fv[f.id] = f.value;
+      }
+      if (selectedPreset.value) fv.__preset = selectedPreset.value;
+      return fv;
+    }
+    function remix() {
+      if (!props.source) return;
+      const pf = state.fields.find(f => f.kind === 'prompt' && f.enabled && !f.variant);
+      const loras = state.fields.filter(f => f.kind === 'lora_list' && f.enabled).flatMap(f => (f.value || [])).filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+      const seedPinned = state.fields.some(f => f.enabled && f.kind === 'seed' && f._pin && String(f.value).trim() !== '');
+      const label = props.name.replace(/^APP /, '').replace(/\.json$/, '');
+      startedId.value = launchJob({ workflowFile: props.name, workflowLabel: label, fieldValues: collectFieldValues(), source: props.source, promptText: pf ? pf.value : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned });
+    }
+    async function save() { const edits = {}; for (const f of state.fields) edits[f.id] = { enabled: !!f.enabled, label: f.label }; try { const r = await fetch('/api/workflow-field-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: props.name, edits }) }).then(x => x.json()); msg.value = r.ok ? 'Saved.' : 'Save failed'; } catch (e) { msg.value = 'Save failed'; } setTimeout(() => { if (/Saved|failed/.test(msg.value)) msg.value = ''; }, 2500); }
+    const outUrl = f => (isVid(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
+    return { state, selectedPreset, msg, job, enabledFields, hiddenFields, isWide, remix, save, load, cancelJob, outUrl };
+  },
+  template: `
+    <div v-if="state.loading" class="muted">Loading fields…</div>
+    <div v-else-if="state.error" class="muted">Couldn’t load fields: {{ state.error }}</div>
+    <div v-else>
+      <div class="fields-grid">
+        <div v-for="f in enabledFields" :key="f.id" class="fc-field" :class="{wide: isWide(f)}">
+          <label class="fc-lbl"><input type="checkbox" class="fc-hidden-tgl" checked @change="f.enabled = false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" class="warn" title="not on output path">⚠</span></label>
+          <field-control :field="f"></field-control>
+        </div>
+        <div v-if="!enabledFields.length" class="muted">No fields enabled — open the hidden list below.</div>
+      </div>
+      <div v-if="state.presets.length" style="margin-top:14px"><label class="fc-lbl" style="margin-bottom:5px">Style preset</label>
+        <select class="fc-input" v-model="selectedPreset"><option value="">— none —</option><option v-for="p in state.presets" :key="p.title" :value="p.title">{{ p.title }}</option></select>
+      </div>
+      <details class="hidden-box" v-if="hiddenFields.length"><summary>{{ hiddenFields.length }} hidden field{{ hiddenFields.length === 1 ? '' : 's' }}</summary>
+        <div class="fc-field" v-for="f in hiddenFields" :key="f.id"><label class="fc-lbl"><input type="checkbox" class="fc-hidden-tgl" @change="f.enabled = true" title="Show field"> {{ f.label }} <span class="muted" style="text-transform:none">· {{ f.kind }}</span></label><field-control :field="f"></field-control></div>
+      </details>
+      <div class="toolbar">
+        <button v-if="!job || job.status!=='running'" class="btn go" @click="remix" :disabled="!source">▶ Remix</button>
+        <button v-else class="btn cancel" @click="cancelJob(job)">■ Cancel</button>
+        <button class="btn primary" @click="save">Save field setup</button>
+        <button class="btn" @click="load">↻ Refresh</button>
+        <span class="muted" v-if="job">{{ job.status==='running' ? (job._node||'…') : job.status }}</span>
+        <span class="muted">{{ msg }}</span>
+      </div>
+      <div v-if="job && (job.status==='running' || job._pct>0)" class="prog"><div class="prog-fill" :style="{width: job._pct + '%'}"></div></div>
+      <div v-if="job && job._log.length" class="log"><div v-for="(l,i) in job._log" :key="i" :class="l.cls">{{ l.m }}</div></div>
+      <div v-if="job && job.results.length" class="out-grid"><a v-for="f in job.results" :key="f.path" class="out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank"><img :src="outUrl(f)" loading="lazy"></a></div>
+    </div>
+  `,
+};
+
+const BrowserView = {
+  emits: ['open'],
+  setup(props, { emit }) {
+    const b = store.browser;
+    onMounted(() => { if (!b.loaded) actions.loadDir(''); });
+    const thumbUrl = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
+    const clickItem = it => { if (it.isDir) actions.loadDir(it.path); else if (it.isImage || it.isVideo) emit('open', it.path); };
+    const dirName = d => (d || '').split(/[\\/]/).filter(Boolean).pop() || 'Media';
+    return { b, load: actions.loadDir, thumbUrl, clickItem, dirName, WF_ICON };
+  },
+  template: `
+    <div class="wrap">
+      <div class="crumbs">
+        <button v-if="b.parent" class="btn" @click="load(b.parent)">↑ Up</button>
+        <span class="muted">{{ dirName(b.dir) }}</span>
+        <span class="muted" style="margin-left:auto">{{ b.items.length }} items</span>
+      </div>
+      <div v-if="b.loading && !b.items.length" class="muted">Loading…</div>
+      <div v-else class="grid">
+        <div v-for="it in b.items" :key="it.path" class="cell" @click="clickItem(it)" :title="it.name">
+          <span v-if="it.isDir" class="folder">📁</span>
+          <img v-else-if="thumbUrl(it)" :src="thumbUrl(it)" loading="lazy" @error="$event.target.style.visibility='hidden'">
+          <span v-else class="folder">🎞️</span>
+          <span v-if="it.isVideo" class="badge">▶</span>
+          <span v-if="it.workflow" class="badge" style="left:4px;right:auto" v-html="WF_ICON" title="Has embedded workflow"></span>
+          <span class="cap">{{ it.name }}</span>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
+const InspectModal = {
+  props: { file: String },
+  components: { FieldsForm },
+  emits: ['close'],
+  setup(props, { emit }) {
+    const workflows = computed(() => store.workflows); const wf = ref('');
+    const meta = reactive({ prompt: '', seed: null, loaded: false });
+    const isVideo = computed(() => isVid(props.file));
+    const source = computed(() => ({ path: props.file, name: (props.file || '').split(/[\\/]/).pop(), type: isVid(props.file) ? 'video' : (isImg(props.file) ? 'image' : 'audio') }));
+    async function loadMeta() { meta.loaded = false; meta.prompt = ''; meta.seed = null; let embeddedWf = null; try { const md = await fetch('/api/metadata?path=' + enc(props.file)).then(r => r.json()); meta.prompt = mainPromptOf(md && md.prompt); embeddedWf = md && md.workflow; if (md && md.prompt) for (const n of Object.values(md.prompt)) { if (n && n.inputs) for (const [k, v] of Object.entries(n.inputs)) if (/seed/i.test(k) && typeof v === 'number' && v >= 0) meta.seed = v; } } catch (e) {} meta.loaded = true; return embeddedWf; }
+    async function pickWorkflow(embeddedWf) { const wfs = await actions.loadWorkflows(); let pick = wfs[0] && wfs[0].name; if (embeddedWf && embeddedWf.nodes) { try { const m = await fetch('/api/workflow-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: embeddedWf }) }).then(r => r.json()); if (m && m.name) pick = m.name; } catch (e) {} } if (!wf.value) wf.value = pick || ''; }
+    async function init() { const embeddedWf = await loadMeta(); await pickWorkflow(embeddedWf); }
+    const onKey = e => { if (e.key === 'Escape') emit('close'); };
+    onMounted(() => { init(); window.addEventListener('keydown', onKey); });
+    onUnmounted(() => window.removeEventListener('keydown', onKey));
+    watch(() => props.file, () => { wf.value = ''; init(); });
+    return { workflows, wf, meta, source, isVideo, fileUrl: computed(() => '/file/' + enc(props.file)), fileName: computed(() => (props.file || '').split(/[\\/]/).pop()), emit };
+  },
+  template: `
+    <div class="overlay" @click.self="emit('close')">
+      <div class="dialog">
+        <div class="dialog-head">
+          <b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fileName }}</b>
+          <select class="fc-input" v-model="wf" style="margin-left:8px"><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select>
+          <button class="x" @click="emit('close')" title="Close (Esc)">✕</button>
+        </div>
+        <div class="dialog-body">
+          <div class="media-pane"><video v-if="isVideo" :src="fileUrl" controls loop></video><img v-else :src="fileUrl"></div>
+          <div class="form-pane"><fields-form v-if="wf && meta.loaded" :name="wf" :source="source" :prefill-prompt="meta.prompt" :prefill-seed="meta.seed" :key="wf"></fields-form><div v-else class="muted">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
+const JobsView = {
+  setup() {
+    const router = useRouter();
+    onMounted(hydrateJobs);
+    const outUrl = f => (isVid(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
+    const rerun = j => { if (j._params) launchJob(Object.assign({}, j._params)); else router.push({ path: '/', query: { file: j.sourcePath } }); };
+    return { jobs: computed(() => store.jobs), outUrl, del: deleteJob, cancel: cancelJob, rerun, timeAgo };
+  },
+  template: `
+    <div class="wrap">
+      <div class="crumbs"><b style="font-size:16px">Jobs</b><span class="muted" style="margin-left:auto">{{ jobs.length }} total</span></div>
+      <div v-if="!jobs.length" class="muted">No jobs yet. Remix an image to start one.</div>
+      <div class="jobs-list">
+        <div v-for="j in jobs" :key="j.id" class="job">
+          <a class="job-src" :href="'/file/'+encodeURIComponent(j.sourcePath)" target="_blank"><img v-if="j.sourceImageUrl" :src="j.sourceImageUrl"></a>
+          <div class="job-main">
+            <div class="job-title"><span class="dot" :class="j.status"></span>{{ j.workflow }} <span class="muted">· {{ timeAgo(j.startTime) }}</span></div>
+            <div v-if="j.prompt" class="job-prompt">{{ j.prompt }}</div>
+            <div v-if="j.status==='running'" class="prog"><div class="prog-fill" :class="{indet: !j._pct}" :style="j._pct ? {width:j._pct+'%'} : {}"></div></div>
+            <div v-if="j.status==='running'" class="muted" style="font-size:11px">{{ j._pct || 0 }}% — {{ j._node || 'waiting…' }}</div>
+            <div v-if="j.results && j.results.length" class="out-grid"><a v-for="f in j.results" :key="f.path" class="out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank"><img :src="outUrl(f)" loading="lazy"></a></div>
+          </div>
+          <div class="job-acts">
+            <button v-if="j.status==='running'" class="mini" @click="cancel(j)" title="Cancel">■</button>
+            <button v-else class="mini" @click="rerun(j)" title="Re-run">♻</button>
+            <button class="mini" @click="del(j)" title="Delete">🗑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
+const FrameView = { props: { src: String }, template: `<iframe class="spa-frame" :src="src"></iframe>` };
+const ChatView = { components: { FrameView }, template: `<frame-view src="/chat"></frame-view>` };
+const VoiceView = { components: { FrameView }, template: `<frame-view src="/voice"></frame-view>` };
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    { path: '/', name: 'browser', component: BrowserView },
+    { path: '/jobs', name: 'jobs', component: JobsView },
+    { path: '/chat', name: 'chat', component: ChatView },
+    { path: '/voice', name: 'voice', component: VoiceView },
+  ],
+});
+
+createApp({
+  components: { InspectModal },
+  setup() {
+    const route = useRoute();
+    const router = useRouter();
+    const inspectFile = computed(() => route.path === '/' && route.query.file ? String(route.query.file) : null);
+    const openInspect = (path) => router.push({ path: '/', query: { file: path } });
+    const closeInspect = () => router.push({ path: '/', query: {} });
+    const openJobs = () => router.push('/jobs');
+    return { route, runningCount, leadPct, inspectFile, openInspect, closeInspect, openJobs };
+  },
+  template: `
+    <div v-if="runningCount>0" class="gtop" @click="openJobs" :title="runningCount + ' running — open Jobs'"><div class="gtop-fill" :class="{indet: leadPct===0}" :style="leadPct>0 ? {width: leadPct + '%'} : {}"></div></div>
+    <div class="topbar">
+      <span class="brand">ComfyRemix <span class="beta">SPA</span></span>
+      <router-link to="/" class="nav">Browser</router-link>
+      <router-link to="/jobs" class="nav">Jobs<span v-if="runningCount" class="pill">{{ runningCount }}</span></router-link>
+      <router-link to="/chat" class="nav">Chat</router-link>
+      <router-link to="/voice" class="nav">Voice</router-link>
+      <a href="/" class="nav" style="margin-left:auto">Classic app ↗</a>
+    </div>
+    <div class="view">
+      <router-view v-slot="{ Component }"><keep-alive><component :is="Component" @open="openInspect"></component></keep-alive></router-view>
+    </div>
+    <inspect-modal v-if="inspectFile" :file="inspectFile" @close="closeInspect"></inspect-modal>
+  `,
+}).use(router).mount('#app');
+</script>
