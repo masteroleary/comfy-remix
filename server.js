@@ -1413,12 +1413,6 @@ const server = http.createServer((req, res) => {
     serveFile(path.join(__dirname, pn.slice(1)), req, res); return;
   }
 
-  // SPA pilot (Vue 3 + Vue Router, hash routing). Client-side routes live under
-  // /app#/... so the server only serves the shell here.
-  if (pn === '/app' && req.method === 'GET') {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    serveFile(path.join(__dirname, 'spa.html'), req, res); return;
-  }
   // Vendored front-end libs (Vue, Vue Router). Allowlisted .js only, path-safe.
   if (pn.startsWith('/vendor/') && req.method === 'GET') {
     const rel = pn.slice('/vendor/'.length);
