@@ -2658,13 +2658,24 @@ $('statusFeatures').onclick = () => {
   .rmx-node-k{color:#8e8e93;min-width:96px;flex:none}
   .rmx-node-v{color:#c7c7cc;word-break:break-word;overflow-wrap:anywhere}
   .rmx-raw{margin:0;padding:8px 10px;font:11px/1.4 ui-monospace,monospace;color:#a8b3c7;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
+  .rmx-nodegroup{margin:2px 0 10px}
+  .rmx-nodegroup-title{font-size:10px;color:#7d7d82;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;border-bottom:1px solid #2c2c2e;padding-bottom:3px}
+  .rmx-picker-overlay{position:fixed;inset:0;z-index:3100;background:#000c;display:flex;align-items:center;justify-content:center;padding:24px}
+  .rmx-picker{background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+  .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px}
+  .rmx-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:12px;overflow:auto}
+  .rmx-picker-cell{position:relative;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:10px;overflow:hidden;cursor:pointer;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+  .rmx-picker-cell:hover{border-color:#0a84ff}
+  .rmx-picker-cell img{width:100%;height:100%;object-fit:cover}
+  .rmx-picker-folder{font-size:34px}
+  .rmx-picker-cap{position:absolute;left:0;right:0;bottom:0;padding:3px 5px;font-size:10px;background:linear-gradient(transparent,#000d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @media (max-width:760px){.rmx-body{grid-template-columns:1fr}.rmx-media{max-height:34vh}.rmx-form{max-height:none}}
 </style>
 <script src="/vendor/vue.global.prod.js"></script>
 <script>
 (function () {
   if (!window.Vue) { console.warn('[remix] Vue not loaded'); return; }
-  const { createApp, reactive, ref, computed, watch, onMounted, onUnmounted } = Vue;
+  const { createApp, reactive, ref, computed, watch, onMounted, onUnmounted, provide, inject } = Vue;
   const enc = encodeURIComponent;
   const WIDE = new Set(['prompt', 'negative_prompt', 'lora_list', 'image_input', 'video_input', 'audio_input']);
   const loraLast = (a, b) => (/^lora/.test(a.kind) ? 1 : 0) - (/^lora/.test(b.kind) ? 1 : 0);
@@ -2880,6 +2891,11 @@ $('statusFeatures').onclick = () => {
         else if (p.source.type === 'video') { job._node = 'Extracting frame…'; const b = await firstVideoFrameBlob('/file/' + enc(p.source.path)); uploadedName = await uploadBlob(b, 'png'); }
       } catch (e) { log('input upload: ' + e.message, 'err'); }
       if (uploadedName) log('Input uploaded as ' + uploadedName);
+      // Upload any gallery-picked image fields so ComfyUI gets an input filename.
+      for (const mf of (p.mediaFields || [])) {
+        try { const up = await uploadImagePath(mf.value); if (up) { p.fieldValues[mf.id] = up; log('Picked image uploaded as ' + up); } }
+        catch (e) { log('media upload (' + mf.id + '): ' + e.message, 'err'); }
+      }
       job._node = 'Applying fields…';
       let data;
       try { data = await fetch('/api/workflow-prompt?name=' + enc(p.workflowFile), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldValues: p.fieldValues }) }).then(r => r.json()); }
@@ -2903,7 +2919,7 @@ $('statusFeatures').onclick = () => {
 
   const FieldControl = {
     props: ['field'],
-    setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount }; },
+    setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); const openPicker = inject('openPicker', null); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount, openPicker }; },
     template: `
       <textarea v-if="t==='multiline'" class="rmx-inp" style="width:100%;resize:vertical" rows="3" v-model="field.value"></textarea>
       <span v-else-if="field.kind==='seed'" class="rmx-seedwrap">
@@ -2924,7 +2940,8 @@ $('statusFeatures').onclick = () => {
       </div>
       <span v-else-if="t==='image' || t==='video' || t==='audio'" class="rmx-imgf">
         <img v-if="t==='image' && field.value" :src="'/file/' + encodeURIComponent(field.value)" @error="$event.target.style.display='none'">
-        <input type="text" class="rmx-inp" style="width:220px" v-model="field.value">
+        <input type="text" class="rmx-inp" style="width:200px" v-model="field.value">
+        <button v-if="openPicker && t==='image'" type="button" class="rmx-btn2" @click="openPicker(field)">🖼 Browse</button>
       </span>
       <input v-else type="text" class="rmx-inp" style="width:280px;max-width:100%" v-model="field.value">
     `,
@@ -3010,6 +3027,21 @@ $('statusFeatures').onclick = () => {
       const enabledFields = computed(() => cfg.fields.filter(f => f.enabled).slice().sort(loraLast));
       const hiddenFields = computed(() => cfg.fields.filter(f => !f.enabled).slice().sort(loraLast));
       const isWide = f => WIDE.has(f.kind);
+      // Group the non-lora controls by the graph node they came from (each group
+      // on its own line under a small node-title heading). LoRAs stay separate.
+      const nodeGroups = computed(() => {
+        const out = [], byKey = new Map();
+        for (const f of enabledFields.value) {
+          if (/^lora/.test(f.kind)) continue;
+          const t = (f.targets || [])[0] || {};
+          const key = String(t.nodeId) + '|' + (t.title || t.class || '');
+          let g = byKey.get(key);
+          if (!g) { g = { key, title: t.title || t.class || ('#' + t.nodeId), fields: [] }; byKey.set(key, g); out.push(g); }
+          g.fields.push(f);
+        }
+        return out;
+      });
+      const enabledLoras = computed(() => enabledFields.value.filter(f => /^lora/.test(f.kind)));
       function collectFieldValues() {
         const fv = {};
         for (const f of cfg.fields) { if (!f.enabled) continue; const t = ctype(f);
@@ -3027,7 +3059,9 @@ $('statusFeatures').onclick = () => {
         const loras = cfg.fields.filter(f => f.kind === 'lora_list' && f.enabled).flatMap(f => (f.value || [])).filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
         const seedPinned = cfg.fields.some(f => f.enabled && f.kind === 'seed' && f._pin && String(f.value).trim() !== '');
         const label = wf.value.replace(/^APP /, '').replace(/\.json$/, '');
-        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? pf.value : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned });
+        // Image fields set to a Media path (via the picker) need uploading at run.
+        const mediaFields = cfg.fields.filter(f => f.enabled && f.kind === 'image_input' && f.value && /[\\/]/.test(String(f.value))).map(f => ({ id: f.id, value: f.value, type: 'image' }));
+        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? pf.value : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields });
       }
       function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
@@ -3080,7 +3114,21 @@ $('statusFeatures').onclick = () => {
       });
       const nodeInputs = n => Object.entries(n.inputs || {}).map(([k, v]) => [k, Array.isArray(v) ? ('← [' + v[0] + ']') : (typeof v === 'string' ? v : JSON.stringify(v))]);
 
-      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs };
+      // Gallery picker for image/video/audio fields (browse the app's Media).
+      const picker = reactive({ open: false, type: 'image', dir: '', items: [], parent: null, loading: false });
+      let pickerField = null;
+      async function pickerLoad(dir) {
+        picker.loading = true;
+        try { const q = dir ? ('?limit=500&dir=' + enc(dir)) : '?limit=500'; const r = await fetch('/api/list' + q).then(x => x.json()); picker.items = (r.items || []).filter(it => it.isDir || (picker.type === 'image' ? it.isImage : picker.type === 'video' ? it.isVideo : it.isAudio)); picker.parent = r.parent; picker.dir = r.dir || ''; } catch (e) {}
+        picker.loading = false;
+      }
+      function openPicker(field) { pickerField = field; const k = field.kind; picker.type = k === 'video_input' ? 'video' : k === 'audio_input' ? 'audio' : 'image'; picker.open = true; pickerLoad(''); }
+      function pickerClick(it) { if (it.isDir) pickerLoad(it.path); else { if (pickerField) pickerField.value = it.path; picker.open = false; } }
+      const pickerThumb = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
+      const pickerDirName = computed(() => (picker.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'Media');
+      provide('openPicker', openPicker);
+
+      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, pickerLoad, pickerClick, pickerThumb, pickerDirName };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3102,13 +3150,22 @@ $('statusFeatures').onclick = () => {
               <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
               <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
               <div v-else>
-                <div class="rmx-grid">
-                  <div v-for="f in enabledFields" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
-                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                <div v-for="g in nodeGroups" :key="g.key" class="rmx-nodegroup">
+                  <div class="rmx-nodegroup-title">{{ g.title }}</div>
+                  <div class="rmx-grid">
+                    <div v-for="f in g.fields" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
+                      <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                      <field-control :field="f"></field-control>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="enabledLoras.length" class="rmx-grid" style="margin-top:6px">
+                  <div v-for="f in enabledLoras" :key="f.id" class="rmx-field wide">
+                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label>
                     <field-control :field="f"></field-control>
                   </div>
-                  <div v-if="!enabledFields.length" class="rmx-mut">No fields enabled — see hidden list.</div>
                 </div>
+                <div v-if="!enabledFields.length" class="rmx-mut">No fields enabled — see hidden list.</div>
                 <div v-if="cfg.presets.length" style="margin-top:12px"><label class="rmx-lbl" style="margin-bottom:5px">Style preset</label>
                   <select class="rmx-inp" v-model="selectedPreset"><option value="">— none —</option><option v-for="p in cfg.presets" :key="p.title" :value="p.title">{{ p.title }}</option></select>
                 </div>
@@ -3140,6 +3197,25 @@ $('statusFeatures').onclick = () => {
                   <details class="rmx-node"><summary>Raw prompt JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embedded, null, 2) }}</pre></details>
                 </div>
               </details>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="picker.open" class="rmx-picker-overlay" @click.self="picker.open=false">
+        <div class="rmx-picker">
+          <div class="rmx-picker-head">
+            <b>Pick image</b>
+            <button v-if="picker.parent" class="rmx-btn2" @click="pickerLoad(picker.parent)">↑ Up</button>
+            <span class="rmx-mut">{{ pickerDirName }}</span>
+            <button class="rmx-x" style="margin-left:auto" @click="picker.open=false">✕</button>
+          </div>
+          <div v-if="picker.loading" class="rmx-mut" style="padding:16px">Loading…</div>
+          <div v-else class="rmx-picker-grid">
+            <div v-for="it in picker.items" :key="it.path" class="rmx-picker-cell" @click="pickerClick(it)" :title="it.name">
+              <span v-if="it.isDir" class="rmx-picker-folder">📁</span>
+              <img v-else-if="pickerThumb(it)" :src="pickerThumb(it)" loading="lazy">
+              <span v-else class="rmx-picker-folder">🎞️</span>
+              <span class="rmx-picker-cap">{{ it.name }}</span>
             </div>
           </div>
         </div>
