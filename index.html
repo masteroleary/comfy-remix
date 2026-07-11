@@ -2659,6 +2659,9 @@ $('statusFeatures').onclick = () => {
   .rmx-node-v{color:#c7c7cc;word-break:break-word;overflow-wrap:anywhere}
   .rmx-raw{margin:0;padding:8px 10px;font:11px/1.4 ui-monospace,monospace;color:#a8b3c7;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
   .rmx-nodegroup{margin:2px 0 10px}
+  .rmx-lora-cols{display:flex;gap:16px;margin-top:6px}
+  .rmx-lora-col{flex:1;min-width:0}
+  @media (max-width:640px){.rmx-lora-cols{flex-direction:column;gap:8px}}
   .rmx-nodegroup-title{font-size:10px;color:#7d7d82;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;border-bottom:1px solid #2c2c2e;padding-bottom:3px}
   .rmx-picker-overlay{position:fixed;inset:0;z-index:3100;background:#000c;display:flex;align-items:center;justify-content:center;padding:24px}
   .rmx-picker{background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:900px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
@@ -3042,6 +3045,9 @@ $('statusFeatures').onclick = () => {
         return out;
       });
       const enabledLoras = computed(() => enabledFields.value.filter(f => /^lora/.test(f.kind)));
+      const loraHigh = computed(() => enabledLoras.value.filter(f => f.variant === 'high'));
+      const loraLow = computed(() => enabledLoras.value.filter(f => f.variant === 'low'));
+      const loraOther = computed(() => enabledLoras.value.filter(f => f.variant !== 'high' && f.variant !== 'low'));
       function collectFieldValues() {
         const fv = {};
         for (const f of cfg.fields) { if (!f.enabled) continue; const t = ctype(f);
@@ -3128,7 +3134,7 @@ $('statusFeatures').onclick = () => {
       const pickerDirName = computed(() => (picker.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'Media');
       provide('openPicker', openPicker);
 
-      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, pickerLoad, pickerClick, pickerThumb, pickerDirName };
+      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, pickerLoad, pickerClick, pickerThumb, pickerDirName };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3159,8 +3165,18 @@ $('statusFeatures').onclick = () => {
                     </div>
                   </div>
                 </div>
-                <div v-if="enabledLoras.length" class="rmx-grid" style="margin-top:6px">
-                  <div v-for="f in enabledLoras" :key="f.id" class="rmx-field wide">
+                <div v-if="loraHigh.length || loraLow.length" class="rmx-lora-cols">
+                  <div class="rmx-lora-col">
+                    <div class="rmx-nodegroup-title">High-noise LoRAs</div>
+                    <div v-for="f in loraHigh" :key="f.id" class="rmx-field"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label><field-control :field="f"></field-control></div>
+                  </div>
+                  <div class="rmx-lora-col">
+                    <div class="rmx-nodegroup-title">Low-noise LoRAs</div>
+                    <div v-for="f in loraLow" :key="f.id" class="rmx-field"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label><field-control :field="f"></field-control></div>
+                  </div>
+                </div>
+                <div v-if="loraOther.length" class="rmx-grid" style="margin-top:6px">
+                  <div v-for="f in loraOther" :key="f.id" class="rmx-field wide">
                     <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label>
                     <field-control :field="f"></field-control>
                   </div>
