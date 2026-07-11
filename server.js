@@ -2519,12 +2519,13 @@ runTests();
     if (!wfName) { jsonRes(res, { error: 'Missing name' }, 400); return; }
     const wfPath = path.join(WORKFLOWS_DIR, wfName);
     if (!path.resolve(wfPath).startsWith(path.resolve(WORKFLOWS_DIR))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
-    fs.readFile(wfPath, 'utf8', (err, raw) => {
+    fs.readFile(wfPath, 'utf8', async (err, raw) => {
       if (err) { jsonRes(res, { error: err.message }, 500); return; }
       let wf; try { wf = JSON.parse(raw.replace(/^﻿/, '')); } catch (e) { jsonRes(res, { error: 'Parse error: ' + e.message }, 500); return; }
       try {
         const st = fs.statSync(wfPath, { throwIfNoEntry: false });
-        jsonRes(res, buildFieldConfig(wf, wfName, st ? st.mtimeMs : 0));
+        let objectInfo = null; try { objectInfo = await getObjectInfo(); } catch (e) {}   // combo choices (cached; null if ComfyUI down)
+        jsonRes(res, buildFieldConfig(wf, wfName, st ? st.mtimeMs : 0, objectInfo));
       } catch (e) { jsonRes(res, { error: 'Field config error: ' + e.message }, 500); }
     });
     return;

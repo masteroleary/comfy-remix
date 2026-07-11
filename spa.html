@@ -306,7 +306,7 @@ const FieldControl = {
     </span>
     <input v-else-if="t==='boolean'" type="checkbox" v-model="field.value" style="width:16px;height:16px;accent-color:#0a84ff">
     <input v-else-if="t==='int' || t==='float'" type="number" class="fc-input" style="width:120px" :step="t==='float' ? '0.01' : '1'" v-model="field.value">
-    <select v-else-if="t==='combo'" class="fc-input" v-model="field.value"><option :value="field.value">{{ field.value }}</option></select>
+    <select v-else-if="t==='combo'" class="fc-input" v-model="field.value"><option v-for="o in (field.control&&field.control.options||[field.value])" :key="o" :value="o">{{ o }}</option></select>
     <div v-else-if="t==='lora_rows'" class="lora-rows">
       <div v-for="(r,i) in field.value" :key="i" v-show="r.on || loraExpanded" class="lora-row" :class="{off: !r.on}"><input type="checkbox" v-model="r.on"><label :title="r.lora">{{ shortLora(r.lora) }}</label><input type="number" step="0.05" v-model.number="r.strength"></div>
       <div v-if="!field.value.length" class="muted" style="font-size:12px">no lora slots</div>

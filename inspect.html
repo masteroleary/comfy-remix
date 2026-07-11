@@ -1561,6 +1561,13 @@ function buildFieldControl(f) {
     btn.title = 'Use the currently-viewed file'; btn.onclick = () => { if (typeof currentFileName === 'string') { inp.value = currentFileName; if (wrap.querySelector('img')) { const im = wrap.querySelector('img'); im.src = '/file/' + encodeURIComponent(currentFileName); im.style.display = ''; } } };
     wrap.append(inp, btn); return wrap;
   }
+  if (t === 'combo') {
+    const sel = document.createElement('select');
+    sel.className = 'fc-input'; sel.setAttribute('data-fid', f.id);
+    const opts = (f.control && f.control.options) || [v];
+    for (const o of opts) { const op = document.createElement('option'); op.value = o; op.textContent = o; if (o === v) op.selected = true; sel.appendChild(op); }
+    return sel;
+  }
   const inp = document.createElement('input');
   inp.type = 'text'; inp.className = 'fc-input'; inp.style.cssText = 'width:280px;max-width:100%'; inp.value = v; inp.setAttribute('data-fid', f.id);
   return inp;
@@ -2235,7 +2242,7 @@ function executePrompt(prompt, onPromptId) {
 
     function connectWs() {
       try {
-        ws = new WebSocket('ws://' + comfyHost + '/comfy-ws?clientId=' + clientId);
+        ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + comfyHost + '/comfy-ws?clientId=' + clientId);
         ws.binaryType = 'arraybuffer';
       } catch (e) {
         log('WebSocket create error: ' + e.message, 'log-err');

@@ -12,7 +12,7 @@ module.exports = function createFieldConfigRuntime(deps) {
 
   // Generate a workflow's field config, merged with the user's saved edits.
   // userEdits: store.fieldConfigs[name] = { edits: {<id>:{enabled?,label?,value?}}, manual: [field...] }
-  function buildFieldConfig(wf, wfName, mtimeMs) {
+  function buildFieldConfig(wf, wfName, mtimeMs, objectInfo) {
     if (!generator) return { version: 1, workflow: wfName, format: 'unavailable', fields: [], zones: [], presets: [], skipped: [], error: 'generator module not loaded' };
     if (!wf || typeof wf !== 'object') return { version: 1, workflow: wfName, format: 'error', fields: [], zones: [], presets: [], skipped: [], error: 'workflow is not an object' };
     const vals = Object.values(wf);
@@ -33,6 +33,19 @@ module.exports = function createFieldConfigRuntime(deps) {
       }
       if (Array.isArray(saved.manual)) for (const mf of saved.manual) {
         if (!cfg.fields.some(f => f.id === mf.id)) cfg.fields.push(Object.assign({ source: 'manual', enabled: true }, mf));
+      }
+    }
+    // Enrich combo fields with their real choices from ComfyUI's /object_info, so
+    // the UI can render a proper dropdown (sampler/scheduler/model/vae/…).
+    if (objectInfo) for (const f of cfg.fields) {
+      if (!f.control || f.control.type !== 'combo') continue;
+      const t = (f.targets || [])[0]; if (!t || !t.class || !t.widget) continue;
+      const info = objectInfo[t.class]; if (!info || !info.input) continue;
+      const def = (info.input.required && info.input.required[t.widget]) || (info.input.optional && info.input.optional[t.widget]);
+      if (def && Array.isArray(def[0]) && def[0].length) {
+        const opts = def[0].slice();
+        if (f.value != null && !opts.includes(f.value)) opts.unshift(f.value);   // keep a stale/renamed value selectable
+        f.control = Object.assign({}, f.control, { options: opts });
       }
     }
     return cfg;
