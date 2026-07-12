@@ -832,7 +832,7 @@ const gridState = Vue.reactive({
 // Reactive state for the media viewer modal (Vue-rendered on #modalApp).
 const modalState = Vue.reactive({ open: false, item: null, muted: true });
 // Reactive state for the toolbar (Vue-rendered on #toolbarApp).
-const chrome = Vue.reactive({
+const tbar = Vue.reactive({
   showControls: false, pathHome: false, searchLabel: '', crumbs: [],
   backDisabled: true, sortLabel: 'Date ↓',
   type: 'all', filtersOpen: false, filterCount: 0,
@@ -853,7 +853,7 @@ const gridWrap   = $('gridWrap');
 const homeWrap   = $('homeWrap');
 const gridAppEl  = $('gridApp');
 const pager      = $('pager');
-// Toolbar is Vue-rendered (#toolbarApp); its state lives in `chrome` and its
+// Toolbar is Vue-rendered (#toolbarApp); its state lives in `tbar` and its
 // buttons call the functions below. The search input keeps its anti-autofill
 // hacks — it's re-captured after the toolbar mounts (see wireSearch).
 let searchInp = null;
@@ -876,7 +876,7 @@ const toastEl    = $('toast');
 // ── Multi-select ─────────────────────────────────────────────────────────
 function toggleMultiSelect(on) {
   S.multiSelect = on !== undefined ? on : !S.multiSelect;
-  chrome.multiSelect = S.multiSelect;
+  tbar.multiSelect = S.multiSelect;
   document.body.classList.toggle('multi-select-on', S.multiSelect);
   if (!S.multiSelect) {
     document.querySelectorAll('.ms-cb').forEach(cb => cb.checked = false);
@@ -886,7 +886,7 @@ function toggleMultiSelect(on) {
 }
 
 function updateBulkBar() {
-  chrome.bulkCount = document.querySelectorAll('.ms-cb:checked').length;
+  tbar.bulkCount = document.querySelectorAll('.ms-cb:checked').length;
 }
 
 function bulkSelAll() {
@@ -1174,7 +1174,7 @@ const SORTS = [
 // closing the tab resets to censored for the next session.
 function setCensor(on) {
   document.body.classList.toggle('blur-on', on);
-  chrome.blurOn = on;
+  tbar.blurOn = on;
   sessionStorage.setItem('censor', on ? '1' : '0');
 }
 setCensor(sessionStorage.getItem('censor') !== '0');   // default ON
@@ -1184,10 +1184,10 @@ function toggleBlur() { setCensor(!document.body.classList.contains('blur-on'));
 // ON by default; state is per-tab (sessionStorage) so navigating — including the
 // Back button — keeps your choice, while closing the tab resets it to ON.
 S.safeMode = sessionStorage.getItem('safeMode') !== '0';
-chrome.safeOn = S.safeMode;
+tbar.safeOn = S.safeMode;
 function toggleSafe() {
   S.safeMode = !S.safeMode;
-  chrome.safeOn = S.safeMode;
+  tbar.safeOn = S.safeMode;
   sessionStorage.setItem('safeMode', S.safeMode ? '1' : '0');
   // On the home landing there's no file list to filter — don't navigate into one.
   if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
@@ -1232,21 +1232,21 @@ let sortIdx = 5; // Date ↓
 function cycleSort() {
   sortIdx = (sortIdx + 1) % SORTS.length;
   const o = SORTS[sortIdx];
-  chrome.sortLabel = o.label;
+  tbar.sortLabel = o.label;
   S.sort = o.sort; S.asc = o.asc;
   loadDir(S.dir, 1, false);
 }
 
 // ── Filter chips ──────────────────────────────────────────────────────────
 function updateFilterCount() {
-  chrome.filterCount = (S.type && S.type !== 'all') ? 1 : 0;
+  tbar.filterCount = (S.type && S.type !== 'all') ? 1 : 0;
 }
 function toggleFilters() {
-  chrome.filtersOpen = !chrome.filtersOpen;
-  if (chrome.filtersOpen && S.multiSelect) toggleMultiSelect(false);
+  tbar.filtersOpen = !tbar.filtersOpen;
+  if (tbar.filtersOpen && S.multiSelect) toggleMultiSelect(false);
 }
 function setType(t) {
-  S.type = t; chrome.type = t;
+  S.type = t; tbar.type = t;
   updateFilterCount();
   loadDir(S.dir, 1, false);
 }
@@ -1279,8 +1279,8 @@ function wireSearch() {
 // ── Load directory ────────────────────────────────────────────────────────
 async function loadDir(dir, page = 1, pushStack = true) {
   S.onHome = false;
-  chrome.pathHome = false;
-  chrome.showControls = true;   // reveal search + filters (hidden on home)
+  tbar.pathHome = false;
+  tbar.showControls = true;   // reveal search + filters (hidden on home)
   // Dismiss any open card action menu
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
@@ -1289,7 +1289,7 @@ async function loadDir(dir, page = 1, pushStack = true) {
   gridAppEl.style.display = '';
   gridState.loading = true; gridState.error = '';
   pagerState.pages = 0;
-  chrome.stats = ''; chrome.pageInfo = '';
+  tbar.stats = ''; tbar.pageInfo = '';
 
   if (pushStack && S.dir && S.dir !== dir) {
     S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
@@ -1365,9 +1365,9 @@ function filesGroupLabel(gdir) {
   return rel ? label + ' / ' + rel : label;
 }
 function renderFileTabs() {
-  if (!S.filesMode || S.search) { chrome.showFileTabs = false; chrome.fileTabs = []; return; }
-  chrome.showFileTabs = true;
-  chrome.fileTabs = FILE_TABS.map(t => ({ id: t.id, label: t.label, active: S.filesTab === t.id }));
+  if (!S.filesMode || S.search) { tbar.showFileTabs = false; tbar.fileTabs = []; return; }
+  tbar.showFileTabs = true;
+  tbar.fileTabs = FILE_TABS.map(t => ({ id: t.id, label: t.label, active: S.filesTab === t.id }));
 }
 
 // Feature registry: home tiles grouped by opt-in feature. `ready` judges the
@@ -1418,11 +1418,11 @@ async function showHomeLanding(forceStatus) {
   if (S.multiSelect) toggleMultiSelect(false);
   renderFileTabs();
   // The home landing has no list to search or filter — hide those controls.
-  chrome.showControls = false;
+  tbar.showControls = false;
   S.dir = '';
-  chrome.pathHome = true; chrome.searchLabel = ''; chrome.crumbs = [];
-  chrome.backDisabled = true;
-  chrome.stats = ''; chrome.pageInfo = '';
+  tbar.pathHome = true; tbar.searchLabel = ''; tbar.crumbs = [];
+  tbar.backDisabled = true;
+  tbar.stats = ''; tbar.pageInfo = '';
   pagerState.pages = 0;
   // Home landing renders into its own container; hide the Vue grid while here.
   gridAppEl.style.display = 'none';
@@ -1527,20 +1527,20 @@ function buildCrumbs(data) {
 }
 
 function renderHeader(data) {
-  chrome.pathHome = false;
+  tbar.pathHome = false;
   if (S.search) {
-    chrome.searchLabel = 'Search: ' + S.search;   // path breadcrumb doesn't apply
-    chrome.crumbs = [];
+    tbar.searchLabel = 'Search: ' + S.search;   // path breadcrumb doesn't apply
+    tbar.crumbs = [];
   } else {
-    chrome.searchLabel = '';
+    tbar.searchLabel = '';
     const crumbs = buildCrumbs(data);
-    chrome.crumbs = crumbs.map((c, i) => ({ label: c.label, dir: c.dir, last: i === crumbs.length - 1 }));
+    tbar.crumbs = crumbs.map((c, i) => ({ label: c.label, dir: c.dir, last: i === crumbs.length - 1 }));
   }
   // At a Files tab root, Back returns Home rather than trying to leave the roots.
-  chrome.backDisabled = !S.navStack.length && !data.parent && !S.filesMode;
+  tbar.backDisabled = !S.navStack.length && !data.parent && !S.filesMode;
   if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
-  chrome.stats = data.total + ' item' + (data.total !== 1 ? 's' : '');
-  chrome.pageInfo = data.pages > 1 ? ('Page ' + data.page + ' / ' + data.pages) : '';
+  tbar.stats = data.total + ' item' + (data.total !== 1 ? 's' : '');
+  tbar.pageInfo = data.pages > 1 ? ('Page ' + data.page + ' / ' + data.pages) : '';
 }
 
 // ── Grid rendering ────────────────────────────────────────────────────────
@@ -2071,14 +2071,14 @@ document.addEventListener('keydown', e => {
 // loadDir/showHomeLanding runs.
 try {
   Vue.createApp({
-    setup() { return { c: chrome, TYPES }; },
+    setup() { return { c: tbar, TYPES }; },
     methods: {
       crumb(cr) { if (searchInp) searchInp.value = ''; loadDir(cr.dir, 1); },
       back() {
         if (S.navStack.length) {
           const prev = S.navStack.pop();
           if (searchInp) searchInp.value = prev.search || '';
-          S.type = prev.type || 'all'; chrome.type = S.type; updateFilterCount();
+          S.type = prev.type || 'all'; tbar.type = S.type; updateFilterCount();
           loadDir(prev.dir, prev.page, false);
         } else if (S.filesMode) { showHomeLanding(); }
         else if (S.parent) { if (searchInp) searchInp.value = ''; loadDir(S.parent, 1, false); }
