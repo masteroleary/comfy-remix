@@ -596,19 +596,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- Pagination (bottom) -->
 <div class="pager" id="pager"></div>
 
-<!-- Media modal -->
-<div class="modal" id="modal">
-  <div class="modal-actions">
-    <button class="modal-act-btn m-fav" id="mFavBtn">⭐ Favorite</button>
-    <button class="modal-act-btn m-del" id="mDelBtn">🗑 Delete</button>
-  </div>
-  <button class="modal-close" id="modalClose">✕</button>
-  <button class="modal-nav" id="modalPrev" disabled>‹</button>
-  <button class="modal-nav" id="modalMute" style="display:none">🔇</button>
-  <button class="modal-nav" id="modalNext" disabled>›</button>
-  <div class="modal-body" id="modalBody"></div>
-  <div class="modal-label" id="modalLabel"></div>
-</div>
+<!-- Media modal (Vue-mounted) -->
+<div id="modalApp"></div>
 
 <!-- Confirm dialog -->
 <div class="confirm-overlay" id="confirmOverlay">
@@ -838,6 +827,8 @@ const gridState = Vue.reactive({
   search: '', dir: null, filesMode: false, onHome: false,
   comfyOutputDir: '', favDir: '', root: '',
 });
+// Reactive state for the media viewer modal (Vue-rendered on #modalApp).
+const modalState = Vue.reactive({ open: false, item: null, muted: true });
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -872,15 +863,6 @@ const sortBtn    = $('sortBtn');
 const filterBar  = $('filterBar');
 const statsTxt   = $('statsTxt');
 const pageInfoTxt= $('pageInfoTxt');
-const modal      = $('modal');
-const modalBody  = $('modalBody');
-const modalLabel = $('modalLabel');
-const modalClose = $('modalClose');
-const modalPrev  = $('modalPrev');
-const modalNext  = $('modalNext');
-const modalMute  = $('modalMute');
-const mFavBtn    = $('mFavBtn');
-const mDelBtn    = $('mDelBtn');
 const confirmOverlay = $('confirmOverlay');
 const confirmTitle   = $('confirmTitle');
 const confirmMsg     = $('confirmMsg');
@@ -1232,7 +1214,7 @@ safeToggle.onclick = () => {
 // Back button — and close the viewer so returning shows nothing until unlocked.
 function censorNow() {
   setCensor(true);
-  if (modal.classList.contains('open')) closeModal();
+  if (modalState.open) closeModal();
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) censorNow(); });
 
@@ -1824,84 +1806,67 @@ function renderPager(data) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────
+// ── Modal viewer (Vue) ─────────────────────────────────────────────────────
 function openModal(item) {
   if (!item) return;
-  stopMedia();
-  modalBody.innerHTML = '';
-  modalLabel.textContent = item.name;
-
-  if (item.isVideo) {
-    const v = document.createElement('video');
-    v.src = `/file/${enc(item.path)}`;
-    v.controls = true; v.playsinline = true; v.autoplay = true; v.loop = true;
-    v.muted = S.videoMuted;
-    modalBody.appendChild(v);
-    modalMute.style.display = '';
-    modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
-  } else {
-    modalMute.style.display = 'none';
-  }
-  if (item.isImage) {
-    const img = document.createElement('img');
-    img.src = `/file/${enc(item.path)}`; img.alt = item.name;
-    modalBody.appendChild(img);
-  } else if (item.isAudio) {
-    const wrap = document.createElement('div'); wrap.className = 'modal-audio-wrap';
-    wrap.innerHTML = '<div style="font-size:64px">🎵</div>';
-    const a = document.createElement('audio');
-    a.src = `/file/${enc(item.path)}`; a.controls = true; a.autoplay = true;
-    wrap.appendChild(a); modalBody.appendChild(wrap);
-  }
-
-  const hasPrev = S.modalIdx > 0;
-  const hasNext = S.modalIdx < S.mediaItems.length - 1;
-  modalPrev.disabled = !hasPrev;
-  modalNext.disabled = !hasNext;
-
-  mFavBtn.onclick = () => doFavorite(item, null, true);
-  mDelBtn.onclick = () => doDelete(item, null, true);
-
-  modal.classList.add('open');
+  modalState.item = item;
+  modalState.open = true;
   document.body.style.overflow = 'hidden';
 }
-
 function closeModal() {
-  stopMedia();
-  modal.classList.remove('open');
+  modalState.open = false;
+  modalState.item = null;   // v-if drops the media element, stopping playback
   document.body.style.overflow = '';
 }
-
-function stopMedia() {
-  const m = modalBody.querySelector('video,audio');
-  if (m) { m.pause(); m.src = ''; }
+function modalNav(delta) {
+  const ni = S.modalIdx + delta;
+  if (ni >= 0 && ni < S.mediaItems.length) { S.modalIdx = ni; modalState.item = S.mediaItems[ni]; }
 }
-
-modalClose.onclick = closeModal;
-modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-
-modalPrev.onclick = () => { if (S.modalIdx > 0) { S.modalIdx--; openModal(S.mediaItems[S.modalIdx]); } };
-modalNext.onclick = () => { if (S.modalIdx < S.mediaItems.length - 1) { S.modalIdx++; openModal(S.mediaItems[S.modalIdx]); } };
-modalMute.onclick = () => {
-  S.videoMuted = !S.videoMuted;
-  const v = modalBody.querySelector('video');
-  if (v) v.muted = S.videoMuted;
-  modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
+const ModalApp = {
+  setup() { return { s: modalState }; },
+  computed: {
+    fileUrl() { return this.s.item ? '/file/' + enc(this.s.item.path) : ''; },
+    hasPrev() { return S.modalIdx > 0; },
+    hasNext() { return S.modalIdx < S.mediaItems.length - 1; },
+  },
+  methods: {
+    close: closeModal,
+    prev() { modalNav(-1); },
+    next() { modalNav(1); },
+    toggleMute() { modalState.muted = !modalState.muted; const v = this.$refs.vid; if (v) v.muted = modalState.muted; },
+    fav() { if (this.s.item) doFavorite(this.s.item, null, true); },
+    del() { if (this.s.item) doDelete(this.s.item, null, true); },
+    onTouchStart(e) { this._tx = e.touches[0].clientX; },
+    onTouchEnd(e) { const dx = e.changedTouches[0].clientX - (this._tx || 0); if (Math.abs(dx) > 55) { if (dx > 0) this.prev(); else this.next(); } },
+  },
+  template: `
+    <div class="modal" :class="{open: s.open}" @click.self="close" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+      <div class="modal-actions">
+        <button class="modal-act-btn m-fav" @click="fav">⭐ Favorite</button>
+        <button class="modal-act-btn m-del" @click="del">🗑 Delete</button>
+      </div>
+      <button class="modal-close" @click="close">✕</button>
+      <button class="modal-nav" id="modalPrev" :disabled="!hasPrev" @click="prev">‹</button>
+      <button v-if="s.item && s.item.isVideo" class="modal-nav" id="modalMute" @click="toggleMute">{{ s.muted ? '🔇' : '🔊' }}</button>
+      <button class="modal-nav" id="modalNext" :disabled="!hasNext" @click="next">›</button>
+      <div class="modal-body">
+        <video v-if="s.item && s.item.isVideo" ref="vid" :key="s.item.path" :src="fileUrl" controls playsinline autoplay loop @loadstart="$event.target.muted = s.muted"></video>
+        <img v-else-if="s.item && s.item.isImage" :key="s.item.path" :src="fileUrl" :alt="s.item.name">
+        <div v-else-if="s.item && s.item.isAudio" class="modal-audio-wrap"><div style="font-size:64px">🎵</div><audio :key="s.item.path" :src="fileUrl" controls autoplay></audio></div>
+      </div>
+      <div class="modal-label">{{ s.item ? s.item.name : '' }}</div>
+    </div>
+  `,
 };
+try { Vue.createApp(ModalApp).mount('#modalApp'); }
+catch (e) { console.error('[modal] Vue mount failed:', e); }
 
-// Swipe in modal
-let tx0 = 0;
-modal.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
-modal.addEventListener('touchend', e => {
-  const dx = e.changedTouches[0].clientX - tx0;
-  if (Math.abs(dx) > 55) { if (dx > 0) modalPrev.click(); else modalNext.click(); }
-}, { passive: true });
-
-// Keyboard
+// Keyboard nav for the viewer
 document.addEventListener('keydown', e => {
-  if (!modal.classList.contains('open')) return;
+  if (!modalState.open) return;
   if (e.key === 'Escape') closeModal();
-  if (e.key === 'ArrowLeft') modalPrev.click();
-  if (e.key === 'ArrowRight') modalNext.click();
+  if (e.key === 'ArrowLeft') modalNav(-1);
+  if (e.key === 'ArrowRight') modalNav(1);
 });
 
 // ── Favorite ──────────────────────────────────────────────────────────────
@@ -2242,7 +2207,7 @@ claudeStopBtn.onclick = async () => {
 
 // Escape closes Claude panel or goes back to list
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && claudePanel.classList.contains('open') && !modal.classList.contains('open')) {
+  if (e.key === 'Escape' && claudePanel.classList.contains('open') && !modalState.open) {
     if (claudeChatView.style.display !== 'none' && !claudeRunning) {
       showClaudeList();
     } else {
