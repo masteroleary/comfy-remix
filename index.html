@@ -528,64 +528,66 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ptr-indicator.pulling{transition:none}
 .ptr-indicator .ptr-spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--text3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+[v-cloak]{display:none !important}
 </style>
 </head>
 <body>
 
 <div class="ptr-indicator" id="ptrIndicator"><span>↓ Pull to refresh</span></div>
 
+<!-- Toolbar (Vue-mounted; in-DOM template) -->
+<div id="toolbarApp" v-cloak>
 <!-- Header -->
 <div class="hdr">
   <div class="hdr-path">
-    <div class="path-wrap"><div class="path-txt" id="pathTxt">Loading…</div></div>
+    <div class="path-wrap"><div class="path-txt" id="pathTxt"><b v-if="c.pathHome">Home</b><b v-else-if="c.searchLabel">{{ c.searchLabel }}</b><template v-else><template v-for="(cr,i) in c.crumbs" :key="i"><span v-if="i" style="color:var(--text3)"> / </span><b v-if="cr.last">{{ cr.label }}</b><span v-else style="color:var(--accent);cursor:pointer" @click="crumb(cr)">{{ cr.label }}</span></template></template></div></div>
   </div>
   <div class="hdr-row1">
-    <button class="back-btn" id="backBtn" disabled>
+    <button class="back-btn" :disabled="c.backDisabled" @click="back">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <button class="home-btn" id="homeBtn" title="Home"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5h5v5"/></svg></button>
-    <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
-    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 3 21 21"/><path d="M10.6 10.7a2 2 0 0 0 2.7 2.9"/><path d="M6.5 6.6C4.3 8 3 10 3 12c0 0 3.5 6 9 6 1.2 0 2.3-.2 3.3-.6M9.9 5.2A9 9 0 0 1 12 5c5.5 0 9 6 9 6a15 15 0 0 1-2.2 2.9"/></svg></button>
-    <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
+    <button class="home-btn" title="Home" @click="goHome"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5h5v5"/></svg></button>
+    <button class="blur-btn" :class="{active: c.blurOn}" title="Toggle blur" @click="toggleBlur"><span v-if="c.blurOn">🔒</span><span v-else>👁</span></button>
+    <button class="blur-btn" id="safeToggle" :class="{active: c.safeOn}" title="Safe mode — hide NSFW-tagged items" @click="toggleSafe"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 3 21 21"/><path d="M10.6 10.7a2 2 0 0 0 2.7 2.9"/><path d="M6.5 6.6C4.3 8 3 10 3 12c0 0 3.5 6 9 6 1.2 0 2.3-.2 3.3-.6M9.9 5.2A9 9 0 0 1 12 5c5.5 0 9 6 9 6a15 15 0 0 1-2.2 2.9"/></svg></button>
+    <button class="blur-btn" title="Settings" @click="openSettings">⚙</button>
   </div>
-  <div class="hdr-row2" id="searchRow">
+  <div class="hdr-row2" id="searchRow" v-show="c.showControls">
     <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" readonly><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
-    <button class="sort-btn" id="wordsBtn" title="Browse prompt words"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
-    <button class="sort-btn" id="sortBtn">Date ↓</button>
+    <button class="sort-btn" title="Browse prompt words" @click="openWords"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
+    <button class="sort-btn" @click="cycleSort">{{ c.sortLabel }}</button>
   </div>
 </div>
 
 <!-- Filters (collapsible) + Select toggle -->
-<div class="filter-bar" id="filterBar">
-  <button class="filter-chip" id="filtersToggle" title="Show type filters">Filters (0)</button>
-  <div id="filterChips" style="display:none;gap:8px;align-items:center;flex-wrap:wrap">
-    <button class="filter-chip active" data-type="all">All</button>
-    <button class="filter-chip" data-type="folder">📁 Folders</button>
-    <button class="filter-chip" data-type="video">🎬 Videos</button>
-    <button class="filter-chip" data-type="image">🖼 Images</button>
-    <button class="filter-chip" data-type="audio">🎵 Audio</button>
+<div class="filter-bar" v-show="c.showControls">
+  <button class="filter-chip" :class="{active: c.filterCount>0}" title="Show type filters" @click="toggleFilters">Filters ({{ c.filterCount }})</button>
+  <div v-show="c.filtersOpen" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button v-for="ft in TYPES" :key="ft.t" class="filter-chip" :class="{active: c.type===ft.t}" @click="setType(ft.t)">{{ ft.label }}</button>
   </div>
-  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg> Select</button>
+  <button v-show="!c.filtersOpen" class="filter-chip" id="multiSelectBtn" :class="{active: c.multiSelect}" title="Make items checkable" @click="toggleSelect"><svg v-if="c.multiSelect" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7.5 12.5l3 3 6-7" stroke-linecap="round" stroke-linejoin="round"/></svg><svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg> Select</button>
 </div>
 
 <!-- Bulk actions (revealed when Select is active) -->
-<div class="filter-bar" id="selectRow" style="display:none">
-  <div id="bulkBar" style="display:none;gap:6px;align-items:center">
-    <span id="bulkCount" style="color:#8e8e93;font-size:13px;white-space:nowrap">0 selected</span>
-    <button class="filter-chip" id="bulkSelAll" style="font-size:12px">Select All</button>
-    <button class="filter-chip" id="bulkSelFiles" style="font-size:12px">Select Files</button>
-    <button class="filter-chip" id="bulkFavBtn" style="font-size:12px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
-    <button class="filter-chip" id="bulkDelBtn" style="font-size:12px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
-    <button class="filter-chip" id="bulkCancelBtn" style="font-size:12px">Cancel</button>
+<div class="filter-bar" v-show="c.multiSelect">
+  <div style="display:flex;gap:6px;align-items:center">
+    <span style="color:#8e8e93;font-size:13px;white-space:nowrap">{{ c.bulkCount }} selected</span>
+    <button class="filter-chip" style="font-size:12px" @click="bulkSelAll">Select All</button>
+    <button class="filter-chip" style="font-size:12px" @click="bulkSelFiles">Select Files</button>
+    <button class="filter-chip" style="font-size:12px;background:#2d5a1e;color:#a8e06c" @click="bulkFav">⭐ Favorite</button>
+    <button class="filter-chip" style="font-size:12px;background:#5a1e1e;color:#e06c6c" @click="bulkDel">🗑 Delete</button>
+    <button class="filter-chip" style="font-size:12px" @click="toggleSelect">Cancel</button>
   </div>
 </div>
 
 <!-- Files & Media tabs (shown only inside the combined Files view, hidden while searching) -->
-<div class="file-tabs" id="fileTabs" style="display:none"></div>
+<div class="file-tabs" v-show="c.showFileTabs">
+  <button v-for="t in c.fileTabs" :key="t.id" class="file-tab" :class="{active: t.active}" @click="clickTab(t.id)">{{ t.label }}</button>
+</div>
 
 <!-- Stats -->
-<div class="stats"><span id="statsTxt"></span><span id="pageInfoTxt"></span></div>
+<div class="stats"><span>{{ c.stats }}</span><span>{{ c.pageInfo }}</span></div>
+</div>
 
 <!-- Pagination (top) -->
 <div class="pager" id="pagerTop"></div>
@@ -829,6 +831,17 @@ const gridState = Vue.reactive({
 });
 // Reactive state for the media viewer modal (Vue-rendered on #modalApp).
 const modalState = Vue.reactive({ open: false, item: null, muted: true });
+// Reactive state for the toolbar (Vue-rendered on #toolbarApp).
+const chrome = Vue.reactive({
+  showControls: false, pathHome: false, searchLabel: '', crumbs: [],
+  backDisabled: true, sortLabel: 'Date ↓',
+  type: 'all', filtersOpen: false, filterCount: 0,
+  multiSelect: false, bulkCount: 0,
+  blurOn: true, safeOn: true,
+  fileTabs: [], showFileTabs: false,
+  stats: '', pageInfo: '',
+});
+const TYPES = [{ t: 'all', label: 'All' }, { t: 'folder', label: '📁 Folders' }, { t: 'video', label: '🎬 Videos' }, { t: 'image', label: '🖼 Images' }, { t: 'audio', label: '🎵 Audio' }];
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -836,58 +849,31 @@ const gridWrap   = $('gridWrap');
 const homeWrap   = $('homeWrap');
 const gridAppEl  = $('gridApp');
 const pager      = $('pager');
-const backBtn    = $('backBtn');
-const homeBtn    = $('homeBtn');
-const pathTxt    = $('pathTxt');
-const blurToggle = $('blurToggle');
-const searchInp  = $('searchInp');
-// Chromium ignores autocomplete="off" and keys saved-entry suggestions off the
-// input's name — a random name per page load means nothing ever matches.
-searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
-// Personal-data autofill (emails etc.) ignores even that, but browsers won't fill a
-// readonly field: it stays readonly until the user actually touches/focuses it
-// (markup has `readonly`), and anything injected regardless gets wiped.
-const unlockSearch = () => searchInp.removeAttribute('readonly');
-searchInp.addEventListener('touchstart', unlockSearch, { passive: true });
-searchInp.addEventListener('focus', unlockSearch);
+// Toolbar is Vue-rendered (#toolbarApp); its state lives in `chrome` and its
+// buttons call the functions below. The search input keeps its anti-autofill
+// hacks — it's re-captured after the toolbar mounts (see wireSearch).
+let searchInp = null;
+const unlockSearch = () => { if (searchInp) searchInp.removeAttribute('readonly'); };
 function wipeInjectedSearch() {
-  if (document.activeElement === searchInp) return; // user is typing — leave it alone
+  if (!searchInp || document.activeElement === searchInp) return; // user is typing
   if (searchInp.value && searchInp.value !== (S.search || '')) {
     searchInp.value = S.search || '';
-    $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+    const sc = $('searchClear'); if (sc) sc.style.display = searchInp.value ? 'block' : 'none';
   }
 }
-setTimeout(wipeInjectedSearch, 400);
 window.addEventListener('pageshow', () => setTimeout(wipeInjectedSearch, 100));
-const sortBtn    = $('sortBtn');
-const filterBar  = $('filterBar');
-const statsTxt   = $('statsTxt');
-const pageInfoTxt= $('pageInfoTxt');
 const confirmOverlay = $('confirmOverlay');
 const confirmTitle   = $('confirmTitle');
 const confirmMsg     = $('confirmMsg');
 const confirmCancel  = $('confirmCancel');
 const confirmOk      = $('confirmOk');
 const toastEl    = $('toast');
-const multiSelectBtn = $('multiSelectBtn');
-const bulkBar    = $('bulkBar');
-const bulkCount  = $('bulkCount');
-const bulkSelAll = $('bulkSelAll');
-const bulkSelFiles = $('bulkSelFiles');
-const bulkFavBtn = $('bulkFavBtn');
-const bulkDelBtn = $('bulkDelBtn');
-const bulkCancelBtn = $('bulkCancelBtn');
 
 // ── Multi-select ─────────────────────────────────────────────────────────
 function toggleMultiSelect(on) {
   S.multiSelect = on !== undefined ? on : !S.multiSelect;
+  chrome.multiSelect = S.multiSelect;
   document.body.classList.toggle('multi-select-on', S.multiSelect);
-  multiSelectBtn.classList.toggle('active', S.multiSelect);
-  multiSelectBtn.innerHTML = (S.multiSelect
-    ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7.5 12.5l3 3 6-7" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg>') + ' Select';
-  bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
-  const selRow = $('selectRow'); if (selRow) selRow.style.display = S.multiSelect ? '' : 'none';
   if (!S.multiSelect) {
     document.querySelectorAll('.ms-cb').forEach(cb => cb.checked = false);
     document.querySelectorAll('.ms-checked').forEach(c => c.classList.remove('ms-checked'));
@@ -896,27 +882,23 @@ function toggleMultiSelect(on) {
 }
 
 function updateBulkBar() {
-  const checked = document.querySelectorAll('.ms-cb:checked');
-  bulkCount.textContent = checked.length + ' selected';
+  chrome.bulkCount = document.querySelectorAll('.ms-cb:checked').length;
 }
 
-multiSelectBtn.onclick = () => toggleMultiSelect();
-bulkCancelBtn.onclick = () => toggleMultiSelect(false);
-
-bulkSelAll.onclick = () => {
+function bulkSelAll() {
   const cbs = document.querySelectorAll('.ms-cb');
   const allChecked = Array.from(cbs).every(cb => cb.checked);
   cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card') || cb.closest('.folder-chip'); if (el) el.classList.toggle('ms-checked', !allChecked); });
   updateBulkBar();
-};
+}
 
 // Select only files (cards) on the current page — not folders
-bulkSelFiles.onclick = () => {
+function bulkSelFiles() {
   const cbs = document.querySelectorAll('.card .ms-cb');
   const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
   cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card'); if (el) el.classList.toggle('ms-checked', !allChecked); });
   updateBulkBar();
-};
+}
 
 // Delete the currently-open empty folder (server refuses if it holds real files).
 async function deleteEmptyFolder() {
@@ -940,7 +922,7 @@ async function deleteEmptyFolder() {
   );
 }
 
-bulkFavBtn.onclick = async () => {
+async function bulkFav() {
   const checked = document.querySelectorAll('.ms-cb:checked');
   if (!checked.length) return;
   const paths = Array.from(checked).map(cb => cb.dataset.path);
@@ -966,9 +948,9 @@ bulkFavBtn.onclick = async () => {
       refreshCurrentPage();
     }
   );
-};
+}
 
-bulkDelBtn.onclick = async () => {
+async function bulkDel() {
   const checked = document.querySelectorAll('.ms-cb:checked');
   if (!checked.length) return;
   confirm(
@@ -993,7 +975,7 @@ bulkDelBtn.onclick = async () => {
       }
     }
   );
-};
+}
 
 // ── Lazy image observer ───────────────────────────────────────────────────
 const imgObs = new IntersectionObserver(entries => {
@@ -1188,26 +1170,24 @@ const SORTS = [
 // closing the tab resets to censored for the next session.
 function setCensor(on) {
   document.body.classList.toggle('blur-on', on);
-  blurToggle.classList.toggle('active', on);
-  blurToggle.textContent = on ? '🔒' : '👁';
+  chrome.blurOn = on;
   sessionStorage.setItem('censor', on ? '1' : '0');
 }
 setCensor(sessionStorage.getItem('censor') !== '0');   // default ON
-blurToggle.onclick = () => setCensor(!document.body.classList.contains('blur-on'));
+function toggleBlur() { setCensor(!document.body.classList.contains('blur-on')); }
 
 // Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter).
 // ON by default; state is per-tab (sessionStorage) so navigating — including the
 // Back button — keeps your choice, while closing the tab resets it to ON.
-const safeToggle = $('safeToggle');
 S.safeMode = sessionStorage.getItem('safeMode') !== '0';
-safeToggle.classList.toggle('active', S.safeMode);
-safeToggle.onclick = () => {
+chrome.safeOn = S.safeMode;
+function toggleSafe() {
   S.safeMode = !S.safeMode;
+  chrome.safeOn = S.safeMode;
   sessionStorage.setItem('safeMode', S.safeMode ? '1' : '0');
-  safeToggle.classList.toggle('active', S.safeMode);
   // On the home landing there's no file list to filter — don't navigate into one.
   if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
-};
+}
 
 // Censor / Hide (blur): re-engage only when the tab actually becomes hidden
 // (switched away / minimized) — not when focus moves to browser chrome like the
@@ -1245,61 +1225,58 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) censo
 })();
 
 let sortIdx = 5; // Date ↓
-sortBtn.onclick = () => {
+function cycleSort() {
   sortIdx = (sortIdx + 1) % SORTS.length;
   const o = SORTS[sortIdx];
-  sortBtn.textContent = o.label;
+  chrome.sortLabel = o.label;
   S.sort = o.sort; S.asc = o.asc;
   loadDir(S.dir, 1, false);
-};
+}
 
 // ── Filter chips ──────────────────────────────────────────────────────────
-const filtersToggle = $('filtersToggle');
-const filterChips = $('filterChips');
-let filtersOpen = false;
 function updateFilterCount() {
-  const n = (S.type && S.type !== 'all') ? 1 : 0;
-  filtersToggle.textContent = 'Filters (' + n + ')';
-  filtersToggle.classList.toggle('active', n > 0);
+  chrome.filterCount = (S.type && S.type !== 'all') ? 1 : 0;
 }
-function setFiltersOpen(open) {
-  filtersOpen = open;
-  filterChips.style.display = open ? 'flex' : 'none';
-  multiSelectBtn.style.display = open ? 'none' : '';   // Filters active → hide Select
-  if (open && S.multiSelect) toggleMultiSelect(false);
+function toggleFilters() {
+  chrome.filtersOpen = !chrome.filtersOpen;
+  if (chrome.filtersOpen && S.multiSelect) toggleMultiSelect(false);
 }
-filtersToggle.onclick = () => setFiltersOpen(!filtersOpen);
-filterBar.addEventListener('click', e => {
-  const chip = e.target.closest('.filter-chip[data-type]');   // ignore Filters/Select toggles
-  if (!chip) return;
-  filterChips.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  chip.classList.add('active');
-  S.type = chip.dataset.type;
+function setType(t) {
+  S.type = t; chrome.type = t;
   updateFilterCount();
   loadDir(S.dir, 1, false);
-});
+}
 
-// ── Search ────────────────────────────────────────────────────────────────
+// ── Search ── wired to the (re-captured) input after the toolbar mounts.
 let searchTimer;
-searchInp.addEventListener('input', () => {
-  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => loadDir(S.dir, 1, false), 380);
-});
-$('searchClear').onclick = () => {
-  searchInp.value = '';
-  $('searchClear').style.display = 'none';
-  clearTimeout(searchTimer);
-  loadDir(S.dir, 1, false);
-};
+function wireSearch() {
+  searchInp = $('searchInp');
+  if (!searchInp) return;
+  // Chromium ignores autocomplete="off"; a random name per load defeats saved-entry
+  // suggestions, and the field stays readonly (anti personal-data autofill) until touched.
+  searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
+  searchInp.addEventListener('touchstart', unlockSearch, { passive: true });
+  searchInp.addEventListener('focus', unlockSearch);
+  searchInp.addEventListener('input', () => {
+    const sc = $('searchClear'); if (sc) sc.style.display = searchInp.value ? 'block' : 'none';
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadDir(S.dir, 1, false), 380);
+  });
+  const sc = $('searchClear');
+  if (sc) sc.onclick = () => {
+    searchInp.value = '';
+    sc.style.display = 'none';
+    clearTimeout(searchTimer);
+    loadDir(S.dir, 1, false);
+  };
+  setTimeout(wipeInjectedSearch, 400);
+}
 
 // ── Load directory ────────────────────────────────────────────────────────
 async function loadDir(dir, page = 1, pushStack = true) {
   S.onHome = false;
-  // Restore the browsing controls hidden on the home landing.
-  $('searchRow').style.display = '';
-  filterBar.style.display = '';
-  const selRow = $('selectRow'); if (selRow) selRow.style.display = 'none';  // shown only in select mode
+  chrome.pathHome = false;
+  chrome.showControls = true;   // reveal search + filters (hidden on home)
   // Dismiss any open card action menu
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
@@ -1309,15 +1286,14 @@ async function loadDir(dir, page = 1, pushStack = true) {
   gridState.loading = true; gridState.error = '';
   pager.innerHTML = '';
   $('pagerTop').innerHTML = '';
-  statsTxt.textContent = '';
-  pageInfoTxt.textContent = '';
+  chrome.stats = ''; chrome.pageInfo = '';
 
   if (pushStack && S.dir && S.dir !== dir) {
     S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
   }
 
-  S.dir = dir; S.page = page; S.search = searchInp.value.trim();
-  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+  S.dir = dir; S.page = page; S.search = searchInp ? searchInp.value.trim() : '';
+  const sc = $('searchClear'); if (sc) sc.style.display = (searchInp && searchInp.value) ? 'block' : 'none';
 
   // Inside the Files & Media view, a search spans all three tabs at once.
   const filesSearchAll = S.filesMode && !!S.search;
@@ -1386,17 +1362,9 @@ function filesGroupLabel(gdir) {
   return rel ? label + ' / ' + rel : label;
 }
 function renderFileTabs() {
-  const el = $('fileTabs');
-  if (!S.filesMode || S.search) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  el.style.display = 'flex';
-  el.innerHTML = '';
-  FILE_TABS.forEach(t => {
-    const b = document.createElement('button');
-    b.className = 'file-tab' + (S.filesTab === t.id ? ' active' : '');
-    b.textContent = t.label;
-    b.onclick = () => { if (S.filesTab !== t.id) loadFilesTab(t.id); };
-    el.appendChild(b);
-  });
+  if (!S.filesMode || S.search) { chrome.showFileTabs = false; chrome.fileTabs = []; return; }
+  chrome.showFileTabs = true;
+  chrome.fileTabs = FILE_TABS.map(t => ({ id: t.id, label: t.label, active: S.filesTab === t.id }));
 }
 
 // Feature registry: home tiles grouped by opt-in feature. `ready` judges the
@@ -1440,20 +1408,18 @@ async function getHomeStatus(force) {
 }
 
 async function showHomeLanding(forceStatus) {
-  searchInp.value = '';
+  if (searchInp) searchInp.value = '';
   S.navStack = [];
   S.onHome = true;
   S.filesMode = false;
+  if (S.multiSelect) toggleMultiSelect(false);
   renderFileTabs();
   // The home landing has no list to search or filter — hide those controls.
-  $('searchRow').style.display = 'none';
-  filterBar.style.display = 'none';
-  const selRow = $('selectRow'); if (selRow) selRow.style.display = 'none';
+  chrome.showControls = false;
   S.dir = '';
-  pathTxt.innerHTML = '<b>Home</b>';
-  backBtn.disabled = true;
-  statsTxt.textContent = '';
-  pageInfoTxt.textContent = '';
+  chrome.pathHome = true; chrome.searchLabel = ''; chrome.crumbs = [];
+  chrome.backDisabled = true;
+  chrome.stats = ''; chrome.pageInfo = '';
   pager.innerHTML = '';
   $('pagerTop').innerHTML = '';
   // Home landing renders into its own container; hide the Vue grid while here.
@@ -1549,55 +1515,20 @@ function buildCrumbs(data) {
 }
 
 function renderHeader(data) {
-  pathTxt.innerHTML = '';
+  chrome.pathHome = false;
   if (S.search) {
-    // Search spans folders — a path breadcrumb doesn't apply.
-    const b = document.createElement('b');
-    b.textContent = 'Search: ' + S.search;
-    pathTxt.appendChild(b);
+    chrome.searchLabel = 'Search: ' + S.search;   // path breadcrumb doesn't apply
+    chrome.crumbs = [];
   } else {
+    chrome.searchLabel = '';
     const crumbs = buildCrumbs(data);
-    crumbs.forEach((c, i) => {
-      if (i) { const sep = document.createElement('span'); sep.textContent = ' / '; sep.style.color = 'var(--text3)'; pathTxt.appendChild(sep); }
-      if (i === crumbs.length - 1) {
-        const b = document.createElement('b'); b.textContent = c.label; pathTxt.appendChild(b);
-      } else {
-        const a = document.createElement('span');
-        a.textContent = c.label;
-        a.style.cssText = 'color:var(--accent);cursor:pointer';
-        a.onclick = () => { searchInp.value = ''; loadDir(c.dir, 1); };
-        pathTxt.appendChild(a);
-      }
-    });
+    chrome.crumbs = crumbs.map((c, i) => ({ label: c.label, dir: c.dir, last: i === crumbs.length - 1 }));
   }
-
   // At a Files tab root, Back returns Home rather than trying to leave the roots.
-  const filesAtTabRoot = S.filesMode && !S.navStack.length;
-  backBtn.disabled = !S.navStack.length && !data.parent && !S.filesMode;
-  backBtn.onclick = () => {
-    if (S.navStack.length) {
-      const prev = S.navStack.pop();
-      searchInp.value = prev.search || '';
-      // restore type chip
-      document.querySelectorAll('.filter-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.type === (prev.type || 'all'));
-      });
-      S.type = prev.type || 'all';
-      loadDir(prev.dir, prev.page, false);
-    } else if (filesAtTabRoot) {
-      showHomeLanding();
-    } else if (data.parent) {
-      searchInp.value = '';
-      loadDir(data.parent, 1, false);
-    }
-  };
-
-  homeBtn.onclick = () => showHomeLanding();
-
+  chrome.backDisabled = !S.navStack.length && !data.parent && !S.filesMode;
   if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
-
-  statsTxt.textContent = data.total + ' item' + (data.total !== 1 ? 's' : '');
-  if (data.pages > 1) pageInfoTxt.textContent = `Page ${data.page} / ${data.pages}`;
+  chrome.stats = data.total + ' item' + (data.total !== 1 ? 's' : '');
+  chrome.pageInfo = data.pages > 1 ? ('Page ' + data.page + ' / ' + data.pages) : '';
 }
 
 // ── Grid rendering ────────────────────────────────────────────────────────
@@ -2260,6 +2191,35 @@ document.addEventListener('keydown', e => {
   }, { passive: true });
 })();
 
+// ── Toolbar (Vue, in-DOM template on #toolbarApp) ──────────────────────────
+// Mounted before init so the (re-captured) search input is wired before the first
+// loadDir/showHomeLanding runs.
+try {
+  Vue.createApp({
+    setup() { return { c: chrome, TYPES }; },
+    methods: {
+      crumb(cr) { if (searchInp) searchInp.value = ''; loadDir(cr.dir, 1); },
+      back() {
+        if (S.navStack.length) {
+          const prev = S.navStack.pop();
+          if (searchInp) searchInp.value = prev.search || '';
+          S.type = prev.type || 'all'; chrome.type = S.type; updateFilterCount();
+          loadDir(prev.dir, prev.page, false);
+        } else if (S.filesMode) { showHomeLanding(); }
+        else if (S.parent) { if (searchInp) searchInp.value = ''; loadDir(S.parent, 1, false); }
+      },
+      goHome() { showHomeLanding(); },
+      toggleBlur, toggleSafe, toggleFilters, setType, cycleSort,
+      toggleSelect() { toggleMultiSelect(); },
+      openSettings() { if (window.openSettingsPanel) window.openSettingsPanel(); },
+      openWords() { if (window.openWordsPanel) window.openWordsPanel(); },
+      bulkSelAll, bulkSelFiles, bulkFav, bulkDel,
+      clickTab(id) { if (S.filesTab !== id) loadFilesTab(id); },
+    },
+  }).mount('#toolbarApp');
+  wireSearch();
+} catch (e) { console.error('[toolbar] Vue mount failed:', e); }
+
 // ── Init ──────────────────────────────────────────────────────────────────
 const initDir = new URLSearchParams(location.search).get('dir') || null;
 if (initDir) {
@@ -2459,7 +2419,7 @@ $('statusFeatures').onclick = () => {
     $('wordsCount').textContent = list.length + ' phrases';
   }
 
-  $('wordsBtn').onclick = () => {
+  window.openWordsPanel = () => {
     overlay.classList.add('open');
     $('wordsList').innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">Loading…</div>';
     fetch('/api/prompt-words?safe=' + (S.safeMode ? '1' : '0')).then(r => r.json()).then(d => {
@@ -2541,7 +2501,7 @@ $('statusFeatures').onclick = () => {
     fetch('/api/nsfw-terms').then(r=>r.json()).then(d=>{ nsfwTerms = Array.isArray(d.terms) ? d.terms.slice() : []; renderNsfw(); }).catch(()=>{ nsfwTerms = []; renderNsfw(); });
   }
 
-  $('settingsBtn').onclick = open;
+  window.openSettingsPanel = open;
   $('settingsCloseBtn').onclick = close;
   $('settingsCancel').onclick = close;
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
