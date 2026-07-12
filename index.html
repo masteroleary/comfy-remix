@@ -591,7 +591,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div class="pager" id="pagerTop"></div>
 
 <!-- Grid -->
-<div id="gridWrap"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+<div id="gridWrap"><div id="homeWrap" style="display:none"></div><div id="gridApp"><div class="loading"><div class="spinner"></div> Loading…</div></div></div>
 
 <!-- Pagination (bottom) -->
 <div class="pager" id="pager"></div>
@@ -814,6 +814,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Vue must load before the main script so the browser grid can be a Vue view -->
+<script src="/vendor/vue.global.prod.js"></script>
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 const S = {
@@ -829,9 +831,19 @@ const S = {
   activeCard: null, // card with open action menu
 };
 
+// Reactive mirror the Vue grid renders from. The vanilla flow keeps owning data
+// fetching and navigation; renderGrid() just pushes the current page into here.
+const gridState = Vue.reactive({
+  loading: true, error: '', items: [],
+  search: '', dir: null, filesMode: false, onHome: false,
+  comfyOutputDir: '', favDir: '', root: '',
+});
+
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const gridWrap   = $('gridWrap');
+const homeWrap   = $('homeWrap');
+const gridAppEl  = $('gridApp');
 const pager      = $('pager');
 const backBtn    = $('backBtn');
 const homeBtn    = $('homeBtn');
@@ -1022,6 +1034,146 @@ function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Vue grid (Increment 1) ─────────────────────────────────────────────────
+// Renders folder chips, search groups, and file cards from gridState. All the
+// actions call the existing vanilla globals (loadDir, openModal, doFavorite,
+// doDelete, openMetadataPage, updateBulkBar, closeCardMenu), and checkboxes stay
+// uncontrolled native inputs so the vanilla bulk bar keeps querying `.ms-cb`.
+const GridCard = {
+  props: ['item'],
+  computed: {
+    thumb() {
+      const it = this.item;
+      if (it.isVideo) return it.thumb ? '/thumb/' + enc(it.path) : null;
+      if (it.isImage) return '/file/' + enc(it.path);
+      return null;
+    },
+    ext() { const n = this.item.name; return n.includes('.') ? n.split('.').pop().toLowerCase() : ''; },
+    extColor() { const it = this.item; return it.isVideo ? 'var(--video)' : it.isImage ? 'var(--image)' : it.isAudio ? 'var(--audio)' : 'var(--text3)'; },
+    cardClass() { const it = this.item; return { 'card-folder': it.isDir, 'card-video-noThumb': it.isVideo && !it.thumb, 'card-audio': it.isAudio }; },
+    infoClickable() { return this.item.isImage || this.item.isVideo; },
+  },
+  methods: {
+    onCheck(e) { const c = e.target.closest('.card'); if (c) c.classList.toggle('ms-checked', e.target.checked); updateBulkBar(); },
+    onInfoClick(e) { if (!this.infoClickable) return; e.stopPropagation(); openMetadataPage(this.item); },
+    fav(e) { e.stopPropagation(); closeCardMenu(); doFavorite(this.item, this.$el); },
+    del(e) { e.stopPropagation(); closeCardMenu(); doDelete(this.item, this.$el); },
+    onClick(e) {
+      if (e.target.closest('.card-actions') || e.target.closest('.card-info') || e.target.classList.contains('ms-cb')) return;
+      const card = this.$el, it = this.item;
+      if (S.multiSelect) { const cb = card.querySelector('.ms-cb'); if (cb) { cb.checked = !cb.checked; card.classList.toggle('ms-checked', cb.checked); updateBulkBar(); } return; }
+      if (card.classList.contains('actions-open')) { closeCardMenu(); return; }
+      if (it.isVideo || it.isImage || it.isAudio) { S.modalIdx = S.mediaItems.findIndex(m => m.path === it.path); openModal(S.mediaItems[S.modalIdx]); }
+    },
+  },
+  mounted() {
+    const img = this.$el.querySelector('img[data-src]');
+    if (img) imgObs.observe(img);
+    const card = this.$el;
+    let t;
+    card.addEventListener('touchstart', () => { t = setTimeout(() => { closeCardMenu(); card.classList.add('actions-open'); S.activeCard = card; }, 500); }, { passive: true });
+    card.addEventListener('touchend', () => clearTimeout(t), { passive: true });
+    card.addEventListener('touchmove', () => clearTimeout(t), { passive: true });
+  },
+  unmounted() { const img = this.$el && this.$el.querySelector('img[data-src]'); if (img && img.dataset.src) imgObs.unobserve(img); },
+  template: `
+    <div class="card" :class="cardClass" @click="onClick">
+      <input type="checkbox" class="ms-cb" :data-path="item.path" @change="onCheck">
+      <div v-if="item.isVideo" class="card-thumb">
+        <img v-if="thumb" :data-src="thumb" alt="">
+        <div v-else class="card-icon">🎬</div>
+        <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+        <div v-if="item.workflow || item.nsfw" class="card-tags"><span v-if="item.workflow" class="card-tag wf" title="Has embedded workflow"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><circle cx="4.5" cy="12" r="2.3"/><circle cx="19" cy="6" r="2.3"/><circle cx="19" cy="18" r="2.3"/><path d="M6.8 12H11M11 6V18M11 6H16.7M11 18H16.7"/></svg> wf</span><span v-if="item.nsfw" class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span></div>
+      </div>
+      <div v-else-if="item.isImage" class="card-thumb">
+        <img :data-src="thumb" alt="">
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+        <div v-if="item.workflow || item.nsfw" class="card-tags"><span v-if="item.workflow" class="card-tag wf" title="Has embedded workflow"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><circle cx="4.5" cy="12" r="2.3"/><circle cx="19" cy="6" r="2.3"/><circle cx="19" cy="18" r="2.3"/><path d="M6.8 12H11M11 6V18M11 6H16.7M11 18H16.7"/></svg> wf</span><span v-if="item.nsfw" class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span></div>
+      </div>
+      <div v-else-if="item.isAudio" class="card-thumb">
+        <div class="card-icon">🎵</div>
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+      </div>
+      <div v-else class="card-thumb"><div class="card-icon">📄</div></div>
+      <div class="card-actions">
+        <button class="act-btn act-fav" title="Favorite" @click="fav">⭐</button>
+        <button class="act-btn act-del" title="Delete" @click="del">🗑</button>
+      </div>
+      <div class="card-info" :style="infoClickable ? 'cursor:pointer' : null" @click="onInfoClick">
+        <div class="card-info-text">
+          <div class="card-name">{{ item.name }}</div>
+          <div v-if="item.size" class="card-meta">{{ item.size }}</div>
+        </div>
+        <div v-if="item.isImage || item.isVideo" class="meta-badge" title="Remix this workflow"><svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></div>
+      </div>
+    </div>
+  `,
+};
+const GridApp = {
+  components: { GridCard },
+  setup() { return { s: gridState }; },
+  computed: {
+    folders() { return this.s.items.filter(i => i.isDir); },
+    files() { return this.s.items.filter(i => !i.isDir); },
+    grouped() { return !!this.s.search && this.files.some(f => f.parentDir); },
+    groups() {
+      const map = new Map();
+      for (const f of this.files) { const k = f.parentDir || ''; if (!map.has(k)) map.set(k, []); map.get(k).push(f); }
+      const cur = (this.s.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+      return [...map.entries()].map(([gdir, files]) => {
+        let rel;
+        if (this.s.filesMode) { rel = filesGroupLabel(gdir); }
+        else { rel = gdir.replace(/\\/g, '/'); if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)'; }
+        return { dir: gdir, label: rel, files };
+      });
+    },
+    canDeleteEmpty() {
+      const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const cur = nrm(this.s.dir);
+      const isRoot = !cur || cur === nrm(this.s.comfyOutputDir) || cur === nrm(this.s.favDir) || cur === nrm(this.s.root);
+      return !this.s.search && !this.s.onHome && this.s.dir && !isRoot;
+    },
+  },
+  methods: {
+    onFolderClick(f, e) {
+      if (e.target.classList.contains('ms-cb')) return;
+      if (S.multiSelect) { const cb = e.currentTarget.querySelector('.ms-cb'); if (cb) { cb.checked = !cb.checked; e.currentTarget.classList.toggle('ms-checked', cb.checked); updateBulkBar(); } return; }
+      loadDir(f.path, 1);
+    },
+    onFolderCheck(e) { const chip = e.target.closest('.folder-chip'); if (chip) chip.classList.toggle('ms-checked', e.target.checked); updateBulkBar(); },
+    openGroup(gdir) { searchInp.value = ''; if (this.s.filesMode) S.filesTab = filesTabForDir(gdir); loadDir(gdir, 1); },
+    delEmpty() { deleteEmptyFolder(); },
+  },
+  template: `
+    <div v-if="s.loading" class="loading"><div class="spinner"></div> Loading…</div>
+    <div v-else-if="s.error" class="err-msg">⚠ {{ s.error }}</div>
+    <div v-else-if="!s.items.length" class="empty">
+      <div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div>
+      <button v-if="canDeleteEmpty" class="btn-ok" @click="delEmpty" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>
+    </div>
+    <template v-else>
+      <div v-if="folders.length" class="folder-row">
+        <div v-for="f in folders" :key="f.path" class="folder-chip" @click="onFolderClick(f, $event)">
+          <input type="checkbox" class="ms-cb" :data-path="f.path" @click.stop @change="onFolderCheck">
+          <span class="folder-emoji">📁</span><span class="folder-label">{{ f.name }}</span>
+        </div>
+      </div>
+      <template v-if="grouped">
+        <template v-for="g in groups" :key="g.dir">
+          <div class="search-group-hdr" title="Open this folder" @click="openGroup(g.dir)">📁 {{ g.label }} <span style="color:var(--text3);font-weight:400">({{ g.files.length }})</span></div>
+          <div class="grid"><grid-card v-for="it in g.files" :key="it.path" :item="it"></grid-card></div>
+        </template>
+      </template>
+      <div v-else class="grid"><grid-card v-for="it in files" :key="it.path" :item="it"></grid-card></div>
+    </template>
+  `,
+};
+// Guard the mount so a grid-render problem can't abort the rest of the app
+// (toolbar, home landing, init all live below this in the same script).
+try { Vue.createApp(GridApp).mount('#gridApp'); }
+catch (e) { console.error('[grid] Vue mount failed:', e); }
+
 function showToast(msg, dur = 2200) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
@@ -1170,7 +1322,9 @@ async function loadDir(dir, page = 1, pushStack = true) {
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
 
-  gridWrap.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+  homeWrap.style.display = 'none'; homeWrap.innerHTML = '';
+  gridAppEl.style.display = '';
+  gridState.loading = true; gridState.error = '';
   pager.innerHTML = '';
   $('pagerTop').innerHTML = '';
   statsTxt.textContent = '';
@@ -1209,7 +1363,7 @@ async function loadDir(dir, page = 1, pushStack = true) {
     renderPager(data);
     renderFileTabs();
   } catch (err) {
-    gridWrap.innerHTML = `<div class="err-msg">⚠ ${esc(err.message)}</div>`;
+    gridState.error = err.message; gridState.loading = false;
   }
 }
 
@@ -1320,12 +1474,12 @@ async function showHomeLanding(forceStatus) {
   pageInfoTxt.textContent = '';
   pager.innerHTML = '';
   $('pagerTop').innerHTML = '';
-  // Hide folder row if present
-  const fr = document.querySelector('.folder-row');
-  if (fr) fr.innerHTML = '';
+  // Home landing renders into its own container; hide the Vue grid while here.
+  gridAppEl.style.display = 'none';
+  homeWrap.style.display = '';
 
   if (!homeStatus || forceStatus) {
-    gridWrap.innerHTML = '<div class="home-landing"><div style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div></div>';
+    homeWrap.innerHTML = '<div class="home-landing"><div style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div></div>';
     try { await getHomeStatus(true); } catch {}
   } else if (Date.now() - homeStatusTs > 15000) {
     getHomeStatus(true).catch(() => {});   // stale: render from cache now, refresh for next visit
@@ -1359,7 +1513,7 @@ async function showHomeLanding(forceStatus) {
   if (pending.length) html += '<div style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: ' + esc(pending.join(', ')) + ' — see Status / Setup</div>';
   html += '<div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" id="homeFeatures" style="color:inherit">✎ Choose features</a></div>';
   html += '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>';
-  gridWrap.innerHTML = '<div class="home-landing">' + html + '</div>';
+  homeWrap.innerHTML = '<div class="home-landing">' + html + '</div>';
 
   // Show total spent
   fetch('/api/cost/summary').then(r => r.json()).then(d => {
@@ -1465,90 +1619,32 @@ function renderHeader(data) {
 }
 
 // ── Grid rendering ────────────────────────────────────────────────────────
+// Push the current page into the reactive grid state; the Vue grid renders it.
+// (Folder chips, search grouping, cards, and the empty state all live in the
+// #gridApp template now — see mountGridApp below.)
 function renderGrid(items) {
-  if (!items.length) {
-    let html = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div>`;
-    // Offer to delete a genuinely-empty subfolder (not a tab root, not search).
-    const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    const cur = nrm(S.dir);
-    const isRoot = !cur || cur === nrm(S.comfyOutputDir) || cur === nrm(S.favDir) || cur === nrm(S.root);
-    if (!S.search && !S.onHome && S.dir && !isRoot) {
-      html += `<button class="btn-ok" id="delEmptyBtn" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>`;
-    }
-    html += `</div>`;
-    gridWrap.innerHTML = html;
-    const del = $('delEmptyBtn');
-    if (del) del.onclick = deleteEmptyFolder;
-    return;
-  }
+  S.mediaItems = items.filter(i => !i.isDir && (i.isVideo || i.isImage || i.isAudio));
+  gridState.items = items;
+  gridState.search = S.search;
+  gridState.dir = S.dir;
+  gridState.filesMode = S.filesMode;
+  gridState.onHome = S.onHome;
+  gridState.comfyOutputDir = S.comfyOutputDir || '';
+  gridState.favDir = S.favDir || '';
+  gridState.root = S.root || '';
+  gridState.loading = false;
+  gridState.error = '';
+}
 
-  const folders = items.filter(i => i.isDir);
-  const files = items.filter(i => !i.isDir);
-  S.mediaItems = files.filter(i => i.isVideo || i.isImage || i.isAudio);
-
-  gridWrap.innerHTML = '';
-
-  // Folder chips row
-  if (folders.length) {
-    const row = document.createElement('div');
-    row.className = 'folder-row';
-    folders.forEach(item => {
-      const chip = document.createElement('div');
-      chip.className = 'folder-chip';
-      chip.innerHTML = `<input type="checkbox" class="ms-cb" data-path="${esc(item.path)}"><span class="folder-emoji">📁</span><span class="folder-label">${esc(item.name)}</span>`;
-      const cb = chip.querySelector('.ms-cb');
-      cb.addEventListener('click', e => { e.stopPropagation(); chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); });
-      chip.onclick = (e) => {
-        if (e.target.classList.contains('ms-cb')) return;
-        if (S.multiSelect) { cb.checked = !cb.checked; chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); return; }
-        loadDir(item.path, 1);
-      };
-      row.appendChild(chip);
-    });
-    gridWrap.appendChild(row);
-  }
-
-  // Media grid — when searching, group results under clickable folder-path headers
-  if (files.length) {
-    const grouped = S.search && files.some(f => f.parentDir);
-    if (grouped) {
-      const groups = new Map();
-      files.forEach((f, i) => {
-        const k = f.parentDir || '';
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push([f, i]); // keep original index for the media viewer
-      });
-      const cur = (S.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
-      for (const [gdir, entries] of groups) {
-        const hdr = document.createElement('div');
-        hdr.className = 'search-group-hdr';
-        let rel;
-        if (S.filesMode) {
-          // Cross-root results: prefix with which tab's tree they came from.
-          rel = filesGroupLabel(gdir);
-        } else {
-          rel = gdir.replace(/\\/g, '/');
-          if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)';
-        }
-        hdr.innerHTML = '📁 ' + esc(rel) + ' <span style="color:var(--text3);font-weight:400">(' + entries.length + ')</span>';
-        hdr.title = 'Open this folder';
-        hdr.onclick = () => {
-          searchInp.value = '';
-          if (S.filesMode) S.filesTab = filesTabForDir(gdir);   // keep the right tab highlighted
-          loadDir(gdir, 1);
-        };
-        gridWrap.appendChild(hdr);
-        const grid = document.createElement('div');
-        grid.className = 'grid';
-        entries.forEach(([item, i]) => grid.appendChild(makeCard(item, i)));
-        gridWrap.appendChild(grid);
-      }
-    } else {
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      files.forEach((item, i) => grid.appendChild(makeCard(item, i)));
-      gridWrap.appendChild(grid);
-    }
+// Reactively drop one item from the grid (used after favorite/delete). Falls back
+// to a full refresh if it isn't on the current page.
+function removeGridItem(path) {
+  const idx = gridState.items.findIndex(i => i.path === path);
+  if (idx >= 0) {
+    gridState.items.splice(idx, 1);
+    S.mediaItems = gridState.items.filter(i => !i.isDir && (i.isVideo || i.isImage || i.isAudio));
+  } else {
+    refreshCurrentPage();
   }
 }
 
@@ -1826,8 +1922,7 @@ async function doFavorite(item, cardEl, fromModal = false) {
         showToast('⭐ Moved to Favorites');
         if (fromModal) closeModal();
         // Remove card from grid
-        if (cardEl) cardEl.remove();
-        else refreshCurrentPage();
+        removeGridItem(item.path);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -1852,8 +1947,7 @@ async function doDelete(item, cardEl, fromModal = false) {
         if (r.error) throw new Error(r.error);
         showToast('🗑 Deleted');
         if (fromModal) closeModal();
-        if (cardEl) cardEl.remove();
-        else refreshCurrentPage();
+        removeGridItem(item.path);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -2706,7 +2800,6 @@ $('statusFeatures').onclick = () => {
   .mb-word:hover{background:#0a84ff1a;color:#fff}
   @media (max-width:640px){.rmx-overlay{padding:0}.rmx-dialog{max-width:100%;max-height:100%;height:100%;border-radius:0;border:0}.rmx-picker-overlay{padding:0}.rmx-picker{max-width:100%;max-height:100%;height:100%;border-radius:0}}
 </style>
-<script src="/vendor/vue.global.prod.js"></script>
 <script>
 (function () {
   if (!window.Vue) { console.warn('[remix] Vue not loaded'); return; }
