@@ -842,6 +842,10 @@ const chrome = Vue.reactive({
   stats: '', pageInfo: '',
 });
 const TYPES = [{ t: 'all', label: 'All' }, { t: 'folder', label: '📁 Folders' }, { t: 'video', label: '🎬 Videos' }, { t: 'image', label: '🖼 Images' }, { t: 'audio', label: '🎵 Audio' }];
+// Reactive state for the top + bottom pagers (Vue-rendered on #pagerTop / #pager).
+const pagerState = Vue.reactive({ page: 1, pages: 0 });
+// Reactive state for the home landing (Vue-rendered on #homeWrap).
+const homeState = Vue.reactive({ loading: false, tiles: [], pendingLabel: '', cost: '', selected: null });
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -1281,11 +1285,10 @@ async function loadDir(dir, page = 1, pushStack = true) {
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
 
-  homeWrap.style.display = 'none'; homeWrap.innerHTML = '';
+  homeWrap.style.display = 'none';
   gridAppEl.style.display = '';
   gridState.loading = true; gridState.error = '';
-  pager.innerHTML = '';
-  $('pagerTop').innerHTML = '';
+  pagerState.pages = 0;
   chrome.stats = ''; chrome.pageInfo = '';
 
   if (pushStack && S.dir && S.dir !== dir) {
@@ -1420,15 +1423,15 @@ async function showHomeLanding(forceStatus) {
   chrome.pathHome = true; chrome.searchLabel = ''; chrome.crumbs = [];
   chrome.backDisabled = true;
   chrome.stats = ''; chrome.pageInfo = '';
-  pager.innerHTML = '';
-  $('pagerTop').innerHTML = '';
+  pagerState.pages = 0;
   // Home landing renders into its own container; hide the Vue grid while here.
   gridAppEl.style.display = 'none';
   homeWrap.style.display = '';
 
   if (!homeStatus || forceStatus) {
-    homeWrap.innerHTML = '<div class="home-landing"><div style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div></div>';
+    homeState.loading = true;
     try { await getHomeStatus(true); } catch {}
+    homeState.loading = false;
   } else if (Date.now() - homeStatusTs > 15000) {
     getHomeStatus(true).catch(() => {});   // stale: render from cache now, refresh for next visit
   }
@@ -1437,58 +1440,67 @@ async function showHomeLanding(forceStatus) {
 
   // Surface the user's chosen features; show everything if setup/status is unknown
   const selected = st && st.features ? st.features : FEATURES.map(f => f.id);
-  const tile = t => '<div class="home-folder" id="' + t.id + '"><div class="home-folder-icon">' + t.icon + '</div><div><div class="home-folder-text">' + t.text + '</div><div class="home-folder-sub">' + t.sub + '</div></div></div>';
+  homeState.selected = selected;
   const pending = [];   // selected but failing their status check → hidden
-  let html = tile({ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' });
+  const tiles = [{ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' }];
 
-  // Combined Files & Media tile — Favorites is the local media root (always
-  // present) and the ComfyUI Output tab uses the ComfyUI output folder. Shown
-  // whenever either root is available; ComfyUI is a required feature.
+  // Combined Files & Media tile — shown whenever either root is available.
   const filesOk = !st || (st.services.media && st.services.media.configured) || (st.services.comfy && st.services.comfy.configured);
-  if (filesOk) {
-    html += tile({ id: 'hlFiles', icon: '📂', text: 'Files & Media', sub: 'ComfyUI output & favorites' });
-  } else {
-    pending.push('Files & Media');
-  }
+  if (filesOk) tiles.push({ id: 'hlFiles', icon: '📂', text: 'Files & Media', sub: 'ComfyUI output & favorites' });
+  else pending.push('Files & Media');
 
   FEATURES.forEach(f => {
     if (f.id === 'media') return;   // folded into the Files & Media tile above
     if (!selected.includes(f.id)) return;
     if (!f.tiles.length) return;
     if (st && !f.ready(st.services)) { pending.push(f.name); return; }
-    html += f.tiles.map(tile).join('');
+    f.tiles.forEach(t => tiles.push(t));
   });
-  if (pending.length) html += '<div style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: ' + esc(pending.join(', ')) + ' — see Status / Setup</div>';
-  html += '<div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" id="homeFeatures" style="color:inherit">✎ Choose features</a></div>';
-  html += '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>';
-  homeWrap.innerHTML = '<div class="home-landing">' + html + '</div>';
+  homeState.tiles = tiles;
+  homeState.pendingLabel = pending.length ? pending.join(', ') : '';
 
   // Show total spent
   fetch('/api/cost/summary').then(r => r.json()).then(d => {
-    const el = $('homeCost');
-    if (!el) return;
-    el.textContent = 'xAI spent: $' + d.total.toFixed(2)
+    homeState.cost = 'xAI spent: $' + d.total.toFixed(2)
       + ' (' + d.voiceMinutes.toFixed(1) + ' voice min, '
       + d.ttsChars.toLocaleString() + ' TTS chars, '
-      + (d.imagineCount||0) + ' images)';
+      + (d.imagineCount || 0) + ' images)';
   }).catch(() => {});
-
-  const wire = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
-  wire('hlFiles', openFilesPanel);
-  wire('hlJobs', () => { if (typeof window.openJobs === 'function') window.openJobs(); else location.href = '/jobs'; });
-  wire('hlClaude', openClaudePanel);
-  wire('hlStatus', openStatusPanel);
-  wire('hlChatLocal', () => { location.href = '/chat/local'; });
-  wire('hlChatGrok', () => { location.href = '/chat/grok'; });
-  wire('hlVoice', async () => {
-    // Voice page requires HTTPS for mic access — switch to the configured HTTPS port
-    if (location.protocol === 'https:') { location.href = '/voice'; return; }
-    let httpsPort = 8443;
-    try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
-    location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
-  });
-  wire('homeFeatures', e => { e.preventDefault(); openSetupWizard(selected); });
 }
+const HomeApp = {
+  setup() { return { s: homeState }; },
+  methods: {
+    tileClick(id) {
+      if (id === 'hlFiles') return openFilesPanel();
+      if (id === 'hlJobs') return (typeof window.openJobs === 'function') ? window.openJobs() : (location.href = '/jobs');
+      if (id === 'hlClaude') return openClaudePanel();
+      if (id === 'hlStatus') return openStatusPanel();
+      if (id === 'hlChatLocal') return void (location.href = '/chat/local');
+      if (id === 'hlChatGrok') return void (location.href = '/chat/grok');
+      if (id === 'hlVoice') return this.openVoice();
+    },
+    async openVoice() {
+      if (location.protocol === 'https:') { location.href = '/voice'; return; }
+      let httpsPort = 8443;
+      try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
+      location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
+    },
+    chooseFeatures(e) { e.preventDefault(); openSetupWizard(this.s.selected || null); },
+  },
+  template: `
+    <div class="home-landing">
+      <div v-if="s.loading" style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div>
+      <template v-else>
+        <div v-for="t in s.tiles" :key="t.id" class="home-folder" :id="t.id" @click="tileClick(t.id)"><div class="home-folder-icon">{{ t.icon }}</div><div><div class="home-folder-text">{{ t.text }}</div><div class="home-folder-sub">{{ t.sub }}</div></div></div>
+        <div v-if="s.pendingLabel" style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: {{ s.pendingLabel }} — see Status / Setup</div>
+        <div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" style="color:inherit" @click="chooseFeatures">✎ Choose features</a></div>
+        <div v-if="s.cost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center">{{ s.cost }}</div>
+      </template>
+    </div>
+  `,
+};
+try { Vue.createApp(HomeApp).mount('#homeWrap'); }
+catch (e) { console.error('[home] Vue mount failed:', e); }
 
 // Build breadcrumb segments from the current dir: the containing root (labelled
 // by tab) followed by each subfolder, each with the dir to navigate to.
@@ -1686,55 +1698,35 @@ document.addEventListener('touchstart', e => {
 }, { passive: true });
 
 // ── Pagination ────────────────────────────────────────────────────────────
+// Pager is Vue-rendered on #pagerTop + #pager from pagerState; this just feeds it.
 function renderPager(data) {
-  const pagerTop = $('pagerTop');
-  if (data.pages <= 1) { pager.innerHTML = ''; pagerTop.innerHTML = ''; return; }
-  pager.innerHTML = '';
-  const { page, pages } = data;
-
-  const addBtn = (label, p, disabled, active) => {
-    const b = document.createElement('button');
-    b.className = 'pg-btn' + (active ? ' cur' : '');
-    b.textContent = label;
-    b.disabled = disabled;
-    if (!disabled) b.onclick = () => { window.scrollTo(0, 0); loadDir(S.dir, p, false); };
-    pager.appendChild(b);
-  };
-  const addDots = () => {
-    const s = document.createElement('span'); s.className = 'pg-dots'; s.textContent = '…'; pager.appendChild(s);
-  };
-
-  addBtn('‹', page - 1, page === 1, false);
-
-  const pageNums = new Set([1, pages]);
-  for (let p = Math.max(2, page - 2); p <= Math.min(pages - 1, page + 2); p++) pageNums.add(p);
-  const sorted = [...pageNums].sort((a, b) => a - b);
-
-  let prev = 0;
-  for (const p of sorted) {
-    if (p - prev > 1) addDots();
-    addBtn(String(p), p, false, p === page);
-    prev = p;
-  }
-
-  addBtn('›', page + 1, page === pages, false);
-
-  // Clone to top pager
-  pagerTop.innerHTML = '';
-  pager.querySelectorAll('button, span').forEach(el => {
-    const clone = el.cloneNode(true);
-    if (clone.onclick === undefined && el.onclick) {
-      // re-bind click from original
-    }
-    pagerTop.appendChild(clone);
-  });
-  pagerTop.querySelectorAll('button').forEach((btn, i) => {
-    const orig = pager.querySelectorAll('button')[i];
-    if (orig && !orig.disabled) {
-      btn.onclick = orig.onclick;
-    }
-  });
+  pagerState.page = data.page;
+  pagerState.pages = data.pages;
 }
+const PagerApp = {
+  setup() { return { s: pagerState }; },
+  computed: {
+    items() {
+      const { page, pages } = this.s;
+      if (pages <= 1) return [];
+      const out = [{ k: 'prev', label: '‹', p: page - 1, disabled: page === 1 }];
+      const nums = new Set([1, pages]);
+      for (let p = Math.max(2, page - 2); p <= Math.min(pages - 1, page + 2); p++) nums.add(p);
+      let prev = 0;
+      for (const p of [...nums].sort((a, b) => a - b)) {
+        if (p - prev > 1) out.push({ k: 'd' + p, dots: true });
+        out.push({ k: 'n' + p, label: String(p), p, cur: p === page });
+        prev = p;
+      }
+      out.push({ k: 'next', label: '›', p: page + 1, disabled: page === pages });
+      return out;
+    },
+  },
+  methods: { go(p) { window.scrollTo(0, 0); loadDir(S.dir, p, false); } },
+  template: `<template v-for="it in items" :key="it.k"><span v-if="it.dots" class="pg-dots">…</span><button v-else class="pg-btn" :class="{cur: it.cur}" :disabled="it.disabled" @click="go(it.p)">{{ it.label }}</button></template>`,
+};
+try { Vue.createApp(PagerApp).mount('#pagerTop'); Vue.createApp(PagerApp).mount('#pager'); }
+catch (e) { console.error('[pager] Vue mount failed:', e); }
 
 // ── Modal ─────────────────────────────────────────────────────────────────
 // ── Modal viewer (Vue) ─────────────────────────────────────────────────────
