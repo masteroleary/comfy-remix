@@ -2474,6 +2474,8 @@ $('statusFeatures').onclick = () => {
   .rmx-media{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
   .rmx-media img,.rmx-media video{max-width:100%;max-height:100%;border-radius:8px}
   .rmx-form{flex:1;min-height:0;padding:16px;overflow:auto}
+  .rmx-runsec{flex:none;border-top:1px solid #2c2c2e;padding:12px 16px 16px;overflow-y:auto;max-height:56%}
+  .rmx-runsec .rmx-run{flex-wrap:wrap;margin:0 0 4px}
   .rmx-inp{background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
   select.rmx-inp{cursor:pointer}
   .rmx-grid{display:flex;flex-wrap:wrap;gap:14px}
@@ -2880,13 +2882,26 @@ $('statusFeatures').onclick = () => {
       // Danger-zone node edits: apply by node id + key when the built graph has them.
       if (p.nodeEdits) { let n = 0; for (const [nid, kv] of Object.entries(p.nodeEdits)) { const node = prompt[nid]; if (node && node.inputs) for (const [k, val] of Object.entries(kv)) { node.inputs[k] = val; n++; } } if (n) log('Applied ' + n + ' node edit(s)'); }
       if (uploadedName) for (const n of Object.values(prompt)) { const t = (n._meta && n._meta.title || '').toUpperCase(); if (t.includes('MAIN IMAGE') && n.inputs) n.inputs.image = uploadedName; }
-      for (const n of Object.values(prompt)) { if (n.inputs && !p.seedPinned) for (const k of Object.keys(n.inputs)) { if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = Math.floor(Math.random() * 2147483647); } if (n.is_changed) delete n.is_changed; }
-      const ok = await execWs(job, prompt, graph, log);
-      // Flip status immediately so the card doesn't linger as "running" while
-      // outputs are still being fetched, then attribute this job's own outputs.
-      job.status = ok ? 'done' : 'error'; job.endTime = Date.now(); job._pct = 100; persist(job);
-      if (jobChannel && job.promptIds[0]) jobChannel.postMessage({ type: 'done', promptId: job.promptIds[0], ok });
-      if (ok) { job._node = 'Scanning outputs…'; await collectOutputs(job); }
+      for (const n of Object.values(prompt)) { if (n.is_changed) delete n.is_changed; }
+      // Run the prompt `runs` times. Each run gets a fresh random seed (unless the
+      // seed is pinned) so the runs vary, and outputs are collected after every run
+      // so the thumbnails accumulate instead of being replaced.
+      const runs = Math.max(1, p.runs || 1);
+      job.runs = runs;
+      let allOk = true;
+      for (let i = 0; i < runs; i++) {
+        if (!p.seedPinned) for (const n of Object.values(prompt)) { if (n.inputs) for (const k of Object.keys(n.inputs)) { if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = Math.floor(Math.random() * 2147483647); } }
+        job._pct = 0; job._node = runs > 1 ? ('Run ' + (i + 1) + '/' + runs + '…') : 'Running…';
+        if (runs > 1) log('— Run ' + (i + 1) + '/' + runs + ' —');
+        const ok = await execWs(job, prompt, graph, log);
+        if (!ok) { allOk = false; break; }
+        job._node = 'Scanning outputs…';
+        await collectOutputs(job);            // accumulates into job.results (dedup by path)
+        job.runsCompleted = (job.runsCompleted || 0) + 1; persist(job);
+      }
+      // Flip status once all runs are done (or one failed).
+      job.status = allOk ? 'done' : 'error'; job.endTime = Date.now(); job._pct = 100; persist(job);
+      if (jobChannel && job.promptIds[0]) jobChannel.postMessage({ type: 'done', promptId: job.promptIds[0], ok: allOk });
     })();
     return id;
   }
@@ -3041,7 +3056,9 @@ $('statusFeatures').onclick = () => {
       const saveMsg = ref('');
       const claudeFix = reactive({ running: false });
       const nodeFilter = ref('');
-      const tab = ref('remix');
+      const tab = ref('workflow');
+      const runCount = ref((function () { try { return localStorage.getItem('archiveRunCount') || '1'; } catch (e) { return '1'; } })());
+      watch(runCount, v => { try { localStorage.setItem('archiveRunCount', v); } catch (e) {} });
       const job = computed(() => startedId.value ? byId(startedId.value) : null);
       const isVideo = computed(() => S.type === 'video');
       const fileUrl = computed(() => '/file/' + enc(S.path));
@@ -3128,7 +3145,7 @@ $('statusFeatures').onclick = () => {
         // Image fields set to a Media path (via the picker) need uploading at run.
         const mediaFields = cfg.fields.filter(f => f.enabled && f.kind === 'image_input' && f.value && /[\\/]/.test(String(f.value))).map(f => ({ id: f.id, value: f.value, type: 'image' }));
         const edits = Object.keys(nodeEdits).length ? JSON.parse(JSON.stringify(nodeEdits)) : null;
-        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits });
+        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits, runs: parseInt(runCount.value, 10) || 1 });
       }
       function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
@@ -3209,7 +3226,7 @@ $('statusFeatures').onclick = () => {
       function onPick(path) { if (pickerField) pickerField.value = path; picker.open = false; }
       provide('openPicker', openPicker);
 
-      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
+      return { S, tab, runCount, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
         replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit };
     },
     template: `
@@ -3218,17 +3235,14 @@ $('statusFeatures').onclick = () => {
           <div class="rmx-head">
             <b class="rmx-title">Remix · {{ S.name }}</b>
             <div class="rmx-tabs">
-              <button :class="{on: tab==='remix'}" @click="tab='remix'">Remix</button>
+              <button :class="{on: tab==='workflow'}" @click="tab='workflow'">Workflow</button>
               <button :class="{on: tab==='preview'}" @click="tab='preview'">Preview</button>
             </div>
-            <select v-show="tab==='remix'" class="rmx-inp" v-model="wf" style="margin-left:8px;max-width:230px">
-              <option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option>
-            </select>
             <button class="rmx-x" @click="close" title="Close (Esc)">✕</button>
           </div>
           <div class="rmx-body">
             <div class="rmx-media" v-show="tab==='preview'"><video v-if="isVideo" :src="fileUrl" controls loop muted></video><img v-else :src="fileUrl"></div>
-            <div class="rmx-form" v-show="tab==='remix'">
+            <div class="rmx-form" v-show="tab==='workflow'">
               <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
               <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
               <div v-else>
@@ -3286,19 +3300,6 @@ $('statusFeatures').onclick = () => {
                   <div class="rmx-field" v-for="f in hiddenFields" :key="f.id"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" @change="f.enabled=true" title="Show field"> {{ f.label }} <span class="rmx-mut" style="text-transform:none">· {{ f.kind }}</span></label><field-control :field="f"></field-control></div>
                 </details>
               </div>
-              <div class="rmx-run">
-                <button v-if="!job || job.status!=='running'" class="rmx-btn go" @click="remix" :disabled="!wf">▶ Remix</button>
-                <button v-else class="rmx-btn cancel" @click="cancelJob(job)">■ Cancel</button>
-                <span class="rmx-status" v-if="job">{{ job.status==='running' ? (job._node||'…') : job.status }}</span>
-                <span class="rmx-status" v-else>close this anytime — runs keep going in Jobs</span>
-              </div>
-              <div v-if="job && (job.status==='running' || job._pct>0)" class="rmx-prog"><div class="rmx-progfill" :style="{width: job._pct + '%'}"></div></div>
-              <div v-if="job && job._log.length" class="rmx-log"><div v-for="(l,i) in job._log" :key="i" :class="'ll-'+l.cls">{{ l.m }}</div></div>
-              <div v-if="job && job._log.length" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-                <button class="rmx-btn2" @click="saveLog">{{ saveMsg || '💾 Save log' }}</button>
-                <button v-if="job.status==='error'" class="rmx-btn2" @click="fixWithClaude" title="Save the log and have Claude review + edit the workflow file">{{ claudeFix.running ? '■ Stop Claude' : '🤖 Fix with Claude' }}</button>
-              </div>
-              <div v-if="job && job.results.length" class="rmx-outgrid"><a v-for="f in job.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank" :title="f.name"><img :src="outUrl(f)" loading="lazy"></a></div>
               <details class="rmx-hidden" v-if="meta.embedded" style="margin-top:12px">
                 <summary>Source workflow · {{ Object.keys(meta.embedded).length }} nodes</summary>
                 <div style="padding:6px 12px 12px">
@@ -3316,6 +3317,24 @@ $('statusFeatures').onclick = () => {
                   <details v-if="meta.embeddedWf" class="rmx-node"><summary>Raw workflow JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embeddedWf, null, 2) }}</pre></details>
                 </div>
               </details>
+            </div>
+            <!-- Run section: always visible (workflow, run count, thumbs) regardless of tab -->
+            <div class="rmx-runsec">
+              <div class="rmx-run">
+                <select class="rmx-inp" v-model="wf" style="min-width:104px;max-width:170px" title="Workflow"><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select>
+                <select class="rmx-inp" v-model="runCount" style="width:70px" title="Number of runs"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select>
+                <button v-if="!job || job.status!=='running'" class="rmx-btn go" @click="remix" :disabled="!wf">▶ Remix</button>
+                <button v-else class="rmx-btn cancel" @click="cancelJob(job)">■ Cancel</button>
+                <span class="rmx-status" v-if="job">{{ job.status==='running' ? (job._node||'…') : job.status }}</span>
+                <span class="rmx-status" v-else>close this anytime — runs keep going in Jobs</span>
+              </div>
+              <div v-if="job && (job.status==='running' || job._pct>0)" class="rmx-prog"><div class="rmx-progfill" :style="{width: job._pct + '%'}"></div></div>
+              <div v-if="job && job._log.length" class="rmx-log"><div v-for="(l,i) in job._log" :key="i" :class="'ll-'+l.cls">{{ l.m }}</div></div>
+              <div v-if="job && job._log.length" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <button class="rmx-btn2" @click="saveLog">{{ saveMsg || '💾 Save log' }}</button>
+                <button v-if="job.status==='error'" class="rmx-btn2" @click="fixWithClaude" title="Save the log and have Claude review + edit the workflow file">{{ claudeFix.running ? '■ Stop Claude' : '🤖 Fix with Claude' }}</button>
+              </div>
+              <div v-if="job && job.results.length" class="rmx-outgrid"><a v-for="f in job.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank" :title="f.name"><img :src="outUrl(f)" loading="lazy"></a></div>
             </div>
           </div>
         </div>
