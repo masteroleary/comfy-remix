@@ -2578,6 +2578,16 @@ $('statusFeatures').onclick = () => {
   .rmx-lora-col{flex:1;min-width:0}
   @media (max-width:640px){.rmx-lora-cols{flex-direction:column;gap:8px}}
   .rmx-nodegroup-title{font-size:10px;color:#7d7d82;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;border-bottom:1px solid #2c2c2e;padding-bottom:3px}
+  .rmx-lb{position:fixed;inset:0;z-index:3300;background:#000e;display:flex;align-items:center;justify-content:center;padding:20px}
+  .rmx-lb-body{max-width:100%;max-height:100%;display:flex;align-items:center;justify-content:center}
+  .rmx-lb-body img,.rmx-lb-body video{max-width:100%;max-height:86vh;border-radius:8px;background:#000}
+  .rmx-lb-x{position:absolute;top:12px;right:16px;background:#0008;border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:50%;cursor:pointer;z-index:2}
+  .rmx-lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:#0008;border:none;color:#fff;font-size:38px;line-height:1;width:50px;height:72px;border-radius:10px;cursor:pointer;z-index:2}
+  .rmx-lb-nav.prev{left:12px}
+  .rmx-lb-nav.next{right:12px}
+  .rmx-lb-nav[disabled]{opacity:.2;cursor:default}
+  .rmx-lb-label{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#fff;font-size:13px;padding:0 16px;text-shadow:0 1px 4px #000;pointer-events:none}
+  @media (max-width:640px){.rmx-lb{padding:0}.rmx-lb-nav{background:#0005;width:44px;height:60px;font-size:32px}}
   .rmx-picker-overlay{position:fixed;inset:0;z-index:3100;background:#000c;display:flex;align-items:center;justify-content:center;padding:24px}
   .rmx-picker{position:relative;background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:1000px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
   .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;text-transform:capitalize}
@@ -3176,7 +3186,21 @@ $('statusFeatures').onclick = () => {
         startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, embeddedWf: inherit ? meta.embeddedWf : null, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits, runs: parseInt(runCount.value, 10) || 1 });
       }
       function close() { S.open = false; }
-      const onKey = e => { if (e.key === 'Escape') close(); };
+      // In-SPA lightbox for the run's output thumbnails (‹ › + keyboard nav).
+      const lightbox = reactive({ open: false, idx: 0 });
+      const lbItems = computed(() => (job.value && job.value.results) || []);
+      const lbCur = computed(() => { const f = lbItems.value[lightbox.idx]; return f ? { path: f.path, name: f.name, isVideo: isVideoName(f.name) } : null; });
+      function openResult(i) { lightbox.idx = i; lightbox.open = true; }
+      function lbNav(d) { const ni = lightbox.idx + d; if (ni >= 0 && ni < lbItems.value.length) lightbox.idx = ni; }
+      const onKey = e => {
+        if (lightbox.open) {
+          if (e.key === 'Escape') lightbox.open = false;
+          else if (e.key === 'ArrowLeft') lbNav(-1);
+          else if (e.key === 'ArrowRight') lbNav(1);
+          return;
+        }
+        if (e.key === 'Escape') close();
+      };
       onMounted(() => { window.addEventListener('keydown', onKey); document.body.classList.add('rmx-noscroll'); });
       onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.classList.remove('rmx-noscroll'); });
       const outUrl = f => (isVideoName(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
@@ -3255,7 +3279,8 @@ $('statusFeatures').onclick = () => {
       provide('openPicker', openPicker);
 
       return { S, tab, runCount, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
-        replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit };
+        replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit,
+        lightbox, lbItems, lbCur, openResult, lbNav };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3363,7 +3388,7 @@ $('statusFeatures').onclick = () => {
                 <button class="rmx-btn2" @click="saveLog">{{ saveMsg || '💾 Save log' }}</button>
                 <button v-if="job.status==='error'" class="rmx-btn2" @click="fixWithClaude" title="Save the log and have Claude review + edit the workflow file">{{ claudeFix.running ? '■ Stop Claude' : '🤖 Fix with Claude' }}</button>
               </div>
-              <div v-if="job && job.results.length" class="rmx-outgrid"><a v-for="f in job.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank" :title="f.name"><img :src="outUrl(f)" loading="lazy"></a></div>
+              <div v-if="job && job.results.length" class="rmx-outgrid"><a v-for="(f,i) in job.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" @click.prevent="openResult(i)" :title="f.name"><img :src="outUrl(f)" loading="lazy"></a></div>
             </div>
           </div>
         </div>
@@ -3373,6 +3398,16 @@ $('statusFeatures').onclick = () => {
           <div class="rmx-picker-head"><b>Pick {{ picker.type }}</b><button class="rmx-x" style="margin-left:auto" @click="picker.open=false">✕</button></div>
           <media-browser :type="picker.type" @pick="onPick"></media-browser>
         </div>
+      </div>
+      <div v-if="lightbox.open" class="rmx-lb" @click.self="lightbox.open=false">
+        <button class="rmx-lb-x" @click="lightbox.open=false" title="Close (Esc)">✕</button>
+        <button class="rmx-lb-nav prev" @click="lbNav(-1)" :disabled="lightbox.idx<=0" title="Previous (←)">‹</button>
+        <div class="rmx-lb-body">
+          <video v-if="lbCur && lbCur.isVideo" :key="lbCur.path" :src="'/file/'+encodeURIComponent(lbCur.path)" controls autoplay loop></video>
+          <img v-else-if="lbCur" :key="lbCur.path" :src="'/file/'+encodeURIComponent(lbCur.path)" :alt="lbCur.name">
+        </div>
+        <button class="rmx-lb-nav next" @click="lbNav(1)" :disabled="lightbox.idx>=lbItems.length-1" title="Next (→)">›</button>
+        <div class="rmx-lb-label">{{ lbCur ? lbCur.name : '' }}<span class="rmx-mut" v-if="lbItems.length>1"> · {{ lightbox.idx+1 }} / {{ lbItems.length }}</span></div>
       </div>
     `,
   };
