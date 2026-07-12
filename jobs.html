@@ -44,7 +44,7 @@ body{background:#0d0d0d;color:#f2f2f7;font-family:-apple-system,BlinkMacSystemFo
 <div class="jobs-list" id="jobsList"><div class="empty">Loading...</div></div>
 
 <script>
-const COMFY_WS = 'ws://' + location.host + '/comfy-ws?clientId=jobs-' + Date.now();
+const COMFY_WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/comfy-ws?clientId=jobs-' + Date.now();
 
 const JobDB = {
   _db: null,

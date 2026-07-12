@@ -75,6 +75,17 @@ textarea.edit-input{resize:vertical;line-height:1.4}
 .seed-switch.on{background:#0a84ff;border-color:#0a84ff}
 .seed-switch .thumb{position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#f2f2f7;display:flex;align-items:center;justify-content:center;font-size:14px;transition:left .15s}
 .seed-switch.on .thumb{left:30px}
+/* Detected Fields form */
+body.fields-mode #promptSection,body.fields-mode #genSection,body.fields-mode #hlStepsSection,body.fields-mode #loraSection,body.fields-mode #framesSelect{display:none !important}
+.fc-input{background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+.fc-field{margin:10px 0}
+.fc-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.fc-grid{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.fc-hidden-tgl{width:15px;height:15px;flex:none;accent-color:#0a84ff;cursor:pointer}
+#fieldsHidden summary{list-style:none;cursor:pointer;padding:9px 12px;font-size:12px;color:#8e8e93;user-select:none;display:flex;align-items:center;gap:6px}
+#fieldsHidden summary::-webkit-details-marker{display:none}
+#fieldsHidden summary::before{content:'▸';display:inline-block;transition:transform .12s;color:#8e8e93}
+#fieldsHidden[open] summary::before{transform:rotate(90deg)}
 </style></head><body>
 <div class="top-bar" style="flex-direction:column;gap:4px">
   <h1 style="width:100%;font-size:13px;color:#8e8e93;font-weight:400" id="fileNameHdr"></h1>
@@ -173,6 +184,19 @@ textarea.edit-input{resize:vertical;line-height:1.4}
             <div id="loraListLow"></div>
           </div>
         </div>
+      </div>
+    </div>
+    <div id="fieldsSection" style="display:none;margin:8px 0">
+      <div id="fieldsActive"></div>
+      <details id="fieldsHidden" style="margin-top:8px;background:#1c1c1e;border:1px solid #38383a;border-radius:8px">
+        <summary><span id="fieldsHiddenCount">0 hidden fields</span></summary>
+        <div id="fieldsHiddenList" style="padding:2px 12px 12px"></div>
+      </details>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="fieldsSaveBtn" style="font-size:12px;padding:6px 12px;background:#2d5a1e;color:#a8e06c">Save field setup</button>
+        <button class="btn" id="fieldsRegenBtn" style="font-size:12px;padding:6px 12px" title="Re-detect from the workflow file (keeps your on/off edits)">↻ Refresh detection</button>
+        <button class="btn" id="fieldsClassicBtn" style="font-size:12px;padding:6px 12px" title="Switch back to the classic controls">↩ Classic controls</button>
+        <span id="fieldsMsg" style="font-size:12px;color:#8e8e93"></span>
       </div>
     </div>
     <div class="exec-panel" id="execPanel">
@@ -418,8 +442,10 @@ function loadWorkflowConfig(name) {
   if (!name) return Promise.resolve();   // no selection yet (e.g. Inherit removed, options still loading)
   if (name === 'inherit') {
     setupInheritControls();
+    loadFieldConfig('inherit');
     return Promise.resolve();
   }
+  loadFieldConfig(name);   // populate the Detected Fields panel alongside the legacy controls
   return fetch('/api/workflow-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
     // Check if workflow file changed since last cache
     const savedMtime = localStorage.getItem('archiveMtime_' + name);
@@ -554,7 +580,8 @@ function loadWorkflowConfig(name) {
   }).catch(() => {});
 }
 
-function renderLoraRows(arr, container) {
+function renderLoraRows(arr, container, onChange) {
+  const save = onChange || saveLoras;
   container.innerHTML = '';
   arr.forEach((l) => {
     const row = document.createElement('div');
@@ -565,8 +592,8 @@ function renderLoraRows(arr, container) {
       + '<input type="number" value="' + l.strength + '" step="0.1" min="0" max="10">';
     const cb = row.querySelector('input[type=checkbox]');
     const numInp = row.querySelector('input[type=number]');
-    cb.onchange = () => { l.on = cb.checked; row.className = 'lora-row' + (l.on ? '' : ' off'); saveLoras(); };
-    numInp.onchange = () => { l.strength = parseFloat(numInp.value) || 0; saveLoras(); };
+    cb.onchange = () => { l.on = cb.checked; row.className = 'lora-row' + (l.on ? '' : ' off'); save(); };
+    numInp.onchange = () => { l.strength = parseFloat(numInp.value) || 0; save(); };
     container.appendChild(row);
   });
 }
@@ -1451,6 +1478,253 @@ function applyInheritEdits(prompt) {
   return prompt;
 }
 
+// ── Detected Fields panel — a config-driven generate form that reuses the
+// existing styled controls (seed switch, LoRA rows/columns). Enabled fields show
+// directly; disabled ones live in a "(N hidden fields)" expander and pop up top
+// when switched on. Replaces the classic scattered controls (body.fields-mode). ──
+let fieldConfig = null;
+let useFieldsMode = false;
+const WIDE_KINDS = new Set(['prompt', 'negative_prompt', 'lora_list', 'image_input', 'video_input', 'audio_input']);
+
+function loadFieldConfig(name) {
+  const sec = document.getElementById('fieldsSection');
+  if (!name || name === 'inherit') { sec.style.display = 'none'; fieldConfig = null; document.body.classList.remove('fields-mode'); return; }
+  fetch('/api/workflow-field-config?name=' + encodeURIComponent(name)).then(r => r.json()).then(cfg => {
+    if (!cfg || cfg.error || !Array.isArray(cfg.fields)) { sec.style.display = 'none'; fieldConfig = null; document.body.classList.remove('fields-mode'); return; }
+    fieldConfig = cfg;
+    prefillFieldsFromMedia();
+    sec.style.display = 'block';
+    renderFieldsPanel();
+    setFieldsMode(localStorage.getItem('archiveClassic_' + name) !== '1');
+  }).catch(() => { sec.style.display = 'none'; fieldConfig = null; document.body.classList.remove('fields-mode'); });
+}
+
+// Build just the control node for a field, reusing existing components/classes.
+function buildFieldControl(f) {
+  const t = (f.control && f.control.type) || 'text';
+  const v = f.value == null ? '' : f.value;
+
+  if (f.kind === 'seed') {
+    const wrap = document.createElement('span');
+    wrap.style.cssText = 'display:flex;gap:8px;align-items:center';
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.min = '0'; inp.step = '1'; inp.placeholder = 'random'; inp.className = 'fc-input';
+    inp.style.width = '160px'; inp.setAttribute('data-fid', f.id);
+    if (Number(v) >= 0) inp.value = v;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'seed-switch'; btn.setAttribute('data-seedpin', '');
+    btn.title = 'Off = new random seed each run · On = pin this exact seed';
+    btn.innerHTML = '<span class="thumb">🎲</span>';
+    if (f.__seedPinned) btn.classList.add('on');
+    const reflect = () => { const on = btn.classList.contains('on'); btn.querySelector('.thumb').textContent = on ? '📌' : '🎲'; inp.style.borderColor = (on && inp.value.trim() !== '') ? '#0a84ff' : '#48484a'; };
+    btn.onclick = () => { btn.classList.toggle('on'); f.__seedPinned = btn.classList.contains('on'); reflect(); };
+    reflect();
+    inp.addEventListener('input', reflect);
+    wrap.append(inp, btn);
+    return wrap;
+  }
+  if (t === 'multiline') {
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.className = 'fc-input'; ta.style.cssText = 'width:100%;resize:vertical'; ta.setAttribute('data-fid', f.id);
+    ta.value = v; return ta;
+  }
+  if (t === 'boolean') {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.style.cssText = 'width:16px;height:16px;accent-color:#0a84ff'; cb.checked = !!v; cb.setAttribute('data-fid', f.id);
+    return cb;
+  }
+  if (t === 'int' || t === 'float') {
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.step = (t === 'float' ? '0.01' : '1'); inp.className = 'fc-input'; inp.style.width = '110px'; inp.value = v; inp.setAttribute('data-fid', f.id);
+    return inp;
+  }
+  if (t === 'lora_rows') {
+    const cont = document.createElement('div');
+    cont.setAttribute('data-fid', f.id);
+    if (!Array.isArray(f.value)) f.value = [];
+    renderLoraRows(f.value, cont, () => {});   // rows mutate f.value in place
+    return cont;
+  }
+  if (t === 'image' || t === 'video' || t === 'audio') {
+    const wrap = document.createElement('span');
+    wrap.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    if (t === 'image' && v) {
+      const img = document.createElement('img');
+      img.src = '/file/' + encodeURIComponent(v); img.onerror = () => img.style.display = 'none';
+      img.style.cssText = 'height:44px;border-radius:6px;border:1px solid #48484a';
+      wrap.appendChild(img);
+    }
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'fc-input'; inp.style.width = '220px'; inp.value = v; inp.setAttribute('data-fid', f.id);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn'; btn.style.cssText = 'font-size:11px;padding:4px 8px'; btn.textContent = '📷 current';
+    btn.title = 'Use the currently-viewed file'; btn.onclick = () => { if (typeof currentFileName === 'string') { inp.value = currentFileName; if (wrap.querySelector('img')) { const im = wrap.querySelector('img'); im.src = '/file/' + encodeURIComponent(currentFileName); im.style.display = ''; } } };
+    wrap.append(inp, btn); return wrap;
+  }
+  if (t === 'combo') {
+    const sel = document.createElement('select');
+    sel.className = 'fc-input'; sel.setAttribute('data-fid', f.id);
+    const opts = (f.control && f.control.options) || [v];
+    for (const o of opts) { const op = document.createElement('option'); op.value = o; op.textContent = o; if (o === v) op.selected = true; sel.appendChild(op); }
+    return sel;
+  }
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.className = 'fc-input'; inp.style.cssText = 'width:280px;max-width:100%'; inp.value = v; inp.setAttribute('data-fid', f.id);
+  return inp;
+}
+
+// One field row: enable toggle + label + control.
+function buildFieldRow(f) {
+  const row = document.createElement('div');
+  row.className = 'fc-field';
+  const lbl = document.createElement('label'); lbl.className = 'fc-lbl';
+  const tgl = document.createElement('input');
+  tgl.type = 'checkbox'; tgl.className = 'fc-hidden-tgl'; tgl.checked = !!f.enabled;
+  tgl.title = f.enabled ? 'Hide this field' : 'Show this field';
+  tgl.onchange = () => { f.enabled = tgl.checked; renderFieldsPanel(); };
+  lbl.appendChild(tgl);
+  lbl.appendChild(document.createTextNode(f.label));
+  if (f.unreachable) { const s = document.createElement('span'); s.textContent = ' ⚠'; s.title = 'not on the output path — may do nothing'; s.style.color = '#ff9f0a'; lbl.appendChild(s); }
+  if (f.inactive) { const s = document.createElement('span'); s.textContent = ' ⚠muted'; s.title = 'target is muted/bypassed'; s.style.color = '#ff9f0a'; lbl.appendChild(s); }
+  row.appendChild(lbl);
+  row.appendChild(buildFieldControl(f));
+  return row;
+}
+
+// When the loaded media carries an embedded prompt/seed (i.e. it's a generated
+// result), preload the prompt/seed fields with it — so opening a video you made
+// shows the prompt that made it, not the workflow file's default. Matches the
+// classic form's "preload from the image" behavior.
+function prefillFieldsFromMedia() {
+  if (!fieldConfig) return;
+  try {
+    const p = (typeof extractImagePrompt === 'function') ? extractImagePrompt() : '';
+    if (p && p.trim()) { const pf = fieldConfig.fields.find(f => f.kind === 'prompt' && !f.variant); if (pf) pf.value = p; }
+    const s = (typeof extractImageSeed === 'function') ? extractImageSeed() : null;
+    if (s != null && Number(s) >= 0) { const sf = fieldConfig.fields.find(f => f.kind === 'seed'); if (sf) sf.value = s; }
+  } catch {}
+}
+
+// Capture the current control values back into f.value so a re-render (e.g. when
+// toggling a hidden field) doesn't discard in-progress edits.
+function syncFieldValuesFromDOM() {
+  if (!fieldConfig) return;
+  const root = document.getElementById('fieldsSection');
+  for (const f of fieldConfig.fields) {
+    const t = (f.control && f.control.type) || 'text';
+    if (t === 'lora_rows') continue;            // rows already mutate f.value in place
+    const el = root.querySelector('[data-fid="' + f.id + '"]');
+    if (!el) continue;
+    if (f.kind === 'seed') { f.value = el.value.trim() === '' ? -1 : parseInt(el.value, 10); const pin = root.querySelector('[data-seedpin]'); if (pin) f.__seedPinned = pin.classList.contains('on'); }
+    else if (t === 'boolean') f.value = el.checked;
+    else f.value = el.value;
+  }
+}
+
+function renderFieldsPanel() {
+  syncFieldValuesFromDOM();
+  const active = document.getElementById('fieldsActive');
+  const hiddenList = document.getElementById('fieldsHiddenList');
+  active.innerHTML = ''; hiddenList.innerHTML = '';
+  if (!fieldConfig) return;
+  // LoRA loaders render last, after the scalar/prompt inputs (stable otherwise).
+  const loraLast = (a, b) => (/^lora/.test(a.kind) ? 1 : 0) - (/^lora/.test(b.kind) ? 1 : 0);
+  const enabled = fieldConfig.fields.filter(f => f.enabled).sort(loraLast);
+  const disabled = fieldConfig.fields.filter(f => !f.enabled).sort(loraLast);
+
+  // High/low LoRA pair → reuse the two-column layout.
+  const loHi = enabled.find(f => f.kind === 'lora_list' && f.variant === 'high');
+  const loLo = enabled.find(f => f.kind === 'lora_list' && f.variant === 'low');
+  const paired = new Set();
+  let grid = null;
+  const flushGrid = () => { grid = null; };
+  for (const f of enabled) {
+    if (paired.has(f.id)) continue;
+    if (f === loHi && loLo) {
+      flushGrid();
+      const cols = document.createElement('div'); cols.className = 'lora-hl-cols';
+      for (const [lf, title] of [[loHi, 'High-noise LoRAs'], [loLo, 'Low-noise LoRAs']]) {
+        const col = document.createElement('div'); col.className = 'lora-hl-col';
+        const lab = document.createElement('div'); lab.className = 'lora-hl-label';
+        const tgl = document.createElement('input'); tgl.type = 'checkbox'; tgl.className = 'fc-hidden-tgl'; tgl.checked = true; tgl.title = 'Hide'; tgl.onchange = () => { lf.enabled = false; renderFieldsPanel(); };
+        lab.appendChild(tgl); lab.appendChild(document.createTextNode(' ' + title));
+        const cont = document.createElement('div'); cont.setAttribute('data-fid', lf.id);
+        if (!Array.isArray(lf.value)) lf.value = [];
+        renderLoraRows(lf.value, cont, () => {});
+        col.append(lab, cont); cols.appendChild(col);
+        paired.add(lf.id);
+      }
+      active.appendChild(cols);
+      continue;
+    }
+    if (WIDE_KINDS.has(f.kind)) { flushGrid(); active.appendChild(buildFieldRow(f)); }
+    else { if (!grid) { grid = document.createElement('div'); grid.className = 'fc-grid'; active.appendChild(grid); } grid.appendChild(buildFieldRow(f)); }
+  }
+  if (!enabled.length) active.innerHTML = '<div style="font-size:12px;color:#8e8e93;padding:4px 0">No fields enabled — open “hidden fields” below to add some.</div>';
+
+  for (const f of disabled) hiddenList.appendChild(buildFieldRow(f));
+  const hd = document.getElementById('fieldsHidden');
+  document.getElementById('fieldsHiddenCount').textContent = disabled.length + ' hidden field' + (disabled.length === 1 ? '' : 's');
+  hd.style.display = disabled.length ? '' : 'none';
+}
+
+function setFieldsMode(on) {
+  useFieldsMode = on;
+  document.body.classList.toggle('fields-mode', on);
+  const name = workflowSelect.value;
+  if (name && name !== 'inherit') localStorage.setItem('archiveClassic_' + name, on ? '' : '1');
+  ['fieldsActive', 'fieldsHidden', 'fieldsSaveBtn', 'fieldsRegenBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; });
+  if (on) { const hd = document.getElementById('fieldsHidden'); if (hd && !fieldConfig) hd.style.display = 'none'; renderFieldsPanel(); }
+  document.getElementById('fieldsClassicBtn').textContent = on ? '↩ Classic controls' : '⚡ Use detected fields';
+}
+
+function fieldsSeedPinnedNow() {
+  if (!useFieldsMode || !fieldConfig) return false;
+  const sf = fieldConfig.fields.find(f => f.kind === 'seed' && f.enabled);
+  if (!sf) return false;
+  const active = document.getElementById('fieldsActive');
+  const pin = active.querySelector('[data-seedpin]');
+  const inp = active.querySelector('[data-fid="' + sf.id + '"]');
+  return !!(pin && pin.classList.contains('on') && inp && inp.value.trim() !== '');
+}
+
+function collectFieldValues(presetTitle) {
+  const fv = {};
+  const active = document.getElementById('fieldsActive');
+  if (fieldConfig) for (const f of fieldConfig.fields) {
+    if (!f.enabled) continue;
+    const t = (f.control && f.control.type) || 'text';
+    if (f.kind === 'seed') {
+      const pin = active.querySelector('[data-seedpin]'); const inp = active.querySelector('[data-fid="' + f.id + '"]');
+      if (pin && pin.classList.contains('on') && inp && inp.value.trim() !== '') fv[f.id] = parseInt(inp.value, 10);
+      continue;
+    }
+    if (t === 'lora_rows') { fv[f.id] = (f.value || []).map(r => ({ slot: r.slot, on: r.on, strength: r.strength })); continue; }
+    const el = active.querySelector('[data-fid="' + f.id + '"]');
+    if (!el) continue;
+    if (t === 'boolean') fv[f.id] = el.checked;
+    else if (el.value !== '' && el.value != null) {
+      fv[f.id] = (f.kind === 'prompt' || f.kind === 'negative_prompt') ? applyReplacements(el.value) : el.value;
+    }
+  }
+  if (presetTitle) fv.__preset = presetTitle;
+  return fv;
+}
+
+// Persist which fields are on/off so re-detection keeps the user's setup.
+function saveFieldEdits() {
+  const name = workflowSelect.value;
+  if (!fieldConfig || name === 'inherit') return;
+  const edits = {};
+  for (const f of fieldConfig.fields) edits[f.id] = { enabled: !!f.enabled, label: f.label };
+  fetch('/api/workflow-field-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, edits }) })
+    .then(r => r.json()).then(r => { const m = document.getElementById('fieldsMsg'); m.textContent = r.ok ? 'Saved.' : ('Save failed: ' + (r.error || '')); setTimeout(() => m.textContent = '', 2500); });
+}
+
+document.getElementById('fieldsSaveBtn').addEventListener('click', saveFieldEdits);
+document.getElementById('fieldsRegenBtn').addEventListener('click', () => { const n = workflowSelect.value; if (n && n !== 'inherit') loadFieldConfig(n); });
+document.getElementById('fieldsClassicBtn').addEventListener('click', () => setFieldsMode(!useFieldsMode));
+
 async function getRunPrompt(presetTitle) {
   const sel = workflowSelect.value;
   if (sel === 'inherit') {
@@ -1459,6 +1733,21 @@ async function getRunPrompt(presetTitle) {
     p = applyReplacementsToNodes(p);
     if (activeReplacements().length) log('Applied ' + activeReplacements().length + ' prompt replacement(s)');
     return p;
+  }
+  // Config-driven path: when "Use for Run" is on, send generic field values and
+  // let the server apply them to the graph before conversion. The run loop still
+  // handles MAIN IMAGE upload + seed randomization on the returned prompt.
+  if (useFieldsMode && fieldConfig) {
+    const fieldValues = collectFieldValues(presetTitle);
+    const resp = await fetch('/api/workflow-prompt?name=' + encodeURIComponent(sel), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldValues })
+    });
+    if (!resp.ok) throw new Error('Failed to load workflow: HTTP ' + resp.status);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    if (Array.isArray(data.fieldWarnings)) data.fieldWarnings.forEach(w => log('field: ' + w, 'log-err'));
+    window.appWorkflowGraph = data.workflow || null;
+    return data.prompt || data;
   }
   // Build overrides from UI
   const overrides = {};
@@ -1622,7 +1911,7 @@ runBtn.onclick = async () => {
   // Pinning is explicit now (📌 toggle) — a value in the box alone doesn't pin.
   // Pinned requires a real seed (>= 0); anything else randomizes every run, which
   // also avoids ComfyUI serving the whole graph from cache (identical inputs).
-  const seedPinned = isSeedPinned();
+  const seedPinned = isSeedPinned() || fieldsSeedPinnedNow();
   const totalRuns = selectedPresets.length * runCount;
   let runIndex = 0;
 
@@ -1703,15 +1992,25 @@ runBtn.onclick = async () => {
 
   // Create a job group ID for this batch
   const jobGroupId = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  // In fields mode the prompt/loras live in the Detected Fields panel, not the
+  // (hidden) legacy controls — read them from the field config for job history.
+  let jobPromptText = promptInput.value;
+  let jobLoras = hasHLLoras
+    ? [...currentLorasHigh, ...currentLorasLow].filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }))
+    : (currentLoras.length > 0 ? currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })) : null);
+  if (useFieldsMode && fieldConfig) {
+    const pf = fieldConfig.fields.find(f => f.kind === 'prompt' && f.enabled);
+    if (pf) { const el = document.querySelector('#fieldsActive [data-fid="' + pf.id + '"]'); if (el) jobPromptText = el.value; }
+    const lf = fieldConfig.fields.filter(f => f.kind === 'lora_list' && f.enabled).flatMap(f => (f.value || []));
+    jobLoras = lf.filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+  }
   const jobRecord = {
     id: jobGroupId,
     workflow: workflowSelect.value === 'inherit' ? 'Inherited' : workflowSelect.value.replace(/^APP /, '').replace(/\.json$/, ''),
     workflowFile: workflowSelect.value,
-    prompt: promptInput.value.substring(0, 200) || '(inherited)',
-    fullPrompt: promptInput.value || '',
-    loras: hasHLLoras
-      ? [...currentLorasHigh, ...currentLorasLow].filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }))
-      : (currentLoras.length > 0 ? currentLoras.map(l => ({ slot: l.slot, on: l.on, strength: l.strength })) : null),
+    prompt: jobPromptText.substring(0, 200) || '(inherited)',
+    fullPrompt: jobPromptText || '',
+    loras: jobLoras,
     frames: framesSelect.value !== 'inherit' ? framesSelect.value : null,
     sourceFile: currentFileName,
     sourcePath: currentImagePath,
@@ -1943,7 +2242,7 @@ function executePrompt(prompt, onPromptId) {
 
     function connectWs() {
       try {
-        ws = new WebSocket('ws://' + comfyHost + '/comfy-ws?clientId=' + clientId);
+        ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + comfyHost + '/comfy-ws?clientId=' + clientId);
         ws.binaryType = 'arraybuffer';
       } catch (e) {
         log('WebSocket create error: ' + e.message, 'log-err');

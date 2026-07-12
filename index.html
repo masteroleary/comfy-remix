@@ -528,84 +528,78 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .ptr-indicator.pulling{transition:none}
 .ptr-indicator .ptr-spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--text3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+[v-cloak]{display:none !important}
 </style>
 </head>
 <body>
 
 <div class="ptr-indicator" id="ptrIndicator"><span>↓ Pull to refresh</span></div>
 
+<!-- Toolbar (Vue-mounted; in-DOM template) -->
+<div id="toolbarApp" v-cloak>
 <!-- Header -->
 <div class="hdr">
   <div class="hdr-path">
-    <div class="path-wrap"><div class="path-txt" id="pathTxt">Loading…</div></div>
+    <div class="path-wrap"><div class="path-txt" id="pathTxt"><b v-if="c.pathHome">Home</b><b v-else-if="c.searchLabel">{{ c.searchLabel }}</b><template v-else><template v-for="(cr,i) in c.crumbs" :key="i"><span v-if="i" style="color:var(--text3)"> / </span><b v-if="cr.last">{{ cr.label }}</b><span v-else style="color:var(--accent);cursor:pointer" @click="crumb(cr)">{{ cr.label }}</span></template></template></div></div>
   </div>
   <div class="hdr-row1">
-    <button class="back-btn" id="backBtn" disabled>
+    <button class="back-btn" :disabled="c.backDisabled" @click="back">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Back
     </button>
-    <button class="home-btn" id="homeBtn" title="Home">⌂</button>
-    <button class="blur-btn active" id="blurToggle" title="Toggle blur">🔒</button>
-    <button class="blur-btn" id="safeToggle" title="Safe mode — hide NSFW-tagged items">🛡</button>
-    <button class="blur-btn" id="settingsBtn" title="Settings">⚙</button>
+    <button class="home-btn" title="Home" @click="goHome"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5h5v5"/></svg></button>
+    <button class="blur-btn" :class="{active: c.blurOn}" title="Toggle blur" @click="toggleBlur"><span v-if="c.blurOn">🔒</span><span v-else>👁</span></button>
+    <button class="blur-btn" id="safeToggle" :class="{active: c.safeOn}" title="Safe mode — hide NSFW-tagged items" @click="toggleSafe"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M3 3 21 21"/><path d="M10.6 10.7a2 2 0 0 0 2.7 2.9"/><path d="M6.5 6.6C4.3 8 3 10 3 12c0 0 3.5 6 9 6 1.2 0 2.3-.2 3.3-.6M9.9 5.2A9 9 0 0 1 12 5c5.5 0 9 6 9 6a15 15 0 0 1-2.2 2.9"/></svg></button>
+    <button class="blur-btn" title="Settings" @click="openSettings">⚙</button>
   </div>
-  <div class="hdr-row2" id="searchRow">
+  <div class="hdr-row2" id="searchRow" v-show="c.showControls">
     <span class="search-wrap"><input class="search-inp" id="searchInp" type="search" placeholder="Search names & prompts…" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" readonly><button class="search-clear" id="searchClear" title="Clear search">✕</button></span>
-    <button class="sort-btn" id="wordsBtn" title="Browse prompt words">🏷</button>
-    <button class="sort-btn" id="sortBtn">Date ↓</button>
+    <button class="sort-btn" title="Browse prompt words" @click="openWords"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
+    <button class="sort-btn" @click="cycleSort">{{ c.sortLabel }}</button>
   </div>
 </div>
 
-<!-- Filter chips -->
-<div class="filter-bar" id="filterBar">
-  <button class="filter-chip active" data-type="all">All</button>
-  <button class="filter-chip" data-type="folder">📁 Folders</button>
-  <button class="filter-chip" data-type="video">🎬 Videos</button>
-  <button class="filter-chip" data-type="image">🖼 Images</button>
-  <button class="filter-chip" data-type="audio">🎵 Audio</button>
+<!-- Filters (collapsible) + Select toggle -->
+<div class="filter-bar" v-show="c.showControls">
+  <button class="filter-chip" :class="{active: c.filterCount>0}" title="Show type filters" @click="toggleFilters">Filters ({{ c.filterCount }})</button>
+  <div v-show="c.filtersOpen" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button v-for="ft in TYPES" :key="ft.t" class="filter-chip" :class="{active: c.type===ft.t}" @click="setType(ft.t)">{{ ft.label }}</button>
+  </div>
+  <button v-show="!c.filtersOpen" class="filter-chip" id="multiSelectBtn" :class="{active: c.multiSelect}" title="Make items checkable" @click="toggleSelect"><svg v-if="c.multiSelect" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7.5 12.5l3 3 6-7" stroke-linecap="round" stroke-linejoin="round"/></svg><svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/></svg> Select</button>
 </div>
 
-<!-- Multi-select toggle + bulk actions (revealed right after the Select button) -->
-<div class="filter-bar" id="selectRow">
-  <button class="filter-chip" id="multiSelectBtn" title="Make items checkable">☐ Select</button>
-  <div id="bulkBar" style="display:none;gap:6px;align-items:center">
-    <span id="bulkCount" style="color:#8e8e93;font-size:13px;white-space:nowrap">0 selected</span>
-    <button class="filter-chip" id="bulkSelAll" style="font-size:12px">Select All</button>
-    <button class="filter-chip" id="bulkSelFiles" style="font-size:12px">Select Files</button>
-    <button class="filter-chip" id="bulkFavBtn" style="font-size:12px;background:#2d5a1e;color:#a8e06c">⭐ Favorite</button>
-    <button class="filter-chip" id="bulkDelBtn" style="font-size:12px;background:#5a1e1e;color:#e06c6c">🗑 Delete</button>
-    <button class="filter-chip" id="bulkCancelBtn" style="font-size:12px">Cancel</button>
+<!-- Bulk actions (revealed when Select is active) -->
+<div class="filter-bar" v-show="c.multiSelect">
+  <div style="display:flex;gap:6px;align-items:center">
+    <span style="color:#8e8e93;font-size:13px;white-space:nowrap">{{ c.bulkCount }} selected</span>
+    <button class="filter-chip" style="font-size:12px" @click="bulkSelAll">Select All</button>
+    <button class="filter-chip" style="font-size:12px" @click="bulkSelFiles">Select Files</button>
+    <button class="filter-chip" style="font-size:12px;background:#2d5a1e;color:#a8e06c" @click="bulkFav">⭐ Favorite</button>
+    <button class="filter-chip" style="font-size:12px;background:#5a1e1e;color:#e06c6c" @click="bulkDel">🗑 Delete</button>
+    <button class="filter-chip" style="font-size:12px" @click="toggleSelect">Cancel</button>
   </div>
 </div>
 
 <!-- Files & Media tabs (shown only inside the combined Files view, hidden while searching) -->
-<div class="file-tabs" id="fileTabs" style="display:none"></div>
+<div class="file-tabs" v-show="c.showFileTabs">
+  <button v-for="t in c.fileTabs" :key="t.id" class="file-tab" :class="{active: t.active}" @click="clickTab(t.id)">{{ t.label }}</button>
+</div>
 
 <!-- Stats -->
-<div class="stats"><span id="statsTxt"></span><span id="pageInfoTxt"></span></div>
+<div class="stats"><span>{{ c.stats }}</span><span>{{ c.pageInfo }}</span></div>
+</div>
 
 <!-- Pagination (top) -->
 <div class="pager" id="pagerTop"></div>
 
 <!-- Grid -->
-<div id="gridWrap"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+<div id="gridWrap"><div id="homeWrap" style="display:none"></div><div id="gridApp"><div class="loading"><div class="spinner"></div> Loading…</div></div></div>
 
 <!-- Pagination (bottom) -->
 <div class="pager" id="pager"></div>
 
-<!-- Media modal -->
-<div class="modal" id="modal">
-  <div class="modal-actions">
-    <button class="modal-act-btn m-fav" id="mFavBtn">⭐ Favorite</button>
-    <button class="modal-act-btn m-del" id="mDelBtn">🗑 Delete</button>
-  </div>
-  <button class="modal-close" id="modalClose">✕</button>
-  <button class="modal-nav" id="modalPrev" disabled>‹</button>
-  <button class="modal-nav" id="modalMute" style="display:none">🔇</button>
-  <button class="modal-nav" id="modalNext" disabled>›</button>
-  <div class="modal-body" id="modalBody"></div>
-  <div class="modal-label" id="modalLabel"></div>
-</div>
+<!-- Media modal (Vue-mounted) -->
+<div id="modalApp"></div>
 
 <!-- Confirm dialog -->
 <div class="confirm-overlay" id="confirmOverlay">
@@ -659,7 +653,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
     <div id="settingsTabPrivacy" style="display:none">
       <div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">NSFW tags</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The 🛡 safe-mode shield hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">The safe-mode toggle (top bar) hides any file whose embedded prompt contains one of these words (whole-word, case-insensitive). Stored encoded in config.</div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <input id="nsfwAddInp" type="text" autocomplete="off" placeholder="Add a tag…" style="flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;font-size:14px;outline:none">
         <button class="btn-ok" id="nsfwAddBtn" style="background:var(--accent);white-space:nowrap">Add</button>
@@ -811,6 +805,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Vue must load before the main script so the browser grid can be a Vue view -->
+<script src="/vendor/vue.global.prod.js"></script>
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 const S = {
@@ -826,68 +822,62 @@ const S = {
   activeCard: null, // card with open action menu
 };
 
+// Reactive mirror the Vue grid renders from. The vanilla flow keeps owning data
+// fetching and navigation; renderGrid() just pushes the current page into here.
+const gridState = Vue.reactive({
+  loading: true, error: '', items: [],
+  search: '', dir: null, filesMode: false, onHome: false,
+  comfyOutputDir: '', favDir: '', root: '',
+});
+// Reactive state for the media viewer modal (Vue-rendered on #modalApp).
+const modalState = Vue.reactive({ open: false, item: null, muted: true });
+// Reactive state for the toolbar (Vue-rendered on #toolbarApp).
+const chrome = Vue.reactive({
+  showControls: false, pathHome: false, searchLabel: '', crumbs: [],
+  backDisabled: true, sortLabel: 'Date ↓',
+  type: 'all', filtersOpen: false, filterCount: 0,
+  multiSelect: false, bulkCount: 0,
+  blurOn: true, safeOn: true,
+  fileTabs: [], showFileTabs: false,
+  stats: '', pageInfo: '',
+});
+const TYPES = [{ t: 'all', label: 'All' }, { t: 'folder', label: '📁 Folders' }, { t: 'video', label: '🎬 Videos' }, { t: 'image', label: '🖼 Images' }, { t: 'audio', label: '🎵 Audio' }];
+// Reactive state for the top + bottom pagers (Vue-rendered on #pagerTop / #pager).
+const pagerState = Vue.reactive({ page: 1, pages: 0 });
+// Reactive state for the home landing (Vue-rendered on #homeWrap).
+const homeState = Vue.reactive({ loading: false, tiles: [], pendingLabel: '', cost: '', selected: null });
+
 // ── DOM refs ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const gridWrap   = $('gridWrap');
+const homeWrap   = $('homeWrap');
+const gridAppEl  = $('gridApp');
 const pager      = $('pager');
-const backBtn    = $('backBtn');
-const homeBtn    = $('homeBtn');
-const pathTxt    = $('pathTxt');
-const blurToggle = $('blurToggle');
-const searchInp  = $('searchInp');
-// Chromium ignores autocomplete="off" and keys saved-entry suggestions off the
-// input's name — a random name per page load means nothing ever matches.
-searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
-// Personal-data autofill (emails etc.) ignores even that, but browsers won't fill a
-// readonly field: it stays readonly until the user actually touches/focuses it
-// (markup has `readonly`), and anything injected regardless gets wiped.
-const unlockSearch = () => searchInp.removeAttribute('readonly');
-searchInp.addEventListener('touchstart', unlockSearch, { passive: true });
-searchInp.addEventListener('focus', unlockSearch);
+// Toolbar is Vue-rendered (#toolbarApp); its state lives in `chrome` and its
+// buttons call the functions below. The search input keeps its anti-autofill
+// hacks — it's re-captured after the toolbar mounts (see wireSearch).
+let searchInp = null;
+const unlockSearch = () => { if (searchInp) searchInp.removeAttribute('readonly'); };
 function wipeInjectedSearch() {
-  if (document.activeElement === searchInp) return; // user is typing — leave it alone
+  if (!searchInp || document.activeElement === searchInp) return; // user is typing
   if (searchInp.value && searchInp.value !== (S.search || '')) {
     searchInp.value = S.search || '';
-    $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+    const sc = $('searchClear'); if (sc) sc.style.display = searchInp.value ? 'block' : 'none';
   }
 }
-setTimeout(wipeInjectedSearch, 400);
 window.addEventListener('pageshow', () => setTimeout(wipeInjectedSearch, 100));
-const sortBtn    = $('sortBtn');
-const filterBar  = $('filterBar');
-const statsTxt   = $('statsTxt');
-const pageInfoTxt= $('pageInfoTxt');
-const modal      = $('modal');
-const modalBody  = $('modalBody');
-const modalLabel = $('modalLabel');
-const modalClose = $('modalClose');
-const modalPrev  = $('modalPrev');
-const modalNext  = $('modalNext');
-const modalMute  = $('modalMute');
-const mFavBtn    = $('mFavBtn');
-const mDelBtn    = $('mDelBtn');
 const confirmOverlay = $('confirmOverlay');
 const confirmTitle   = $('confirmTitle');
 const confirmMsg     = $('confirmMsg');
 const confirmCancel  = $('confirmCancel');
 const confirmOk      = $('confirmOk');
 const toastEl    = $('toast');
-const multiSelectBtn = $('multiSelectBtn');
-const bulkBar    = $('bulkBar');
-const bulkCount  = $('bulkCount');
-const bulkSelAll = $('bulkSelAll');
-const bulkSelFiles = $('bulkSelFiles');
-const bulkFavBtn = $('bulkFavBtn');
-const bulkDelBtn = $('bulkDelBtn');
-const bulkCancelBtn = $('bulkCancelBtn');
 
 // ── Multi-select ─────────────────────────────────────────────────────────
 function toggleMultiSelect(on) {
   S.multiSelect = on !== undefined ? on : !S.multiSelect;
+  chrome.multiSelect = S.multiSelect;
   document.body.classList.toggle('multi-select-on', S.multiSelect);
-  multiSelectBtn.classList.toggle('active', S.multiSelect);
-  multiSelectBtn.textContent = S.multiSelect ? '☑ Select' : '☐ Select';
-  bulkBar.style.display = S.multiSelect ? 'flex' : 'none';
   if (!S.multiSelect) {
     document.querySelectorAll('.ms-cb').forEach(cb => cb.checked = false);
     document.querySelectorAll('.ms-checked').forEach(c => c.classList.remove('ms-checked'));
@@ -896,27 +886,23 @@ function toggleMultiSelect(on) {
 }
 
 function updateBulkBar() {
-  const checked = document.querySelectorAll('.ms-cb:checked');
-  bulkCount.textContent = checked.length + ' selected';
+  chrome.bulkCount = document.querySelectorAll('.ms-cb:checked').length;
 }
 
-multiSelectBtn.onclick = () => toggleMultiSelect();
-bulkCancelBtn.onclick = () => toggleMultiSelect(false);
-
-bulkSelAll.onclick = () => {
+function bulkSelAll() {
   const cbs = document.querySelectorAll('.ms-cb');
   const allChecked = Array.from(cbs).every(cb => cb.checked);
   cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card') || cb.closest('.folder-chip'); if (el) el.classList.toggle('ms-checked', !allChecked); });
   updateBulkBar();
-};
+}
 
 // Select only files (cards) on the current page — not folders
-bulkSelFiles.onclick = () => {
+function bulkSelFiles() {
   const cbs = document.querySelectorAll('.card .ms-cb');
   const allChecked = cbs.length > 0 && Array.from(cbs).every(cb => cb.checked);
   cbs.forEach(cb => { cb.checked = !allChecked; const el = cb.closest('.card'); if (el) el.classList.toggle('ms-checked', !allChecked); });
   updateBulkBar();
-};
+}
 
 // Delete the currently-open empty folder (server refuses if it holds real files).
 async function deleteEmptyFolder() {
@@ -940,7 +926,7 @@ async function deleteEmptyFolder() {
   );
 }
 
-bulkFavBtn.onclick = async () => {
+async function bulkFav() {
   const checked = document.querySelectorAll('.ms-cb:checked');
   if (!checked.length) return;
   const paths = Array.from(checked).map(cb => cb.dataset.path);
@@ -966,9 +952,9 @@ bulkFavBtn.onclick = async () => {
       refreshCurrentPage();
     }
   );
-};
+}
 
-bulkDelBtn.onclick = async () => {
+async function bulkDel() {
   const checked = document.querySelectorAll('.ms-cb:checked');
   if (!checked.length) return;
   confirm(
@@ -993,7 +979,7 @@ bulkDelBtn.onclick = async () => {
       }
     }
   );
-};
+}
 
 // ── Lazy image observer ───────────────────────────────────────────────────
 const imgObs = new IntersectionObserver(entries => {
@@ -1015,6 +1001,146 @@ const enc = p => encodeURIComponent(p);
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Vue grid (Increment 1) ─────────────────────────────────────────────────
+// Renders folder chips, search groups, and file cards from gridState. All the
+// actions call the existing vanilla globals (loadDir, openModal, doFavorite,
+// doDelete, openMetadataPage, updateBulkBar, closeCardMenu), and checkboxes stay
+// uncontrolled native inputs so the vanilla bulk bar keeps querying `.ms-cb`.
+const GridCard = {
+  props: ['item'],
+  computed: {
+    thumb() {
+      const it = this.item;
+      if (it.isVideo) return it.thumb ? '/thumb/' + enc(it.path) : null;
+      if (it.isImage) return '/file/' + enc(it.path);
+      return null;
+    },
+    ext() { const n = this.item.name; return n.includes('.') ? n.split('.').pop().toLowerCase() : ''; },
+    extColor() { const it = this.item; return it.isVideo ? 'var(--video)' : it.isImage ? 'var(--image)' : it.isAudio ? 'var(--audio)' : 'var(--text3)'; },
+    cardClass() { const it = this.item; return { 'card-folder': it.isDir, 'card-video-noThumb': it.isVideo && !it.thumb, 'card-audio': it.isAudio }; },
+    infoClickable() { return this.item.isImage || this.item.isVideo; },
+  },
+  methods: {
+    onCheck(e) { const c = e.target.closest('.card'); if (c) c.classList.toggle('ms-checked', e.target.checked); updateBulkBar(); },
+    onInfoClick(e) { if (!this.infoClickable) return; e.stopPropagation(); openMetadataPage(this.item); },
+    fav(e) { e.stopPropagation(); closeCardMenu(); doFavorite(this.item, this.$el); },
+    del(e) { e.stopPropagation(); closeCardMenu(); doDelete(this.item, this.$el); },
+    onClick(e) {
+      if (e.target.closest('.card-actions') || e.target.closest('.card-info') || e.target.classList.contains('ms-cb')) return;
+      const card = this.$el, it = this.item;
+      if (S.multiSelect) { const cb = card.querySelector('.ms-cb'); if (cb) { cb.checked = !cb.checked; card.classList.toggle('ms-checked', cb.checked); updateBulkBar(); } return; }
+      if (card.classList.contains('actions-open')) { closeCardMenu(); return; }
+      if (it.isVideo || it.isImage || it.isAudio) { S.modalIdx = S.mediaItems.findIndex(m => m.path === it.path); openModal(S.mediaItems[S.modalIdx]); }
+    },
+  },
+  mounted() {
+    const img = this.$el.querySelector('img[data-src]');
+    if (img) imgObs.observe(img);
+    const card = this.$el;
+    let t;
+    card.addEventListener('touchstart', () => { t = setTimeout(() => { closeCardMenu(); card.classList.add('actions-open'); S.activeCard = card; }, 500); }, { passive: true });
+    card.addEventListener('touchend', () => clearTimeout(t), { passive: true });
+    card.addEventListener('touchmove', () => clearTimeout(t), { passive: true });
+  },
+  unmounted() { const img = this.$el && this.$el.querySelector('img[data-src]'); if (img && img.dataset.src) imgObs.unobserve(img); },
+  template: `
+    <div class="card" :class="cardClass" @click="onClick">
+      <input type="checkbox" class="ms-cb" :data-path="item.path" @change="onCheck">
+      <div v-if="item.isVideo" class="card-thumb">
+        <img v-if="thumb" :data-src="thumb" alt="">
+        <div v-else class="card-icon">🎬</div>
+        <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+        <div v-if="item.workflow || item.nsfw" class="card-tags"><span v-if="item.workflow" class="card-tag wf" title="Has embedded workflow"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><circle cx="4.5" cy="12" r="2.3"/><circle cx="19" cy="6" r="2.3"/><circle cx="19" cy="18" r="2.3"/><path d="M6.8 12H11M11 6V18M11 6H16.7M11 18H16.7"/></svg> wf</span><span v-if="item.nsfw" class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span></div>
+      </div>
+      <div v-else-if="item.isImage" class="card-thumb">
+        <img :data-src="thumb" alt="">
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+        <div v-if="item.workflow || item.nsfw" class="card-tags"><span v-if="item.workflow" class="card-tag wf" title="Has embedded workflow"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><circle cx="4.5" cy="12" r="2.3"/><circle cx="19" cy="6" r="2.3"/><circle cx="19" cy="18" r="2.3"/><path d="M6.8 12H11M11 6V18M11 6H16.7M11 18H16.7"/></svg> wf</span><span v-if="item.nsfw" class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span></div>
+      </div>
+      <div v-else-if="item.isAudio" class="card-thumb">
+        <div class="card-icon">🎵</div>
+        <div v-if="ext" class="ext-badge" :style="{color: extColor}">{{ ext }}</div>
+      </div>
+      <div v-else class="card-thumb"><div class="card-icon">📄</div></div>
+      <div class="card-actions">
+        <button class="act-btn act-fav" title="Favorite" @click="fav">⭐</button>
+        <button class="act-btn act-del" title="Delete" @click="del">🗑</button>
+      </div>
+      <div class="card-info" :style="infoClickable ? 'cursor:pointer' : null" @click="onInfoClick">
+        <div class="card-info-text">
+          <div class="card-name">{{ item.name }}</div>
+          <div v-if="item.size" class="card-meta">{{ item.size }}</div>
+        </div>
+        <div v-if="item.isImage || item.isVideo" class="meta-badge" title="Remix this workflow"><svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></div>
+      </div>
+    </div>
+  `,
+};
+const GridApp = {
+  components: { GridCard },
+  setup() { return { s: gridState }; },
+  computed: {
+    folders() { return this.s.items.filter(i => i.isDir); },
+    files() { return this.s.items.filter(i => !i.isDir); },
+    grouped() { return !!this.s.search && this.files.some(f => f.parentDir); },
+    groups() {
+      const map = new Map();
+      for (const f of this.files) { const k = f.parentDir || ''; if (!map.has(k)) map.set(k, []); map.get(k).push(f); }
+      const cur = (this.s.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+      return [...map.entries()].map(([gdir, files]) => {
+        let rel;
+        if (this.s.filesMode) { rel = filesGroupLabel(gdir); }
+        else { rel = gdir.replace(/\\/g, '/'); if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)'; }
+        return { dir: gdir, label: rel, files };
+      });
+    },
+    canDeleteEmpty() {
+      const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const cur = nrm(this.s.dir);
+      const isRoot = !cur || cur === nrm(this.s.comfyOutputDir) || cur === nrm(this.s.favDir) || cur === nrm(this.s.root);
+      return !this.s.search && !this.s.onHome && this.s.dir && !isRoot;
+    },
+  },
+  methods: {
+    onFolderClick(f, e) {
+      if (e.target.classList.contains('ms-cb')) return;
+      if (S.multiSelect) { const cb = e.currentTarget.querySelector('.ms-cb'); if (cb) { cb.checked = !cb.checked; e.currentTarget.classList.toggle('ms-checked', cb.checked); updateBulkBar(); } return; }
+      loadDir(f.path, 1);
+    },
+    onFolderCheck(e) { const chip = e.target.closest('.folder-chip'); if (chip) chip.classList.toggle('ms-checked', e.target.checked); updateBulkBar(); },
+    openGroup(gdir) { searchInp.value = ''; if (this.s.filesMode) S.filesTab = filesTabForDir(gdir); loadDir(gdir, 1); },
+    delEmpty() { deleteEmptyFolder(); },
+  },
+  template: `
+    <div v-if="s.loading" class="loading"><div class="spinner"></div> Loading…</div>
+    <div v-else-if="s.error" class="err-msg">⚠ {{ s.error }}</div>
+    <div v-else-if="!s.items.length" class="empty">
+      <div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div>
+      <button v-if="canDeleteEmpty" class="btn-ok" @click="delEmpty" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>
+    </div>
+    <template v-else>
+      <div v-if="folders.length" class="folder-row">
+        <div v-for="f in folders" :key="f.path" class="folder-chip" @click="onFolderClick(f, $event)">
+          <input type="checkbox" class="ms-cb" :data-path="f.path" @click.stop @change="onFolderCheck">
+          <span class="folder-emoji">📁</span><span class="folder-label">{{ f.name }}</span>
+        </div>
+      </div>
+      <template v-if="grouped">
+        <template v-for="g in groups" :key="g.dir">
+          <div class="search-group-hdr" title="Open this folder" @click="openGroup(g.dir)">📁 {{ g.label }} <span style="color:var(--text3);font-weight:400">({{ g.files.length }})</span></div>
+          <div class="grid"><grid-card v-for="it in g.files" :key="it.path" :item="it"></grid-card></div>
+        </template>
+      </template>
+      <div v-else class="grid"><grid-card v-for="it in files" :key="it.path" :item="it"></grid-card></div>
+    </template>
+  `,
+};
+// Guard the mount so a grid-render problem can't abort the rest of the app
+// (toolbar, home landing, init all live below this in the same script).
+try { Vue.createApp(GridApp).mount('#gridApp'); }
+catch (e) { console.error('[grid] Vue mount failed:', e); }
 
 function showToast(msg, dur = 2200) {
   toastEl.textContent = msg;
@@ -1048,33 +1174,31 @@ const SORTS = [
 // closing the tab resets to censored for the next session.
 function setCensor(on) {
   document.body.classList.toggle('blur-on', on);
-  blurToggle.classList.toggle('active', on);
-  blurToggle.textContent = on ? '🔒' : '👁';
+  chrome.blurOn = on;
   sessionStorage.setItem('censor', on ? '1' : '0');
 }
 setCensor(sessionStorage.getItem('censor') !== '0');   // default ON
-blurToggle.onclick = () => setCensor(!document.body.classList.contains('blur-on'));
+function toggleBlur() { setCensor(!document.body.classList.contains('blur-on')); }
 
 // Safe mode: omit NSFW-tagged items from all listings/searches (server-side filter).
 // ON by default; state is per-tab (sessionStorage) so navigating — including the
 // Back button — keeps your choice, while closing the tab resets it to ON.
-const safeToggle = $('safeToggle');
 S.safeMode = sessionStorage.getItem('safeMode') !== '0';
-safeToggle.classList.toggle('active', S.safeMode);
-safeToggle.onclick = () => {
+chrome.safeOn = S.safeMode;
+function toggleSafe() {
   S.safeMode = !S.safeMode;
+  chrome.safeOn = S.safeMode;
   sessionStorage.setItem('safeMode', S.safeMode ? '1' : '0');
-  safeToggle.classList.toggle('active', S.safeMode);
   // On the home landing there's no file list to filter — don't navigate into one.
   if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
-};
+}
 
 // Censor / Hide (blur): re-engage only when the tab actually becomes hidden
 // (switched away / minimized) — not when focus moves to browser chrome like the
 // Back button — and close the viewer so returning shows nothing until unlocked.
 function censorNow() {
   setCensor(true);
-  if (modal.classList.contains('open')) closeModal();
+  if (modalState.open) closeModal();
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) censorNow(); });
 
@@ -1105,61 +1229,74 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) censo
 })();
 
 let sortIdx = 5; // Date ↓
-sortBtn.onclick = () => {
+function cycleSort() {
   sortIdx = (sortIdx + 1) % SORTS.length;
   const o = SORTS[sortIdx];
-  sortBtn.textContent = o.label;
+  chrome.sortLabel = o.label;
   S.sort = o.sort; S.asc = o.asc;
   loadDir(S.dir, 1, false);
-};
+}
 
 // ── Filter chips ──────────────────────────────────────────────────────────
-filterBar.addEventListener('click', e => {
-  const chip = e.target.closest('.filter-chip');
-  if (!chip) return;
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  chip.classList.add('active');
-  S.type = chip.dataset.type;
+function updateFilterCount() {
+  chrome.filterCount = (S.type && S.type !== 'all') ? 1 : 0;
+}
+function toggleFilters() {
+  chrome.filtersOpen = !chrome.filtersOpen;
+  if (chrome.filtersOpen && S.multiSelect) toggleMultiSelect(false);
+}
+function setType(t) {
+  S.type = t; chrome.type = t;
+  updateFilterCount();
   loadDir(S.dir, 1, false);
-});
+}
 
-// ── Search ────────────────────────────────────────────────────────────────
+// ── Search ── wired to the (re-captured) input after the toolbar mounts.
 let searchTimer;
-searchInp.addEventListener('input', () => {
-  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => loadDir(S.dir, 1, false), 380);
-});
-$('searchClear').onclick = () => {
-  searchInp.value = '';
-  $('searchClear').style.display = 'none';
-  clearTimeout(searchTimer);
-  loadDir(S.dir, 1, false);
-};
+function wireSearch() {
+  searchInp = $('searchInp');
+  if (!searchInp) return;
+  // Chromium ignores autocomplete="off"; a random name per load defeats saved-entry
+  // suggestions, and the field stays readonly (anti personal-data autofill) until touched.
+  searchInp.setAttribute('name', 'nf-' + Math.random().toString(36).slice(2));
+  searchInp.addEventListener('touchstart', unlockSearch, { passive: true });
+  searchInp.addEventListener('focus', unlockSearch);
+  searchInp.addEventListener('input', () => {
+    const sc = $('searchClear'); if (sc) sc.style.display = searchInp.value ? 'block' : 'none';
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadDir(S.dir, 1, false), 380);
+  });
+  const sc = $('searchClear');
+  if (sc) sc.onclick = () => {
+    searchInp.value = '';
+    sc.style.display = 'none';
+    clearTimeout(searchTimer);
+    loadDir(S.dir, 1, false);
+  };
+  setTimeout(wipeInjectedSearch, 400);
+}
 
 // ── Load directory ────────────────────────────────────────────────────────
 async function loadDir(dir, page = 1, pushStack = true) {
   S.onHome = false;
-  // Restore the browsing controls hidden on the home landing.
-  $('searchRow').style.display = '';
-  filterBar.style.display = '';
-  const selRow = $('selectRow'); if (selRow) selRow.style.display = '';
+  chrome.pathHome = false;
+  chrome.showControls = true;   // reveal search + filters (hidden on home)
   // Dismiss any open card action menu
   closeCardMenu();
   if (S.multiSelect) toggleMultiSelect(false);
 
-  gridWrap.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
-  pager.innerHTML = '';
-  $('pagerTop').innerHTML = '';
-  statsTxt.textContent = '';
-  pageInfoTxt.textContent = '';
+  homeWrap.style.display = 'none';
+  gridAppEl.style.display = '';
+  gridState.loading = true; gridState.error = '';
+  pagerState.pages = 0;
+  chrome.stats = ''; chrome.pageInfo = '';
 
   if (pushStack && S.dir && S.dir !== dir) {
     S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
   }
 
-  S.dir = dir; S.page = page; S.search = searchInp.value.trim();
-  $('searchClear').style.display = searchInp.value ? 'block' : 'none';
+  S.dir = dir; S.page = page; S.search = searchInp ? searchInp.value.trim() : '';
+  const sc = $('searchClear'); if (sc) sc.style.display = (searchInp && searchInp.value) ? 'block' : 'none';
 
   // Inside the Files & Media view, a search spans all three tabs at once.
   const filesSearchAll = S.filesMode && !!S.search;
@@ -1187,7 +1324,7 @@ async function loadDir(dir, page = 1, pushStack = true) {
     renderPager(data);
     renderFileTabs();
   } catch (err) {
-    gridWrap.innerHTML = `<div class="err-msg">⚠ ${esc(err.message)}</div>`;
+    gridState.error = err.message; gridState.loading = false;
   }
 }
 
@@ -1228,17 +1365,9 @@ function filesGroupLabel(gdir) {
   return rel ? label + ' / ' + rel : label;
 }
 function renderFileTabs() {
-  const el = $('fileTabs');
-  if (!S.filesMode || S.search) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  el.style.display = 'flex';
-  el.innerHTML = '';
-  FILE_TABS.forEach(t => {
-    const b = document.createElement('button');
-    b.className = 'file-tab' + (S.filesTab === t.id ? ' active' : '');
-    b.textContent = t.label;
-    b.onclick = () => { if (S.filesTab !== t.id) loadFilesTab(t.id); };
-    el.appendChild(b);
-  });
+  if (!S.filesMode || S.search) { chrome.showFileTabs = false; chrome.fileTabs = []; return; }
+  chrome.showFileTabs = true;
+  chrome.fileTabs = FILE_TABS.map(t => ({ id: t.id, label: t.label, active: S.filesTab === t.id }));
 }
 
 // Feature registry: home tiles grouped by opt-in feature. `ready` judges the
@@ -1282,29 +1411,27 @@ async function getHomeStatus(force) {
 }
 
 async function showHomeLanding(forceStatus) {
-  searchInp.value = '';
+  if (searchInp) searchInp.value = '';
   S.navStack = [];
   S.onHome = true;
   S.filesMode = false;
+  if (S.multiSelect) toggleMultiSelect(false);
   renderFileTabs();
   // The home landing has no list to search or filter — hide those controls.
-  $('searchRow').style.display = 'none';
-  filterBar.style.display = 'none';
-  const selRow = $('selectRow'); if (selRow) selRow.style.display = 'none';
+  chrome.showControls = false;
   S.dir = '';
-  pathTxt.innerHTML = '<b>Home</b>';
-  backBtn.disabled = true;
-  statsTxt.textContent = '';
-  pageInfoTxt.textContent = '';
-  pager.innerHTML = '';
-  $('pagerTop').innerHTML = '';
-  // Hide folder row if present
-  const fr = document.querySelector('.folder-row');
-  if (fr) fr.innerHTML = '';
+  chrome.pathHome = true; chrome.searchLabel = ''; chrome.crumbs = [];
+  chrome.backDisabled = true;
+  chrome.stats = ''; chrome.pageInfo = '';
+  pagerState.pages = 0;
+  // Home landing renders into its own container; hide the Vue grid while here.
+  gridAppEl.style.display = 'none';
+  homeWrap.style.display = '';
 
   if (!homeStatus || forceStatus) {
-    gridWrap.innerHTML = '<div class="home-landing"><div style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div></div>';
+    homeState.loading = true;
     try { await getHomeStatus(true); } catch {}
+    homeState.loading = false;
   } else if (Date.now() - homeStatusTs > 15000) {
     getHomeStatus(true).catch(() => {});   // stale: render from cache now, refresh for next visit
   }
@@ -1313,58 +1440,67 @@ async function showHomeLanding(forceStatus) {
 
   // Surface the user's chosen features; show everything if setup/status is unknown
   const selected = st && st.features ? st.features : FEATURES.map(f => f.id);
-  const tile = t => '<div class="home-folder" id="' + t.id + '"><div class="home-folder-icon">' + t.icon + '</div><div><div class="home-folder-text">' + t.text + '</div><div class="home-folder-sub">' + t.sub + '</div></div></div>';
+  homeState.selected = selected;
   const pending = [];   // selected but failing their status check → hidden
-  let html = tile({ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' });
+  const tiles = [{ id: 'hlStatus', icon: '🩺', text: 'Status / Setup', sub: 'Which services are set up, running, and healthy' }];
 
-  // Combined Files & Media tile — Favorites is the local media root (always
-  // present) and the ComfyUI Output tab uses the ComfyUI output folder. Shown
-  // whenever either root is available; ComfyUI is a required feature.
+  // Combined Files & Media tile — shown whenever either root is available.
   const filesOk = !st || (st.services.media && st.services.media.configured) || (st.services.comfy && st.services.comfy.configured);
-  if (filesOk) {
-    html += tile({ id: 'hlFiles', icon: '📂', text: 'Files & Media', sub: 'ComfyUI output & favorites' });
-  } else {
-    pending.push('Files & Media');
-  }
+  if (filesOk) tiles.push({ id: 'hlFiles', icon: '📂', text: 'Files & Media', sub: 'ComfyUI output & favorites' });
+  else pending.push('Files & Media');
 
   FEATURES.forEach(f => {
     if (f.id === 'media') return;   // folded into the Files & Media tile above
     if (!selected.includes(f.id)) return;
     if (!f.tiles.length) return;
     if (st && !f.ready(st.services)) { pending.push(f.name); return; }
-    html += f.tiles.map(tile).join('');
+    f.tiles.forEach(t => tiles.push(t));
   });
-  if (pending.length) html += '<div style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: ' + esc(pending.join(', ')) + ' — see Status / Setup</div>';
-  html += '<div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" id="homeFeatures" style="color:inherit">✎ Choose features</a></div>';
-  html += '<div id="homeCost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center"></div>';
-  gridWrap.innerHTML = '<div class="home-landing">' + html + '</div>';
+  homeState.tiles = tiles;
+  homeState.pendingLabel = pending.length ? pending.join(', ') : '';
 
   // Show total spent
   fetch('/api/cost/summary').then(r => r.json()).then(d => {
-    const el = $('homeCost');
-    if (!el) return;
-    el.textContent = 'xAI spent: $' + d.total.toFixed(2)
+    homeState.cost = 'xAI spent: $' + d.total.toFixed(2)
       + ' (' + d.voiceMinutes.toFixed(1) + ' voice min, '
       + d.ttsChars.toLocaleString() + ' TTS chars, '
-      + (d.imagineCount||0) + ' images)';
+      + (d.imagineCount || 0) + ' images)';
   }).catch(() => {});
-
-  const wire = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
-  wire('hlFiles', openFilesPanel);
-  wire('hlJobs', () => { location.href = '/jobs'; });
-  wire('hlClaude', openClaudePanel);
-  wire('hlStatus', openStatusPanel);
-  wire('hlChatLocal', () => { location.href = '/chat/local'; });
-  wire('hlChatGrok', () => { location.href = '/chat/grok'; });
-  wire('hlVoice', async () => {
-    // Voice page requires HTTPS for mic access — switch to the configured HTTPS port
-    if (location.protocol === 'https:') { location.href = '/voice'; return; }
-    let httpsPort = 8443;
-    try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
-    location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
-  });
-  wire('homeFeatures', e => { e.preventDefault(); openSetupWizard(selected); });
 }
+const HomeApp = {
+  setup() { return { s: homeState }; },
+  methods: {
+    tileClick(id) {
+      if (id === 'hlFiles') return openFilesPanel();
+      if (id === 'hlJobs') return (typeof window.openJobs === 'function') ? window.openJobs() : (location.href = '/jobs');
+      if (id === 'hlClaude') return openClaudePanel();
+      if (id === 'hlStatus') return openStatusPanel();
+      if (id === 'hlChatLocal') return void (location.href = '/chat/local');
+      if (id === 'hlChatGrok') return void (location.href = '/chat/grok');
+      if (id === 'hlVoice') return this.openVoice();
+    },
+    async openVoice() {
+      if (location.protocol === 'https:') { location.href = '/voice'; return; }
+      let httpsPort = 8443;
+      try { const s = await fetch('/api/settings').then(r => r.json()); httpsPort = (s.info && s.info.httpsPort) || 8443; } catch {}
+      location.href = 'https://' + location.hostname + ':' + httpsPort + '/voice';
+    },
+    chooseFeatures(e) { e.preventDefault(); openSetupWizard(this.s.selected || null); },
+  },
+  template: `
+    <div class="home-landing">
+      <div v-if="s.loading" style="padding:24px;text-align:center;font-size:12px;color:var(--text3)">Checking services…</div>
+      <template v-else>
+        <div v-for="t in s.tiles" :key="t.id" class="home-folder" :id="t.id" @click="tileClick(t.id)"><div class="home-folder-icon">{{ t.icon }}</div><div><div class="home-folder-text">{{ t.text }}</div><div class="home-folder-sub">{{ t.sub }}</div></div></div>
+        <div v-if="s.pendingLabel" style="font-size:12px;color:var(--amber);padding:4px 4px 0;text-align:center">Hidden until ready: {{ s.pendingLabel }} — see Status / Setup</div>
+        <div style="font-size:12px;color:#8e8e93;padding:2px 4px 0;text-align:center"><a href="#" style="color:inherit" @click="chooseFeatures">✎ Choose features</a></div>
+        <div v-if="s.cost" style="font-size:12px;color:#8e8e93;padding:8px 4px 0;text-align:center">{{ s.cost }}</div>
+      </template>
+    </div>
+  `,
+};
+try { Vue.createApp(HomeApp).mount('#homeWrap'); }
+catch (e) { console.error('[home] Vue mount failed:', e); }
 
 // Build breadcrumb segments from the current dir: the containing root (labelled
 // by tab) followed by each subfolder, each with the dir to navigate to.
@@ -1391,260 +1527,50 @@ function buildCrumbs(data) {
 }
 
 function renderHeader(data) {
-  pathTxt.innerHTML = '';
+  chrome.pathHome = false;
   if (S.search) {
-    // Search spans folders — a path breadcrumb doesn't apply.
-    const b = document.createElement('b');
-    b.textContent = 'Search: ' + S.search;
-    pathTxt.appendChild(b);
+    chrome.searchLabel = 'Search: ' + S.search;   // path breadcrumb doesn't apply
+    chrome.crumbs = [];
   } else {
+    chrome.searchLabel = '';
     const crumbs = buildCrumbs(data);
-    crumbs.forEach((c, i) => {
-      if (i) { const sep = document.createElement('span'); sep.textContent = ' / '; sep.style.color = 'var(--text3)'; pathTxt.appendChild(sep); }
-      if (i === crumbs.length - 1) {
-        const b = document.createElement('b'); b.textContent = c.label; pathTxt.appendChild(b);
-      } else {
-        const a = document.createElement('span');
-        a.textContent = c.label;
-        a.style.cssText = 'color:var(--accent);cursor:pointer';
-        a.onclick = () => { searchInp.value = ''; loadDir(c.dir, 1); };
-        pathTxt.appendChild(a);
-      }
-    });
+    chrome.crumbs = crumbs.map((c, i) => ({ label: c.label, dir: c.dir, last: i === crumbs.length - 1 }));
   }
-
   // At a Files tab root, Back returns Home rather than trying to leave the roots.
-  const filesAtTabRoot = S.filesMode && !S.navStack.length;
-  backBtn.disabled = !S.navStack.length && !data.parent && !S.filesMode;
-  backBtn.onclick = () => {
-    if (S.navStack.length) {
-      const prev = S.navStack.pop();
-      searchInp.value = prev.search || '';
-      // restore type chip
-      document.querySelectorAll('.filter-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.type === (prev.type || 'all'));
-      });
-      S.type = prev.type || 'all';
-      loadDir(prev.dir, prev.page, false);
-    } else if (filesAtTabRoot) {
-      showHomeLanding();
-    } else if (data.parent) {
-      searchInp.value = '';
-      loadDir(data.parent, 1, false);
-    }
-  };
-
-  homeBtn.onclick = () => showHomeLanding();
-
+  chrome.backDisabled = !S.navStack.length && !data.parent && !S.filesMode;
   if (data.comfyOutputDir) S.comfyOutputDir = data.comfyOutputDir;
-
-  statsTxt.textContent = data.total + ' item' + (data.total !== 1 ? 's' : '');
-  if (data.pages > 1) pageInfoTxt.textContent = `Page ${data.page} / ${data.pages}`;
+  chrome.stats = data.total + ' item' + (data.total !== 1 ? 's' : '');
+  chrome.pageInfo = data.pages > 1 ? ('Page ' + data.page + ' / ' + data.pages) : '';
 }
 
 // ── Grid rendering ────────────────────────────────────────────────────────
+// Push the current page into the reactive grid state; the Vue grid renders it.
+// (Folder chips, search grouping, cards, and the empty state all live in the
+// #gridApp template now — see mountGridApp below.)
 function renderGrid(items) {
-  if (!items.length) {
-    let html = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-msg">Nothing here</div>`;
-    // Offer to delete a genuinely-empty subfolder (not a tab root, not search).
-    const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    const cur = nrm(S.dir);
-    const isRoot = !cur || cur === nrm(S.comfyOutputDir) || cur === nrm(S.favDir) || cur === nrm(S.root);
-    if (!S.search && !S.onHome && S.dir && !isRoot) {
-      html += `<button class="btn-ok" id="delEmptyBtn" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>`;
-    }
-    html += `</div>`;
-    gridWrap.innerHTML = html;
-    const del = $('delEmptyBtn');
-    if (del) del.onclick = deleteEmptyFolder;
-    return;
-  }
-
-  const folders = items.filter(i => i.isDir);
-  const files = items.filter(i => !i.isDir);
-  S.mediaItems = files.filter(i => i.isVideo || i.isImage || i.isAudio);
-
-  gridWrap.innerHTML = '';
-
-  // Folder chips row
-  if (folders.length) {
-    const row = document.createElement('div');
-    row.className = 'folder-row';
-    folders.forEach(item => {
-      const chip = document.createElement('div');
-      chip.className = 'folder-chip';
-      chip.innerHTML = `<input type="checkbox" class="ms-cb" data-path="${esc(item.path)}"><span class="folder-emoji">📁</span><span class="folder-label">${esc(item.name)}</span>`;
-      const cb = chip.querySelector('.ms-cb');
-      cb.addEventListener('click', e => { e.stopPropagation(); chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); });
-      chip.onclick = (e) => {
-        if (e.target.classList.contains('ms-cb')) return;
-        if (S.multiSelect) { cb.checked = !cb.checked; chip.classList.toggle('ms-checked', cb.checked); updateBulkBar(); return; }
-        loadDir(item.path, 1);
-      };
-      row.appendChild(chip);
-    });
-    gridWrap.appendChild(row);
-  }
-
-  // Media grid — when searching, group results under clickable folder-path headers
-  if (files.length) {
-    const grouped = S.search && files.some(f => f.parentDir);
-    if (grouped) {
-      const groups = new Map();
-      files.forEach((f, i) => {
-        const k = f.parentDir || '';
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push([f, i]); // keep original index for the media viewer
-      });
-      const cur = (S.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
-      for (const [gdir, entries] of groups) {
-        const hdr = document.createElement('div');
-        hdr.className = 'search-group-hdr';
-        let rel;
-        if (S.filesMode) {
-          // Cross-root results: prefix with which tab's tree they came from.
-          rel = filesGroupLabel(gdir);
-        } else {
-          rel = gdir.replace(/\\/g, '/');
-          if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)';
-        }
-        hdr.innerHTML = '📁 ' + esc(rel) + ' <span style="color:var(--text3);font-weight:400">(' + entries.length + ')</span>';
-        hdr.title = 'Open this folder';
-        hdr.onclick = () => {
-          searchInp.value = '';
-          if (S.filesMode) S.filesTab = filesTabForDir(gdir);   // keep the right tab highlighted
-          loadDir(gdir, 1);
-        };
-        gridWrap.appendChild(hdr);
-        const grid = document.createElement('div');
-        grid.className = 'grid';
-        entries.forEach(([item, i]) => grid.appendChild(makeCard(item, i)));
-        gridWrap.appendChild(grid);
-      }
-    } else {
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      files.forEach((item, i) => grid.appendChild(makeCard(item, i)));
-      gridWrap.appendChild(grid);
-    }
-  }
+  S.mediaItems = items.filter(i => !i.isDir && (i.isVideo || i.isImage || i.isAudio));
+  gridState.items = items;
+  gridState.search = S.search;
+  gridState.dir = S.dir;
+  gridState.filesMode = S.filesMode;
+  gridState.onHome = S.onHome;
+  gridState.comfyOutputDir = S.comfyOutputDir || '';
+  gridState.favDir = S.favDir || '';
+  gridState.root = S.root || '';
+  gridState.loading = false;
+  gridState.error = '';
 }
 
-function makeCard(item, idx) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  if (item.isDir) card.classList.add('card-folder');
-  else if (item.isVideo && !item.thumb) card.classList.add('card-video-noThumb');
-  else if (item.isAudio) card.classList.add('card-audio');
-
-  const ext = item.name.includes('.') ? item.name.split('.').pop().toLowerCase() : '';
-  let extColor = item.isVideo ? 'var(--video)' : item.isImage ? 'var(--image)' : item.isAudio ? 'var(--audio)' : 'var(--text3)';
-
-  // Index-derived tags: embedded workflow + NSFW (visible even while blurred)
-  const tagsHtml = (item.workflow || item.nsfw)
-    ? `<div class="card-tags">${item.workflow ? '<span class="card-tag wf" title="Has embedded workflow">⚙ wf</span>' : ''}${item.nsfw ? '<span class="card-tag nsfw" title="Prompt matched NSFW terms">18+</span>' : ''}</div>`
-    : '';
-
-  let thumbHtml = '';
-  if (item.isDir) {
-    thumbHtml = `<div class="card-thumb"><div class="card-icon">📁</div></div>`;
-  } else if (item.isVideo) {
-    const tsrc = item.thumb ? `/thumb/${enc(item.path)}` : null;
-    thumbHtml = `
-      <div class="card-thumb">
-        ${tsrc ? `<img data-src="${esc(tsrc)}" alt="">` : `<div class="card-icon">🎬</div>`}
-        <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
-        ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
-        ${tagsHtml}
-      </div>`;
-  } else if (item.isImage) {
-    thumbHtml = `
-      <div class="card-thumb">
-        <img data-src="/file/${enc(item.path)}" alt="">
-        ${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}
-        ${tagsHtml}
-      </div>`;
-  } else if (item.isAudio) {
-    thumbHtml = `<div class="card-thumb"><div class="card-icon">🎵</div>${ext ? `<div class="ext-badge" style="color:${extColor}">${ext}</div>` : ''}</div>`;
+// Reactively drop one item from the grid (used after favorite/delete). Falls back
+// to a full refresh if it isn't on the current page.
+function removeGridItem(path) {
+  const idx = gridState.items.findIndex(i => i.path === path);
+  if (idx >= 0) {
+    gridState.items.splice(idx, 1);
+    S.mediaItems = gridState.items.filter(i => !i.isDir && (i.isVideo || i.isImage || i.isAudio));
   } else {
-    thumbHtml = `<div class="card-thumb"><div class="card-icon">📄</div></div>`;
+    refreshCurrentPage();
   }
-
-  // Action buttons (non-folder)
-  const actionsHtml = !item.isDir ? `
-    <div class="card-actions">
-      <button class="act-btn act-fav" title="Favorite">⭐</button>
-      <button class="act-btn act-del" title="Delete">🗑</button>
-    </div>` : '';
-
-  card.innerHTML = `
-    <input type="checkbox" class="ms-cb" data-path="${esc(item.path)}">
-    ${thumbHtml}
-    ${actionsHtml}
-    <div class="card-info">
-      <div class="card-info-text">
-        <div class="card-name">${esc(item.name)}</div>
-        ${item.size ? `<div class="card-meta">${item.size}</div>` : ''}
-      </div>
-      ${(item.isImage || item.isVideo) ? `<div class="meta-badge" data-metapath="${esc(item.path)}" title="Remix this workflow"><svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></div>` : ''}
-    </div>`;
-
-  // Lazy load images
-  const img = card.querySelector('img[data-src]');
-  if (img) imgObs.observe(img);
-
-  // Card-info bar click → open metadata page
-  const cardInfo = card.querySelector('.card-info');
-  if (cardInfo && (item.isImage || item.isVideo)) {
-    cardInfo.addEventListener('click', e => {
-      e.stopPropagation();
-      openMetadataPage(item);
-    });
-    cardInfo.style.cursor = 'pointer';
-  }
-
-  // Multi-select checkbox
-  const msCb = card.querySelector('.ms-cb');
-  if (msCb) {
-    msCb.addEventListener('change', e => {
-      e.stopPropagation();
-      card.classList.toggle('ms-checked', msCb.checked);
-      updateBulkBar();
-    });
-  }
-
-  // Tap → open (or toggle checkbox in multi-select mode)
-  card.addEventListener('click', e => {
-    if (e.target.closest('.card-actions') || e.target.closest('.card-info') || e.target.classList.contains('ms-cb')) return;
-    if (S.multiSelect) {
-      if (msCb) { msCb.checked = !msCb.checked; card.classList.toggle('ms-checked', msCb.checked); updateBulkBar(); }
-      return;
-    }
-    if (card.classList.contains('actions-open')) { closeCardMenu(); return; }
-    if (item.isDir) { searchInp.value = ''; loadDir(item.path); return; }
-    if (item.isVideo || item.isImage || item.isAudio) {
-      const mi = S.mediaItems.findIndex(m => m.path === item.path);
-      S.modalIdx = mi;
-      openModal(S.mediaItems[mi]);
-    }
-  });
-
-  // Long-press → action menu
-  if (!item.isDir) {
-    let pressTimer;
-    card.addEventListener('touchstart', () => {
-      pressTimer = setTimeout(() => { closeCardMenu(); card.classList.add('actions-open'); S.activeCard = card; }, 500);
-    }, { passive: true });
-    card.addEventListener('touchend', () => clearTimeout(pressTimer), { passive: true });
-    card.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true });
-
-    const favBtnEl = card.querySelector('.act-fav');
-    const delBtnEl = card.querySelector('.act-del');
-    if (favBtnEl) favBtnEl.onclick = e => { e.stopPropagation(); closeCardMenu(); doFavorite(item, card); };
-    if (delBtnEl) delBtnEl.onclick = e => { e.stopPropagation(); closeCardMenu(); doDelete(item, card); };
-  }
-
-  return card;
 }
 
 function closeCardMenu() {
@@ -1655,135 +1581,98 @@ document.addEventListener('touchstart', e => {
 }, { passive: true });
 
 // ── Pagination ────────────────────────────────────────────────────────────
+// Pager is Vue-rendered on #pagerTop + #pager from pagerState; this just feeds it.
 function renderPager(data) {
-  const pagerTop = $('pagerTop');
-  if (data.pages <= 1) { pager.innerHTML = ''; pagerTop.innerHTML = ''; return; }
-  pager.innerHTML = '';
-  const { page, pages } = data;
-
-  const addBtn = (label, p, disabled, active) => {
-    const b = document.createElement('button');
-    b.className = 'pg-btn' + (active ? ' cur' : '');
-    b.textContent = label;
-    b.disabled = disabled;
-    if (!disabled) b.onclick = () => { window.scrollTo(0, 0); loadDir(S.dir, p, false); };
-    pager.appendChild(b);
-  };
-  const addDots = () => {
-    const s = document.createElement('span'); s.className = 'pg-dots'; s.textContent = '…'; pager.appendChild(s);
-  };
-
-  addBtn('‹', page - 1, page === 1, false);
-
-  const pageNums = new Set([1, pages]);
-  for (let p = Math.max(2, page - 2); p <= Math.min(pages - 1, page + 2); p++) pageNums.add(p);
-  const sorted = [...pageNums].sort((a, b) => a - b);
-
-  let prev = 0;
-  for (const p of sorted) {
-    if (p - prev > 1) addDots();
-    addBtn(String(p), p, false, p === page);
-    prev = p;
-  }
-
-  addBtn('›', page + 1, page === pages, false);
-
-  // Clone to top pager
-  pagerTop.innerHTML = '';
-  pager.querySelectorAll('button, span').forEach(el => {
-    const clone = el.cloneNode(true);
-    if (clone.onclick === undefined && el.onclick) {
-      // re-bind click from original
-    }
-    pagerTop.appendChild(clone);
-  });
-  pagerTop.querySelectorAll('button').forEach((btn, i) => {
-    const orig = pager.querySelectorAll('button')[i];
-    if (orig && !orig.disabled) {
-      btn.onclick = orig.onclick;
-    }
-  });
+  pagerState.page = data.page;
+  pagerState.pages = data.pages;
 }
+const PagerApp = {
+  setup() { return { s: pagerState }; },
+  computed: {
+    items() {
+      const { page, pages } = this.s;
+      if (pages <= 1) return [];
+      const out = [{ k: 'prev', label: '‹', p: page - 1, disabled: page === 1 }];
+      const nums = new Set([1, pages]);
+      for (let p = Math.max(2, page - 2); p <= Math.min(pages - 1, page + 2); p++) nums.add(p);
+      let prev = 0;
+      for (const p of [...nums].sort((a, b) => a - b)) {
+        if (p - prev > 1) out.push({ k: 'd' + p, dots: true });
+        out.push({ k: 'n' + p, label: String(p), p, cur: p === page });
+        prev = p;
+      }
+      out.push({ k: 'next', label: '›', p: page + 1, disabled: page === pages });
+      return out;
+    },
+  },
+  methods: { go(p) { window.scrollTo(0, 0); loadDir(S.dir, p, false); } },
+  template: `<template v-for="it in items" :key="it.k"><span v-if="it.dots" class="pg-dots">…</span><button v-else class="pg-btn" :class="{cur: it.cur}" :disabled="it.disabled" @click="go(it.p)">{{ it.label }}</button></template>`,
+};
+try { Vue.createApp(PagerApp).mount('#pagerTop'); Vue.createApp(PagerApp).mount('#pager'); }
+catch (e) { console.error('[pager] Vue mount failed:', e); }
 
 // ── Modal ─────────────────────────────────────────────────────────────────
+// ── Modal viewer (Vue) ─────────────────────────────────────────────────────
 function openModal(item) {
   if (!item) return;
-  stopMedia();
-  modalBody.innerHTML = '';
-  modalLabel.textContent = item.name;
-
-  if (item.isVideo) {
-    const v = document.createElement('video');
-    v.src = `/file/${enc(item.path)}`;
-    v.controls = true; v.playsinline = true; v.autoplay = true; v.loop = true;
-    v.muted = S.videoMuted;
-    modalBody.appendChild(v);
-    modalMute.style.display = '';
-    modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
-  } else {
-    modalMute.style.display = 'none';
-  }
-  if (item.isImage) {
-    const img = document.createElement('img');
-    img.src = `/file/${enc(item.path)}`; img.alt = item.name;
-    modalBody.appendChild(img);
-  } else if (item.isAudio) {
-    const wrap = document.createElement('div'); wrap.className = 'modal-audio-wrap';
-    wrap.innerHTML = '<div style="font-size:64px">🎵</div>';
-    const a = document.createElement('audio');
-    a.src = `/file/${enc(item.path)}`; a.controls = true; a.autoplay = true;
-    wrap.appendChild(a); modalBody.appendChild(wrap);
-  }
-
-  const hasPrev = S.modalIdx > 0;
-  const hasNext = S.modalIdx < S.mediaItems.length - 1;
-  modalPrev.disabled = !hasPrev;
-  modalNext.disabled = !hasNext;
-
-  mFavBtn.onclick = () => doFavorite(item, null, true);
-  mDelBtn.onclick = () => doDelete(item, null, true);
-
-  modal.classList.add('open');
+  modalState.item = item;
+  modalState.open = true;
   document.body.style.overflow = 'hidden';
 }
-
 function closeModal() {
-  stopMedia();
-  modal.classList.remove('open');
+  modalState.open = false;
+  modalState.item = null;   // v-if drops the media element, stopping playback
   document.body.style.overflow = '';
 }
-
-function stopMedia() {
-  const m = modalBody.querySelector('video,audio');
-  if (m) { m.pause(); m.src = ''; }
+function modalNav(delta) {
+  const ni = S.modalIdx + delta;
+  if (ni >= 0 && ni < S.mediaItems.length) { S.modalIdx = ni; modalState.item = S.mediaItems[ni]; }
 }
-
-modalClose.onclick = closeModal;
-modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-
-modalPrev.onclick = () => { if (S.modalIdx > 0) { S.modalIdx--; openModal(S.mediaItems[S.modalIdx]); } };
-modalNext.onclick = () => { if (S.modalIdx < S.mediaItems.length - 1) { S.modalIdx++; openModal(S.mediaItems[S.modalIdx]); } };
-modalMute.onclick = () => {
-  S.videoMuted = !S.videoMuted;
-  const v = modalBody.querySelector('video');
-  if (v) v.muted = S.videoMuted;
-  modalMute.textContent = S.videoMuted ? '🔇' : '🔊';
+const ModalApp = {
+  setup() { return { s: modalState }; },
+  computed: {
+    fileUrl() { return this.s.item ? '/file/' + enc(this.s.item.path) : ''; },
+    hasPrev() { return S.modalIdx > 0; },
+    hasNext() { return S.modalIdx < S.mediaItems.length - 1; },
+  },
+  methods: {
+    close: closeModal,
+    prev() { modalNav(-1); },
+    next() { modalNav(1); },
+    toggleMute() { modalState.muted = !modalState.muted; const v = this.$refs.vid; if (v) v.muted = modalState.muted; },
+    fav() { if (this.s.item) doFavorite(this.s.item, null, true); },
+    del() { if (this.s.item) doDelete(this.s.item, null, true); },
+    onTouchStart(e) { this._tx = e.touches[0].clientX; },
+    onTouchEnd(e) { const dx = e.changedTouches[0].clientX - (this._tx || 0); if (Math.abs(dx) > 55) { if (dx > 0) this.prev(); else this.next(); } },
+  },
+  template: `
+    <div class="modal" :class="{open: s.open}" @click.self="close" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+      <div class="modal-actions">
+        <button class="modal-act-btn m-fav" @click="fav">⭐ Favorite</button>
+        <button class="modal-act-btn m-del" @click="del">🗑 Delete</button>
+      </div>
+      <button class="modal-close" @click="close">✕</button>
+      <button class="modal-nav" id="modalPrev" :disabled="!hasPrev" @click="prev">‹</button>
+      <button v-if="s.item && s.item.isVideo" class="modal-nav" id="modalMute" @click="toggleMute">{{ s.muted ? '🔇' : '🔊' }}</button>
+      <button class="modal-nav" id="modalNext" :disabled="!hasNext" @click="next">›</button>
+      <div class="modal-body">
+        <video v-if="s.item && s.item.isVideo" ref="vid" :key="s.item.path" :src="fileUrl" controls playsinline autoplay loop @loadstart="$event.target.muted = s.muted"></video>
+        <img v-else-if="s.item && s.item.isImage" :key="s.item.path" :src="fileUrl" :alt="s.item.name">
+        <div v-else-if="s.item && s.item.isAudio" class="modal-audio-wrap"><div style="font-size:64px">🎵</div><audio :key="s.item.path" :src="fileUrl" controls autoplay></audio></div>
+      </div>
+      <div class="modal-label">{{ s.item ? s.item.name : '' }}</div>
+    </div>
+  `,
 };
+try { Vue.createApp(ModalApp).mount('#modalApp'); }
+catch (e) { console.error('[modal] Vue mount failed:', e); }
 
-// Swipe in modal
-let tx0 = 0;
-modal.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
-modal.addEventListener('touchend', e => {
-  const dx = e.changedTouches[0].clientX - tx0;
-  if (Math.abs(dx) > 55) { if (dx > 0) modalPrev.click(); else modalNext.click(); }
-}, { passive: true });
-
-// Keyboard
+// Keyboard nav for the viewer
 document.addEventListener('keydown', e => {
-  if (!modal.classList.contains('open')) return;
+  if (!modalState.open) return;
   if (e.key === 'Escape') closeModal();
-  if (e.key === 'ArrowLeft') modalPrev.click();
-  if (e.key === 'ArrowRight') modalNext.click();
+  if (e.key === 'ArrowLeft') modalNav(-1);
+  if (e.key === 'ArrowRight') modalNav(1);
 });
 
 // ── Favorite ──────────────────────────────────────────────────────────────
@@ -1804,8 +1693,7 @@ async function doFavorite(item, cardEl, fromModal = false) {
         showToast('⭐ Moved to Favorites');
         if (fromModal) closeModal();
         // Remove card from grid
-        if (cardEl) cardEl.remove();
-        else refreshCurrentPage();
+        removeGridItem(item.path);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -1830,8 +1718,7 @@ async function doDelete(item, cardEl, fromModal = false) {
         if (r.error) throw new Error(r.error);
         showToast('🗑 Deleted');
         if (fromModal) closeModal();
-        if (cardEl) cardEl.remove();
-        else refreshCurrentPage();
+        removeGridItem(item.path);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -1845,6 +1732,9 @@ function refreshCurrentPage() {
 
 // ── Metadata Viewer ──────────────────────────────────────────────────────
 function openMetadataPage(item) {
+  // Remix badge → open the in-page remix dialog (browser stays behind).
+  // Falls back to the classic inspect page if the dialog script isn't loaded.
+  if (typeof window.openRemix === 'function') { window.openRemix(item); return; }
   const params = new URLSearchParams({
     path: item.path,
     name: item.name,
@@ -2123,7 +2013,7 @@ claudeStopBtn.onclick = async () => {
 
 // Escape closes Claude panel or goes back to list
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && claudePanel.classList.contains('open') && !modal.classList.contains('open')) {
+  if (e.key === 'Escape' && claudePanel.classList.contains('open') && !modalState.open) {
     if (claudeChatView.style.display !== 'none' && !claudeRunning) {
       showClaudeList();
     } else {
@@ -2175,6 +2065,35 @@ document.addEventListener('keydown', e => {
     }
   }, { passive: true });
 })();
+
+// ── Toolbar (Vue, in-DOM template on #toolbarApp) ──────────────────────────
+// Mounted before init so the (re-captured) search input is wired before the first
+// loadDir/showHomeLanding runs.
+try {
+  Vue.createApp({
+    setup() { return { c: chrome, TYPES }; },
+    methods: {
+      crumb(cr) { if (searchInp) searchInp.value = ''; loadDir(cr.dir, 1); },
+      back() {
+        if (S.navStack.length) {
+          const prev = S.navStack.pop();
+          if (searchInp) searchInp.value = prev.search || '';
+          S.type = prev.type || 'all'; chrome.type = S.type; updateFilterCount();
+          loadDir(prev.dir, prev.page, false);
+        } else if (S.filesMode) { showHomeLanding(); }
+        else if (S.parent) { if (searchInp) searchInp.value = ''; loadDir(S.parent, 1, false); }
+      },
+      goHome() { showHomeLanding(); },
+      toggleBlur, toggleSafe, toggleFilters, setType, cycleSort,
+      toggleSelect() { toggleMultiSelect(); },
+      openSettings() { if (window.openSettingsPanel) window.openSettingsPanel(); },
+      openWords() { if (window.openWordsPanel) window.openWordsPanel(); },
+      bulkSelAll, bulkSelFiles, bulkFav, bulkDel,
+      clickTab(id) { if (S.filesTab !== id) loadFilesTab(id); },
+    },
+  }).mount('#toolbarApp');
+  wireSearch();
+} catch (e) { console.error('[toolbar] Vue mount failed:', e); }
 
 // ── Init ──────────────────────────────────────────────────────────────────
 const initDir = new URLSearchParams(location.search).get('dir') || null;
@@ -2375,7 +2294,7 @@ $('statusFeatures').onclick = () => {
     $('wordsCount').textContent = list.length + ' phrases';
   }
 
-  $('wordsBtn').onclick = () => {
+  window.openWordsPanel = () => {
     overlay.classList.add('open');
     $('wordsList').innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text3)">Loading…</div>';
     fetch('/api/prompt-words?safe=' + (S.safeMode ? '1' : '0')).then(r => r.json()).then(d => {
@@ -2457,7 +2376,7 @@ $('statusFeatures').onclick = () => {
     fetch('/api/nsfw-terms').then(r=>r.json()).then(d=>{ nsfwTerms = Array.isArray(d.terms) ? d.terms.slice() : []; renderNsfw(); }).catch(()=>{ nsfwTerms = []; renderNsfw(); });
   }
 
-  $('settingsBtn').onclick = open;
+  window.openSettingsPanel = open;
   $('settingsCloseBtn').onclick = close;
   $('settingsCancel').onclick = close;
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
@@ -2542,5 +2461,933 @@ $('statusFeatures').onclick = () => {
   };
 })();
 </script>
+<!-- REMIX-DIALOG:START -->
+<style>
+  body.rmx-noscroll{overflow:hidden !important;overscroll-behavior:none}
+  .rmx-overlay{position:fixed;inset:0;z-index:3000;background:#000b;display:flex;align-items:center;justify-content:center;padding:24px}
+  .rmx-dialog{background:#141416;border:1px solid #38383a;border-radius:16px;width:100%;max-width:1060px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #000c}
+  .rmx-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #2c2c2e;flex:none}
+  .rmx-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f2f2f7}
+  .rmx-x{margin-left:auto;background:none;border:none;color:#f2f2f7;font-size:22px;cursor:pointer}
+  .rmx-x:disabled{opacity:.4;cursor:default}
+  .rmx-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .rmx-media{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
+  .rmx-media img,.rmx-media video{max-width:100%;max-height:100%;border-radius:8px}
+  .rmx-form{flex:1;min-height:0;padding:16px;overflow:auto}
+  .rmx-inp{background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  select.rmx-inp{cursor:pointer}
+  .rmx-grid{display:flex;flex-wrap:wrap;gap:14px}
+  .rmx-field{display:flex;flex-direction:column;gap:5px}
+  .rmx-field.wide{flex-basis:100%}
+  .rmx-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.4px}
+  .rmx-tgl{width:15px;height:15px;accent-color:#0a84ff;cursor:pointer}
+  .rmx-mut{color:#8e8e93}
+  .rmx-seedwrap{display:flex;gap:8px;align-items:center}
+  .rmx-seed{position:relative;width:58px;height:30px;border-radius:15px;border:1px solid #48484a;background:#2c2c2e;cursor:pointer;padding:0;flex:none;transition:background .15s,border-color .15s}
+  .rmx-seed.on{background:#0a84ff;border-color:#0a84ff}
+  .rmx-seed .thumb{position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#f2f2f7;display:flex;align-items:center;justify-content:center;font-size:14px;transition:left .15s}
+  .rmx-seed.on .thumb{left:30px}
+  .rmx-loras{display:flex;flex-direction:column;gap:4px}
+  .rmx-lora{display:flex;align-items:center;gap:8px;font-size:12px}
+  .rmx-lora.off{opacity:.5}
+  .rmx-lora label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c7c7cc}
+  .rmx-lora input[type=number]{width:80px;background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:6px;padding:4px 6px}
+  .rmx-imgf{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .rmx-imgf img{height:44px;border-radius:6px;border:1px solid #48484a}
+  .rmx-hidden{margin-top:14px;background:#1c1c1e;border:1px solid #38383a;border-radius:10px}
+  .rmx-hidden summary{list-style:none;cursor:pointer;padding:10px 12px;font-size:12px;color:#8e8e93;display:flex;align-items:center;gap:6px}
+  .rmx-hidden summary::-webkit-details-marker{display:none}
+  .rmx-hidden summary::before{content:'▸';transition:transform .12s}
+  .rmx-hidden[open] summary::before{transform:rotate(90deg)}
+  .rmx-hidden .rmx-field{padding:6px 12px}
+  .rmx-run{display:flex;align-items:center;gap:10px;margin:16px 0 4px}
+  .rmx-btn{border:1px solid #48484a;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;color:#f2f2f7;background:#2c2c2e}
+  .rmx-btn.go{background:#2d5a1e;border-color:#3a7a28;color:#a8e06c}
+  .rmx-btn.cancel{background:#5a1e1e;border-color:#7a2828;color:#ff9d9d}
+  .rmx-btn:disabled{opacity:.5;cursor:default}
+  .rmx-status{font-size:12px;color:#8e8e93}
+  .rmx-prog{height:6px;background:#2c2c2e;border-radius:3px;overflow:hidden;margin:8px 0}
+  .rmx-progfill{height:100%;background:#0a84ff;width:0;transition:width .2s}
+  .rmx-log{margin-top:8px;max-height:150px;overflow:auto;background:#0a0a0a;border:1px solid #2c2c2e;border-radius:8px;padding:8px;font:11px/1.5 ui-monospace,monospace;color:#c7c7cc}
+  .rmx-log .ll-err{color:#ff6b6b}
+  .rmx-log .ll-done{color:#a8e06c}
+  .rmx-log .ll-warn{color:#ffcf6b}
+  .rmx-outgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-top:12px}
+  .rmx-out{display:block;border:1px solid #38383a;border-radius:8px;overflow:hidden;aspect-ratio:1}
+  .rmx-out img{width:100%;height:100%;object-fit:cover}
+  .rmx-jobs{padding:12px 16px;overflow:auto;max-height:80vh;display:flex;flex-direction:column;gap:10px}
+  .rmx-job{display:flex;gap:12px;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:12px;padding:10px}
+  .rmx-job-src{width:64px;height:64px;flex:none;border-radius:8px;overflow:hidden;background:#000}
+  .rmx-job-src img{width:100%;height:100%;object-fit:cover}
+  .rmx-job-main{flex:1;min-width:0}
+  .rmx-job-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#f2f2f7}
+  .rmx-dot{width:8px;height:8px;border-radius:50%;flex:none;background:#8e8e93}
+  .rmx-dot.running{background:#0a84ff;animation:rmxpulse 1s infinite}
+  .rmx-dot.done,.rmx-dot.complete{background:#30d158}
+  .rmx-dot.error{background:#ff453a}
+  .rmx-topbar{position:fixed;top:0;left:0;right:0;height:4px;z-index:2950;cursor:pointer;background:#0a84ff22;overflow:hidden}
+  .rmx-topbar:hover{height:6px}
+  .rmx-topbar-fill{height:100%;background:linear-gradient(90deg,#0a84ff,#5ac8fa);width:0;transition:width .3s;box-shadow:0 0 8px #0a84ffaa}
+  .rmx-topbar-fill.indet{width:35%;animation:rmxindet 1.15s ease-in-out infinite}
+  @keyframes rmxindet{0%{transform:translateX(-120%)}100%{transform:translateX(340%)}}
+  @keyframes rmxpulse{50%{opacity:.35}}
+  .rmx-job-prompt{font-size:12px;color:#c7c7cc;margin:3px 0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .rmx-job-acts{display:flex;flex-direction:column;gap:6px;flex:none}
+  .rmx-mini{background:#2c2c2e;border:1px solid #48484a;border-radius:8px;color:#f2f2f7;cursor:pointer;padding:5px 9px;font-size:13px}
+  .rmx-mini:hover{border-color:#0a84ff}
+  .rmx-fab{position:fixed;right:20px;bottom:20px;z-index:2900;background:#0a84ff;color:#fff;border:none;border-radius:24px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px #0a84ff55}
+  .rmx-tabs{display:flex;gap:2px;background:#0a0a0a;border:1px solid #2c2c2e;border-radius:8px;padding:2px}
+  .rmx-tabs button{background:none;border:none;color:#8e8e93;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px}
+  .rmx-tabs button.on{background:#2c2c2e;color:#f2f2f7}
+  .rmx-btn2{background:#2c2c2e;border:1px solid #48484a;border-radius:8px;color:#f2f2f7;cursor:pointer;padding:6px 12px;font-size:12px}
+  .rmx-btn2:hover{border-color:#0a84ff}
+  .rmx-lora-more{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;padding:5px 9px;margin-top:2px;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:8px;font-size:12px;color:#8e8e93;user-select:none}
+  .rmx-lora-more:hover{border-color:#0a84ff;color:#c7c7cc}
+  .rmx-lora-arrow{transition:transform .12s;color:#8e8e93}
+  .rmx-lora-arrow.open{transform:rotate(180deg)}
+  .rmx-node{background:#161618;border:1px solid #2c2c2e;border-radius:8px;margin-top:6px}
+  .rmx-node>summary{list-style:none;cursor:pointer;padding:7px 10px;font-size:12px;color:#c7c7cc}
+  .rmx-node>summary::-webkit-details-marker{display:none}
+  .rmx-node>summary::before{content:'▸ ';color:#636366}
+  .rmx-node[open]>summary::before{content:'▾ '}
+  .rmx-node-body{padding:2px 10px 10px;font-size:11px;display:flex;flex-direction:column;gap:3px}
+  .rmx-node-inp{display:flex;gap:8px;align-items:center}
+  .rmx-node-k{color:#8e8e93;min-width:96px;flex:none}
+  .rmx-node-v{color:#c7c7cc;word-break:break-word;overflow-wrap:anywhere}
+  .rmx-node-edit{flex:1;min-width:0;padding:3px 6px;font-size:11px}
+  .rmx-node-edit.edited{border-color:#0a84ff;background:#0a2540;color:#eaf3ff}
+  .rmx-node.edited>summary{color:#5ac8fa}
+  .rmx-raw{margin:0;padding:8px 10px;font:11px/1.4 ui-monospace,monospace;color:#a8b3c7;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
+  .rmx-repl{margin-top:14px;background:#1c1c1e;border:1px solid #38383a;border-radius:10px}
+  .rmx-repl>summary{list-style:none;cursor:pointer;padding:10px 12px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
+  .rmx-repl>summary::-webkit-details-marker{display:none}
+  .rmx-repl>summary::before{content:'▸';display:inline-block;margin-right:6px;transition:transform .12s}
+  .rmx-repl[open]>summary::before{transform:rotate(90deg)}
+  .rmx-repl-body{padding:2px 12px 12px}
+  .rmx-repl-all{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;margin-bottom:8px;cursor:pointer;user-select:none}
+  .rmx-repl-all input,.rmx-repl-row input[type=checkbox]{width:16px;height:16px;flex:none;accent-color:#0a84ff}
+  .rmx-repl-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .rmx-repl-row input[type=text]{flex:1;min-width:0}
+  .rmx-repl-swap{flex:none;padding:6px 9px;color:#0a84ff}
+  .rmx-repl-del{flex:none;width:30px;padding:6px 0;background:#3a1e1e;color:#e06c6c;border:1px solid #5a2a2a;border-radius:8px;cursor:pointer;font-size:12px}
+  .rmx-repl-del:hover{border-color:#e06c6c}
+  .rmx-nodegroup{margin:2px 0 10px}
+  .rmx-lora-cols{display:flex;gap:16px;margin-top:6px}
+  .rmx-lora-col{flex:1;min-width:0}
+  @media (max-width:640px){.rmx-lora-cols{flex-direction:column;gap:8px}}
+  .rmx-nodegroup-title{font-size:10px;color:#7d7d82;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 5px;border-bottom:1px solid #2c2c2e;padding-bottom:3px}
+  .rmx-picker-overlay{position:fixed;inset:0;z-index:3100;background:#000c;display:flex;align-items:center;justify-content:center;padding:24px}
+  .rmx-picker{position:relative;background:#141416;border:1px solid #38383a;border-radius:14px;width:100%;max-width:1000px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+  .rmx-picker-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;text-transform:capitalize}
+  .mb{display:flex;flex-direction:column;min-height:0;flex:1}
+  .mb-toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #2c2c2e;flex:none;flex-wrap:wrap}
+  .mb-roots{display:flex;gap:2px;background:#0a0a0a;border:1px solid #2c2c2e;border-radius:8px;padding:2px;flex:none}
+  .mb-roots button{background:none;border:none;color:#8e8e93;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px}
+  .mb-roots button.on{background:#2c2c2e;color:#f2f2f7}
+  .mb-roots button:disabled{opacity:.4;cursor:default}
+  .mb-search{flex:1;min-width:80px}
+  .mb-grid{display:flex;flex-wrap:wrap;gap:6px;padding:12px;overflow:auto;align-content:flex-start;flex:1;min-height:0}
+  .mb-cell{position:relative;height:150px;border:1px solid #2c2c2e;border-radius:8px;overflow:hidden;cursor:pointer;background:#1c1c1e;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .mb-cell:hover{border-color:#0a84ff}
+  .mb-cell img{height:100%;width:auto;display:block}
+  .mb-cell.folder{width:130px}
+  .mb-folder-ico{font-size:34px}
+  .mb-cap{position:absolute;left:0;right:0;bottom:0;padding:2px 6px;font-size:10px;background:linear-gradient(transparent,#000d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+  .mb-words{position:absolute;inset:0;background:#000b;display:flex;align-items:flex-start;justify-content:center;padding:56px 16px 16px;z-index:2}
+  .mb-words-panel{background:#1c1c1e;border:1px solid #38383a;border-radius:12px;width:100%;max-width:440px;max-height:72vh;display:flex;flex-direction:column;padding:12px}
+  .mb-words-list{overflow:auto;display:flex;flex-direction:column}
+  .mb-word{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #2c2c2e;color:#c7c7cc}
+  .mb-word:hover{background:#0a84ff1a;color:#fff}
+  @media (max-width:640px){.rmx-overlay{padding:0}.rmx-dialog{max-width:100%;max-height:100%;height:100%;border-radius:0;border:0}.rmx-picker-overlay{padding:0}.rmx-picker{max-width:100%;max-height:100%;height:100%;border-radius:0}}
+</style>
+<script>
+(function () {
+  if (!window.Vue) { console.warn('[remix] Vue not loaded'); return; }
+  const { createApp, reactive, ref, computed, watch, onMounted, onUnmounted, provide, inject } = Vue;
+  const enc = encodeURIComponent;
+  const WIDE = new Set(['prompt', 'negative_prompt', 'lora_list', 'image_input', 'video_input', 'audio_input']);
+  const loraLast = (a, b) => (/^lora/.test(a.kind) ? 1 : 0) - (/^lora/.test(b.kind) ? 1 : 0);
+  const shortLora = s => String(s == null ? '' : s).split(/[\\/]/).pop().replace(/\.safetensors$/i, '');
+  const ctype = f => (f.control && f.control.type) || 'text';
+  const isVideoName = p => /\.(mp4|webm|mkv|mov|m4v)$/i.test(p || '');
+  const timeAgo = ts => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
+
+  // ── Prompt Replacements ── global find→replace rules with toggles, applied to
+  // prompt/negative field values right before each run (case-insensitive, all
+  // matches). Shared with the inspect page via /api/replacements; localStorage
+  // gives an instant paint before the server copy arrives.
+  const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const replacements = reactive([]);
+  const replAllOn = ref(false);
+  function syncReplAll() { replAllOn.value = replacements.length > 0 && replacements.every(r => r.on); }
+  function activeReplacements() { return replacements.filter(r => r.on && r.from && String(r.from).trim()); }
+  function saveReplacements() {
+    const plain = replacements.map(r => ({ from: r.from, to: r.to, on: !!r.on }));
+    try { localStorage.setItem('archiveReplacements', JSON.stringify(plain)); } catch (e) {}
+    fetch('/api/replacements', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replacements: plain }) }).catch(() => {});
+    syncReplAll();
+  }
+  try { const c = JSON.parse(localStorage.getItem('archiveReplacements') || '[]'); if (Array.isArray(c)) replacements.push(...c); } catch (e) {}
+  syncReplAll();
+  fetch('/api/replacements').then(r => r.json()).then(d => {
+    const server = Array.isArray(d.replacements) ? d.replacements : [];
+    if (server.length === 0 && replacements.length > 0) { saveReplacements(); }
+    else { replacements.splice(0, replacements.length, ...server); try { localStorage.setItem('archiveReplacements', JSON.stringify(server)); } catch (e) {} }
+    syncReplAll();
+  }).catch(() => {});
+  function applyReplacements(text) {
+    if (typeof text !== 'string') return text;
+    let out = text;
+    for (const r of activeReplacements()) out = out.replace(new RegExp(escRe(r.from), 'gi'), r.to == null ? '' : r.to);
+    return out;
+  }
+  // For nodes: only touch prompt-ish string inputs, skipping model/sampler/file/numeric keys.
+  const REPL_SKIP_KEY = /_name$|name$|filename|ckpt|lora|vae|sampler|scheduler|model|path|url|format|extension|seed|width|height|steps|cfg/i;
+  function applyReplacementsToNodes(prompt) {
+    if (!activeReplacements().length) return prompt;
+    for (const node of Object.values(prompt)) {
+      if (!node || !node.inputs) continue;
+      for (const key of Object.keys(node.inputs)) {
+        if (typeof node.inputs[key] !== 'string') continue;
+        if (REPL_SKIP_KEY.test(key)) continue;
+        node.inputs[key] = applyReplacements(node.inputs[key]);
+      }
+    }
+    return prompt;
+  }
+
+  function mainPromptOf(promptObj) {
+    if (!promptObj || typeof promptObj !== 'object') return '';
+    const tiers = [[], [], []];
+    for (const n of Object.values(promptObj)) {
+      if (!n || !n.inputs) continue;
+      const title = (n._meta && n._meta.title) || '';
+      if (/negative|neg\b/i.test(title)) continue;
+      let text = '';
+      for (const v of Object.values(n.inputs)) if (typeof v === 'string' && v.length > text.length) text = v;
+      if (!text.trim()) continue;
+      if (/main/i.test(title) && /prompt/i.test(title)) tiers[0].push(text);
+      else if (/pos/i.test(title) && /prompt/i.test(title)) tiers[1].push(text);
+      else if (text.length > 20) tiers[2].push(text);
+    }
+    for (const t of tiers) if (t.length) return t.sort((a, b) => b.length - a.length)[0];
+    return '';
+  }
+  function firstVideoFrameBlob(videoUrl) {
+    return new Promise((resolve, reject) => {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      let settled = false;
+      const finish = (fn, arg) => { if (!settled) { settled = true; v.removeAttribute('src'); v.load(); fn(arg); } };
+      v.onerror = () => finish(reject, new Error('could not decode video'));
+      v.onloadeddata = () => { try { v.currentTime = 0.001; } catch (e) {} };
+      v.onseeked = () => {
+        if (settled) return;
+        try {
+          const c = document.createElement('canvas');
+          c.width = v.videoWidth; c.height = v.videoHeight;
+          if (!c.width || !c.height) return finish(reject, new Error('video has no dimensions'));
+          c.getContext('2d').drawImage(v, 0, 0);
+          c.toBlob(b => b ? finish(resolve, b) : finish(reject, new Error('canvas export failed')), 'image/png');
+        } catch (e) { finish(reject, e); }
+      };
+      setTimeout(() => finish(reject, new Error('timed out decoding video')), 20000);
+      v.src = videoUrl;
+    });
+  }
+  async function uploadBlob(blob, ext) {
+    const uploadName = 'app_input_' + Date.now() + '.' + (ext || 'png');
+    const fd = new FormData(); fd.append('image', blob, uploadName); fd.append('overwrite', 'true');
+    const r = await fetch('/api/comfy/upload/image', { method: 'POST', body: fd });
+    if (!r.ok) return null;
+    const j = await r.json(); return j.name || uploadName;
+  }
+  async function uploadImagePath(p) {
+    const r = await fetch('/file/' + enc(p)); if (!r.ok) return null;
+    const blob = await r.blob(); const name = p.split(/[\\/]/).pop();
+    return uploadBlob(blob, name.includes('.') ? name.split('.').pop() : 'png');
+  }
+
+  // ── Shared IndexedDB job store (same 'comfyJobs' DB the /jobs page uses) ──
+  const JobDB = {
+    _db: null,
+    open() {
+      if (this._db) return Promise.resolve(this._db);
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('comfyJobs', 1);
+        req.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains('jobs')) { const st = db.createObjectStore('jobs', { keyPath: 'id' }); st.createIndex('startTime', 'startTime'); } };
+        req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+        req.onerror = () => reject(req.error);
+      });
+    },
+    async getAll() { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readonly'); const r = tx.objectStore('jobs').getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }); },
+    async put(job) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readwrite'); tx.objectStore('jobs').put(job); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); },
+    async del(id) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('jobs', 'readwrite'); tx.objectStore('jobs').delete(id); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); },
+  };
+  const jobChannel = (() => { try { return new BroadcastChannel('comfy-jobs'); } catch (e) { return null; } })();
+
+  // ── Central reactive store: the single source of truth for jobs ──
+  const store = reactive({ list: [], loaded: false });
+  window.RemixJobs = store;                       // exposed for the rest of the app
+  const byId = id => store.list.find(j => j.id === id);
+  const runningCount = computed(() => store.list.filter(j => j.status === 'running').length);
+  // Lead progress = the % of the actively-executing job (ComfyUI runs one at a
+  // time, so the max _pct among running jobs is the one currently on the GPU).
+  const leadPct = computed(() => { const r = store.list.filter(j => j.status === 'running'); return r.length ? Math.max.apply(null, r.map(j => j._pct || 0)) : 0; });
+  function persist(job) { const c = {}; for (const k in job) if (k[0] !== '_') c[k] = job[k]; JobDB.put(JSON.parse(JSON.stringify(c))).catch(() => {}); }
+  // Reload recovery: a WebSocket can't survive a page reload (ComfyUI keys it to
+  // a client id and won't replay), so any job left 'running' is resolved by
+  // polling ComfyUI's /history for completion + rescanning outputs.
+  async function recoverJob(job) {
+    if (job._recovering) return; job._recovering = true;
+    try {
+      if (Date.now() - job.startTime > 7200000) { job.status = 'error'; job.endTime = job.startTime; job._pct = 100; persist(job); return; }
+      if (!job.promptIds || !job.promptIds.length) { if (Date.now() - job.startTime > 300000) { job.status = 'error'; job.endTime = job.startTime; persist(job); } return; }
+      let completed = 0, errored = false; const names = new Set();
+      for (const pid of job.promptIds) {
+        try {
+          const data = await fetch('/api/comfy/api/history/' + pid).then(r => r.ok ? r.json() : null);
+          const entry = data && data[pid]; if (!entry) continue;
+          if (entry.status && entry.status.status_str === 'error') { errored = true; break; }
+          if (entry.status && entry.status.completed) { completed++; const outs = entry.outputs || {}; for (const nodeOut of Object.values(outs)) for (const items of Object.values(nodeOut)) if (Array.isArray(items)) for (const it of items) if (it.filename) names.add(it.filename); }
+        } catch (e) {}
+      }
+      if (errored) { job.status = 'error'; job.endTime = Date.now(); job._pct = 100; persist(job); return; }
+      if (completed >= (job.runs || 1)) {
+        if (names.size) { try { const files = await fetch('/api/recent-outputs?since=' + job.startTime).then(r => r.json()); const seen = new Set(job.results.map(o => o.path)); for (const f of files) if (names.has(f.name) && !seen.has(f.path)) job.results.push({ path: f.path, name: f.name, thumbPath: f.thumbPath }); } catch (e) {} }
+        job.status = 'done'; job.endTime = Date.now(); job._pct = 100; persist(job);
+      }
+    } finally { job._recovering = false; }
+  }
+  async function hydrate() {
+    try {
+      const all = await JobDB.getAll(); all.sort((a, b) => b.startTime - a.startTime);
+      for (const j of all) { j._pct = (j.status === 'done' || j.status === 'complete') ? 100 : 0; j._node = j.status === 'running' ? 'reconnecting…' : ''; j._log = []; j._live = false; }
+      store.list = all;
+    } catch (e) {}
+    store.loaded = true;
+    // Poll /history for EVERY queued running job as a backstop — a WebSocket can
+    // drop/miss the completion message, and a job with no fallback would then
+    // spin forever. /history is authoritative, so this is safe alongside a live WS.
+    for (const j of store.list.filter(x => x.status === 'running')) recoverJob(j);
+    setInterval(() => { for (const j of store.list.filter(x => x.status === 'running' && x.promptIds && x.promptIds.length && !x._recovering)) recoverJob(j); }, 10000);
+  }
+  hydrate();
+  if (jobChannel) jobChannel.onmessage = (evt) => {
+    const m = evt.data || {}; if (!m || !m.promptId) return;
+    const j = store.list.find(x => (x.promptIds || []).includes(m.promptId));
+    if (!j) return;
+    if (m.type === 'progress' && m.pct != null) j._pct = m.pct;
+    else if (m.type === 'executing') { if (m.node) j._node = m.node; if (m.pct != null) j._pct = m.pct; }
+    else if (m.type === 'done') { j.status = m.ok ? 'done' : 'error'; j._pct = 100; }
+  };
+
+  // ── Run engine (owns the WebSocket run; lives in the store, not the dialog,
+  //    so closing the dialog never orphans a running job) ──
+  function execWs(job, prompt, graph, log) {
+    return new Promise((resolve) => {
+      const totalNodes = Object.keys(prompt).length; let done = 0;
+      const nodeMap = {}; Object.entries(prompt).forEach(([id, n]) => nodeMap[id] = (n._meta && n._meta.title) || n.class_type || id);
+      const clientId = (crypto.randomUUID ? crypto.randomUUID() : 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+      let ws = null, submitted = false, reconnects = 0, cur = null;
+      job._interrupt = () => { try { fetch('/api/comfy/api/interrupt', { method: 'POST' }); } catch (e) {} };
+      const finish = (ok) => { job._pct = 100; if (ws) { try { ws.close(); } catch (e) {} ws = null; } resolve(ok); };
+      function post(type, extra) { if (jobChannel && cur) jobChannel.postMessage(Object.assign({ type, promptId: cur }, extra || {})); }
+      function onMsg(evt) {
+        if (typeof evt.data !== 'string') return; let msg; try { msg = JSON.parse(evt.data); } catch (e) { return; }
+        const d = msg.data || {}; if (d.prompt_id && d.prompt_id !== cur) return;
+        switch (msg.type) {
+          case 'execution_start': job._node = 'Running…'; log('Execution started'); break;
+          case 'execution_cached': if (d.nodes) { done += d.nodes.length; job._pct = Math.round(done / totalNodes * 100); } break;
+          case 'executing': if (d.node == null) break; job._node = nodeMap[d.node] || d.node; post('executing', { node: job._node }); break;
+          case 'executed': done++; job._pct = Math.round(done / totalNodes * 100); break;
+          case 'progress': if (d.max > 0) { job._pct = Math.round(d.value / d.max * 100); job._node = 'Step ' + d.value + '/' + d.max; post('progress', { pct: job._pct }); } break;
+          case 'execution_success': log('Completed', 'done'); finish(true); break;
+          case 'execution_error': log('Error in node ' + d.node_id + ': ' + (d.exception_message || ''), 'err'); finish(false); break;
+          case 'execution_interrupted': log('Interrupted', 'err'); finish(false); break;
+        }
+      }
+      function connect() {
+        try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/comfy-ws?clientId=' + clientId); ws.binaryType = 'arraybuffer'; }
+        catch (e) { log('WS error: ' + e.message, 'err'); finish(false); return; }
+        ws.onmessage = onMsg;
+        ws.onerror = () => log('WebSocket error', 'err');
+        ws.onclose = () => { if (cur && reconnects < 3) { reconnects++; setTimeout(connect, 1000); } else if (cur) finish(false); };
+        ws.onopen = async () => {
+          if (submitted) return; submitted = true; job._node = 'Queueing…'; log('Submitting (' + totalNodes + ' nodes)…');
+          try {
+            const payload = { prompt, client_id: clientId };
+            if (graph) payload.extra_data = { extra_pnginfo: { workflow: graph } };
+            const res = await fetch('/api/comfy/api/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json());
+            if (res.error) { log('Error: ' + (res.error.message || JSON.stringify(res.error)), 'err'); finish(false); return; }
+            if (res.node_errors && Object.keys(res.node_errors).length) { log('ComfyUI rejected ' + Object.keys(res.node_errors).length + ' node(s):', 'err'); for (const [nid, ne] of Object.entries(res.node_errors)) for (const e of (ne.errors || [])) log('  [' + nid + '] ' + e.message, 'err'); finish(false); return; }
+            cur = res.prompt_id; job.promptIds.push(cur); persist(job); job._node = 'Queued'; log('Queued ' + String(cur).slice(0, 8));
+          } catch (e) { log('Error: ' + e.message, 'err'); finish(false); }
+        };
+      }
+      connect();
+    });
+  }
+  // Attribute outputs to THIS job by filename from its own prompt history — safe
+  // with concurrent jobs (a time-window diff would grab another job's files).
+  async function collectOutputs(job) {
+    const names = new Set();
+    for (const pid of job.promptIds) {
+      try { const data = await fetch('/api/comfy/api/history/' + pid).then(r => r.ok ? r.json() : null); const e = data && data[pid]; if (e && e.outputs) for (const nodeOut of Object.values(e.outputs)) for (const items of Object.values(nodeOut)) if (Array.isArray(items)) for (const it of items) if (it.filename) names.add(it.filename); } catch (e) {}
+    }
+    if (!names.size) return;
+    for (const delay of [0, 1200, 3000]) {
+      if (delay) await new Promise(r => setTimeout(r, delay));
+      try { const files = await fetch('/api/recent-outputs?since=' + (job.startTime - 3600000)).then(r => r.json()); const seen = new Set(job.results.map(o => o.path)); for (const f of files) if (names.has(f.name) && !seen.has(f.path)) job.results.push({ path: f.path, name: f.name, thumbPath: f.thumbPath }); } catch (e) {}
+      if (job.results.length >= names.size) break;
+    }
+    persist(job);
+  }
+  // Launch a job into the store and drive it to completion (async, non-blocking).
+  function launchJob(p) {
+    const id = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    const job = reactive({
+      id, workflow: p.workflowLabel, workflowFile: p.workflowFile,
+      prompt: (p.promptText || '').slice(0, 200), fullPrompt: p.promptText || '', loras: p.loras || null,
+      sourceFile: p.source.name, sourcePath: p.source.path, sourceImageUrl: '/file/' + enc(p.source.path),
+      status: 'running', runs: 1, presets: p.preset ? [p.preset] : [],
+      startTime: Date.now(), endTime: null, promptIds: [], results: [],
+      _pct: 0, _node: 'Preparing…', _log: [], _params: p, _live: true,
+    });
+    store.list.unshift(job); persist(job);
+    (async () => {
+      const log = (m, cls) => { job._log.push({ m, cls: cls || '' }); if (job._log.length > 200) job._log.shift(); };
+      let uploadedName = null;
+      try {
+        if (p.source.type === 'image') { job._node = 'Uploading image…'; uploadedName = await uploadImagePath(p.source.path); }
+        else if (p.source.type === 'video') { job._node = 'Extracting frame…'; const b = await firstVideoFrameBlob('/file/' + enc(p.source.path)); uploadedName = await uploadBlob(b, 'png'); }
+      } catch (e) { log('input upload: ' + e.message, 'err'); }
+      if (uploadedName) log('Input uploaded as ' + uploadedName);
+      // Upload any gallery-picked image fields so ComfyUI gets an input filename.
+      for (const mf of (p.mediaFields || [])) {
+        try { const up = await uploadImagePath(mf.value); if (up) { p.fieldValues[mf.id] = up; log('Picked image uploaded as ' + up); } }
+        catch (e) { log('media upload (' + mf.id + '): ' + e.message, 'err'); }
+      }
+      job._node = 'Applying fields…';
+      let data;
+      try { data = await fetch('/api/workflow-prompt?name=' + enc(p.workflowFile), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldValues: p.fieldValues }) }).then(r => r.json()); }
+      catch (e) { log('build prompt: ' + e.message, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
+      if (data.error) { log('error: ' + data.error, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
+      (data.fieldWarnings || []).forEach(w => log('field: ' + w, 'warn'));
+      const graph = data.workflow || null; const prompt = data.prompt || data;
+      // Prompt Replacements: rewrite prompt-ish text across the built graph.
+      if (activeReplacements().length) { applyReplacementsToNodes(prompt); log('Applied ' + activeReplacements().length + ' prompt replacement(s)'); }
+      // Danger-zone node edits: apply by node id + key when the built graph has them.
+      if (p.nodeEdits) { let n = 0; for (const [nid, kv] of Object.entries(p.nodeEdits)) { const node = prompt[nid]; if (node && node.inputs) for (const [k, val] of Object.entries(kv)) { node.inputs[k] = val; n++; } } if (n) log('Applied ' + n + ' node edit(s)'); }
+      if (uploadedName) for (const n of Object.values(prompt)) { const t = (n._meta && n._meta.title || '').toUpperCase(); if (t.includes('MAIN IMAGE') && n.inputs) n.inputs.image = uploadedName; }
+      for (const n of Object.values(prompt)) { if (n.inputs && !p.seedPinned) for (const k of Object.keys(n.inputs)) { if (k.includes('seed') && typeof n.inputs[k] === 'number') n.inputs[k] = Math.floor(Math.random() * 2147483647); } if (n.is_changed) delete n.is_changed; }
+      const ok = await execWs(job, prompt, graph, log);
+      // Flip status immediately so the card doesn't linger as "running" while
+      // outputs are still being fetched, then attribute this job's own outputs.
+      job.status = ok ? 'done' : 'error'; job.endTime = Date.now(); job._pct = 100; persist(job);
+      if (jobChannel && job.promptIds[0]) jobChannel.postMessage({ type: 'done', promptId: job.promptIds[0], ok });
+      if (ok) { job._node = 'Scanning outputs…'; await collectOutputs(job); }
+    })();
+    return id;
+  }
+  function cancelJob(job) { if (job && job._interrupt) job._interrupt(); if (job) { job._node = 'Interrupting…'; } }
+  async function deleteJob(job) { const i = store.list.indexOf(job); if (i >= 0) store.list.splice(i, 1); try { await JobDB.del(job.id); } catch (e) {} }
+
+  const FieldControl = {
+    props: ['field'],
+    setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); const openPicker = inject('openPicker', null); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount, openPicker }; },
+    template: `
+      <textarea v-if="t==='multiline'" class="rmx-inp" style="width:100%;resize:vertical" rows="3" v-model="field.value"></textarea>
+      <span v-else-if="field.kind==='seed'" class="rmx-seedwrap">
+        <input type="number" class="rmx-inp" style="width:160px" v-model="field.value" placeholder="random" min="0">
+        <button type="button" class="rmx-seed" :class="{on: field._pin}" @click="field._pin = !field._pin"
+                :title="field._pin ? 'Pinned — exact seed each run' : 'Random each run'"><span class="thumb">{{ field._pin ? '📌' : '🎲' }}</span></button>
+      </span>
+      <input v-else-if="t==='boolean'" type="checkbox" v-model="field.value" style="width:16px;height:16px;accent-color:#0a84ff">
+      <input v-else-if="t==='int' || t==='float'" type="number" class="rmx-inp" style="width:120px" :step="t==='float' ? '0.01' : '1'" v-model="field.value">
+      <select v-else-if="t==='combo'" class="rmx-inp" v-model="field.value"><option v-for="o in (field.control&&field.control.options||[field.value])" :key="o" :value="o">{{ o }}</option></select>
+      <div v-else-if="t==='lora_rows'" class="rmx-loras">
+        <div v-for="(r,i) in field.value" :key="i" v-show="r.on || loraExpanded" class="rmx-lora" :class="{off: !r.on}">
+          <input type="checkbox" v-model="r.on"><label :title="r.lora">{{ shortLora(r.lora) }}</label>
+          <input type="number" step="0.05" v-model.number="r.strength">
+        </div>
+        <div v-if="!field.value.length" class="rmx-mut" style="font-size:12px">no lora slots</div>
+        <div v-else-if="offCount" class="rmx-lora-more" @click="loraExpanded=!loraExpanded"><span>{{ loraExpanded ? 'Hide disabled loras' : ('＋ ' + offCount + ' more lora' + (offCount===1?'':'s')) }}</span><span class="rmx-lora-arrow" :class="{open: loraExpanded}">▾</span></div>
+      </div>
+      <span v-else-if="t==='image' || t==='video' || t==='audio'" class="rmx-imgf">
+        <input type="text" class="rmx-inp" style="width:200px" v-model="field.value">
+        <button v-if="openPicker && t==='image'" type="button" class="rmx-btn2" @click="openPicker(field)">🖼 Browse</button>
+        <img v-if="t==='image' && field.value" :key="field.value" :src="'/file/' + encodeURIComponent(field.value)" @error="$event.target.style.display='none'" title="Selected image">
+      </span>
+      <input v-else type="text" class="rmx-inp" style="width:280px;max-width:100%" v-model="field.value">
+    `,
+  };
+
+  // Remix launcher dialog — builds field values and launches a job into the store.
+  const S = reactive({ open: false, path: '', name: '', type: '' });
+  window.openRemix = (item) => { S.path = item.path; S.name = item.name; S.type = item.isVideo ? 'video' : (item.isImage ? 'image' : 'audio'); S.open = true; };
+
+  // Read the values a media was actually generated with (loras, steps, cfg, size,
+  // prompt…) out of its embedded litegraph and write them onto the field config.
+  function prefillFromEmbedded(fields, wfGraph) {
+    if (!wfGraph || !Array.isArray(wfGraph.nodes)) return;
+    const byId = {}; for (const n of wfGraph.nodes) byId[String(n.id)] = n;
+    for (const f of fields) {
+      const t = (f.targets || [])[0]; if (!t || (t.path && t.path.length)) continue;
+      const node = byId[String(t.nodeId)]; if (!node) continue;
+      if (t.class && node.type && node.type !== t.class) continue;   // guard against id collisions
+      const wv = node.widgets_values;
+      if (f.kind === 'lora_list') {
+        if (Array.isArray(wv)) { const rows = []; wv.forEach((item, idx) => { if (item && typeof item === 'object' && 'lora' in item) rows.push({ slot: idx, on: !!item.on, lora: item.lora, strength: item.strength != null ? item.strength : 1, strengthTwo: item.strengthTwo }); }); if (rows.length) f.value = rows; }
+        continue;
+      }
+      if (Array.isArray(wv) && typeof t.widgetIndex === 'number' && t.widgetIndex >= 0 && t.widgetIndex < wv.length) { const v = wv[t.widgetIndex]; if (v != null && typeof v !== 'object') f.value = v; }
+      else if (wv && !Array.isArray(wv) && typeof wv === 'object' && t.widget in wv) f.value = wv[t.widget];
+    }
+  }
+
+  // Reusable media browser (search names+prompts, prompt-word directory, sort,
+  // folder navigation, justified uniform-height thumbnails). Emits 'pick' with a path.
+  const MB_SORTS = [{ s: 'date', a: false, l: 'Newest' }, { s: 'date', a: true, l: 'Oldest' }, { s: 'name', a: true, l: 'A–Z' }, { s: 'name', a: false, l: 'Z–A' }, { s: 'size', a: false, l: 'Largest' }];
+  const MediaBrowser = {
+    props: { type: { type: String, default: 'image' } },
+    emits: ['pick'],
+    setup(props, { emit }) {
+      const state = reactive({ items: [], parent: null, dir: '', loading: false });
+      const roots = reactive({ output: '', favorites: '' });
+      const activeRoot = ref('output');
+      const search = ref('');
+      const sortIdx = ref(0);
+      const words = reactive({ open: false, list: [], filter: '', loading: false });
+      let timer = null;
+      async function load(dir) {
+        state.loading = true;
+        try {
+          const p = new URLSearchParams(); p.set('limit', '200');
+          const so = MB_SORTS[sortIdx.value]; p.set('sort', so.s); p.set('asc', so.a ? 'true' : 'false');
+          if (search.value.trim()) { p.set('search', search.value.trim()); p.set('scope', 'all'); }
+          else if (dir != null) p.set('dir', dir);
+          const r = await fetch('/api/list?' + p.toString()).then(x => x.json());
+          const t = props.type;
+          state.items = (r.items || []).filter(it => it.isDir || (t === 'image' ? it.isImage : t === 'video' ? it.isVideo : it.isAudio));
+          roots.output = r.comfyOutputDir || roots.output; roots.favorites = r.favoritesDir || roots.favorites;
+          state.parent = r.parent; state.dir = r.dir || '';
+        } catch (e) {}
+        state.loading = false;
+      }
+      function switchRoot(which) { activeRoot.value = which; search.value = ''; load(which === 'output' ? roots.output : roots.favorites); }
+      onMounted(async () => {
+        // Discover the two roots, then default to ComfyUI Output (like the main page).
+        try { const r = await fetch('/api/list?limit=1').then(x => x.json()); roots.output = r.comfyOutputDir || ''; roots.favorites = r.favoritesDir || ''; } catch (e) {}
+        activeRoot.value = roots.output ? 'output' : 'favorites';
+        load(activeRoot.value === 'output' ? roots.output : (roots.favorites || ''));
+      });
+      function onSearch() { clearTimeout(timer); timer = setTimeout(() => load(search.value.trim() ? null : state.dir), 350); }
+      function clickItem(it) { if (it.isDir) { search.value = ''; load(it.path); } else emit('pick', it.path); }
+      const thumb = it => it.isVideo ? (it.thumb ? '/thumb/' + enc(it.path) : '') : '/file/' + enc(it.path);
+      const dirName = computed(() => (state.dir || '').split(/[\\/]/).filter(Boolean).pop() || 'Media');
+      const sortLabel = computed(() => MB_SORTS[sortIdx.value].l);
+      function cycleSort() { sortIdx.value = (sortIdx.value + 1) % MB_SORTS.length; load(search.value.trim() ? null : state.dir); }
+      async function openWords() { words.open = true; if (words.list.length) return; words.loading = true; try { const d = await fetch('/api/prompt-words?safe=0').then(r => r.json()); words.list = d.words || []; } catch (e) {} words.loading = false; }
+      const filteredWords = computed(() => { const f = words.filter.trim().toLowerCase(); const l = f ? words.list.filter(w => w.t.includes(f)) : words.list; return l.slice().sort((a, b) => b.n - a.n || a.t.localeCompare(b.t)).slice(0, 400); });
+      function pickWord(w) { words.open = false; search.value = w.t; load(null); }
+      return { state, roots, activeRoot, switchRoot, search, words, load, onSearch, clickItem, thumb, dirName, sortLabel, cycleSort, openWords, filteredWords, pickWord };
+    },
+    template: `
+      <div class="mb">
+        <div class="mb-toolbar">
+          <div class="mb-roots">
+            <button :class="{on: activeRoot==='output'}" @click="switchRoot('output')" :disabled="!roots.output">Output</button>
+            <button :class="{on: activeRoot==='favorites'}" @click="switchRoot('favorites')" :disabled="!roots.favorites">Favorites</button>
+          </div>
+          <input class="rmx-inp mb-search" type="search" placeholder="Search names & prompts…" v-model="search" @input="onSearch">
+          <button class="rmx-btn2" @click="openWords" title="Browse prompt words"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20.6 13.4l-7.1 7.1a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.9 12.8l.5-7a1.5 1.5 0 0 1 1.4-1.4l7-.5a2 2 0 0 1 1.5.6l6.3 6.3a2 2 0 0 1 0 2.6z"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
+          <button class="rmx-btn2" @click="cycleSort" :title="'Sort: ' + sortLabel">{{ sortLabel }}</button>
+          <button v-if="state.parent && !search" class="rmx-btn2" @click="load(state.parent)">↑ Up</button>
+          <span class="rmx-mut" style="margin-left:auto;font-size:12px">{{ search ? 'search results' : dirName }}</span>
+        </div>
+        <div v-if="state.loading" class="rmx-mut" style="padding:16px">Loading…</div>
+        <div v-else-if="!state.items.length" class="rmx-mut" style="padding:16px">Nothing here.</div>
+        <div v-else class="mb-grid">
+          <div v-for="it in state.items" :key="it.path" class="mb-cell" :class="{folder: it.isDir}" @click="clickItem(it)" :title="it.name">
+            <span v-if="it.isDir" class="mb-folder-ico">📁</span>
+            <img v-else-if="thumb(it)" :src="thumb(it)" loading="lazy" @error="$event.target.style.visibility='hidden'">
+            <span v-else class="mb-folder-ico">🎞️</span>
+            <span class="mb-cap">{{ it.name }}</span>
+          </div>
+        </div>
+        <div v-if="words.open" class="mb-words" @click.self="words.open=false">
+          <div class="mb-words-panel">
+            <input class="rmx-inp" type="search" placeholder="Filter prompt words…" v-model="words.filter" style="width:100%;margin-bottom:8px">
+            <div v-if="words.loading" class="rmx-mut">Loading…</div>
+            <div v-else class="mb-words-list">
+              <div v-for="w in filteredWords" :key="w.t" class="mb-word" @click="pickWord(w)"><span>{{ w.t }}</span><span class="rmx-mut">{{ w.n }}</span></div>
+              <div v-if="!filteredWords.length" class="rmx-mut" style="padding:12px">No matches</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+  };
+
+  const RemixDialog = {
+    components: { FieldControl, MediaBrowser },
+    setup() {
+      const workflows = ref([]); const wf = ref('');
+      const cfg = reactive({ fields: [], presets: [], loading: true, error: '' });
+      const selectedPreset = ref('');
+      const meta = reactive({ prompt: '', seed: null, embedded: null, embeddedWf: null, matchedWf: null });
+      const startedId = ref(null);
+      const saveMsg = ref('');
+      const claudeFix = reactive({ running: false });
+      const nodeFilter = ref('');
+      const tab = ref('remix');
+      const job = computed(() => startedId.value ? byId(startedId.value) : null);
+      const isVideo = computed(() => S.type === 'video');
+      const fileUrl = computed(() => '/file/' + enc(S.path));
+
+      async function loadMeta() {
+        meta.prompt = ''; meta.seed = null; meta.embedded = null; let embeddedWf = null;
+        try {
+          const md = await fetch('/api/metadata?path=' + enc(S.path)).then(r => r.json());
+          meta.prompt = mainPromptOf(md && md.prompt); embeddedWf = md && md.workflow; meta.embedded = (md && md.prompt) || null; meta.embeddedWf = embeddedWf || null;
+          if (md && md.prompt) for (const n of Object.values(md.prompt)) { if (n && n.inputs) for (const [k, v] of Object.entries(n.inputs)) if (/seed/i.test(k) && typeof v === 'number' && v >= 0) meta.seed = v; }
+        } catch (e) {}
+        return embeddedWf;
+      }
+      async function loadWorkflows(embeddedWf) {
+        try { workflows.value = await fetch('/api/workflows').then(r => r.json()); } catch (e) { workflows.value = []; }
+        let pick = workflows.value[0] && workflows.value[0].name;
+        if (embeddedWf && embeddedWf.nodes) { try { const m = await fetch('/api/workflow-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: embeddedWf }) }).then(r => r.json()); if (m && m.name) { pick = m.name; meta.matchedWf = m.name; } } catch (e) {} }
+        wf.value = pick || '';
+      }
+      async function loadFields() {
+        if (!wf.value) { cfg.fields = []; cfg.loading = false; return; }
+        cfg.loading = true;
+        try {
+          const c = await fetch('/api/workflow-field-config?name=' + enc(wf.value)).then(r => r.json());
+          if (c.error || !Array.isArray(c.fields)) { cfg.error = c.error || 'no config'; cfg.fields = []; cfg.presets = []; }
+          else {
+            cfg.error = ''; cfg.presets = c.presets || [];
+            for (const f of c.fields) { if (f.kind === 'seed') { if (Number(f.value) < 0) f.value = ''; f._pin = false; } if (ctype(f) === 'lora_rows' && !Array.isArray(f.value)) f.value = []; if (ctype(f) === 'boolean') f.value = !!f.value; }
+            if (meta.prompt) { const pf = c.fields.find(f => f.kind === 'prompt' && !f.variant); if (pf) pf.value = meta.prompt; }
+            if (meta.seed != null && meta.seed >= 0) { const sf = c.fields.find(f => f.kind === 'seed'); if (sf) sf.value = meta.seed; }
+            // When the source media carries this exact workflow, prefill every field
+            // (loras, steps, cfg, size…) from the values it was actually generated with.
+            if (meta.embeddedWf && wf.value === meta.matchedWf) prefillFromEmbedded(c.fields, meta.embeddedWf);
+            cfg.fields = c.fields;
+          }
+        } catch (e) { cfg.error = String(e.message || e); }
+        cfg.loading = false;
+      }
+      async function init() { startedId.value = null; cfg.loading = true; const e = await loadMeta(); await loadWorkflows(e); await loadFields(); }
+      onMounted(init);
+      watch(wf, () => { startedId.value = null; loadFields(); });
+
+      const enabledFields = computed(() => cfg.fields.filter(f => f.enabled).slice().sort(loraLast));
+      const hiddenFields = computed(() => cfg.fields.filter(f => !f.enabled).slice().sort(loraLast));
+      const isWide = f => WIDE.has(f.kind);
+      // Group the non-lora controls by the graph node they came from (each group
+      // on its own line under a small node-title heading). LoRAs stay separate.
+      const nodeGroups = computed(() => {
+        const byKey = new Map();
+        for (const f of enabledFields.value) {
+          if (/^lora/.test(f.kind)) continue;
+          const t = (f.targets || [])[0] || {};
+          const key = String(t.nodeId) + '|' + (t.title || t.class || '');
+          let g = byKey.get(key);
+          if (!g) { g = { key, title: t.title || t.class || ('#' + t.nodeId), fields: [] }; byKey.set(key, g); }
+          g.fields.push(f);
+        }
+        const all = [...byKey.values()];
+        // Titled group only for nodes with 2+ controls; single-control nodes flow
+        // together in one row (so e.g. separate Width/Height primitives sit side by side).
+        return { titled: all.filter(g => g.fields.length >= 2), loose: all.filter(g => g.fields.length < 2).flatMap(g => g.fields) };
+      });
+      const enabledLoras = computed(() => enabledFields.value.filter(f => /^lora/.test(f.kind)));
+      const loraHigh = computed(() => enabledLoras.value.filter(f => f.variant === 'high'));
+      const loraLow = computed(() => enabledLoras.value.filter(f => f.variant === 'low'));
+      const loraOther = computed(() => enabledLoras.value.filter(f => f.variant !== 'high' && f.variant !== 'low'));
+      function collectFieldValues() {
+        const fv = {};
+        for (const f of cfg.fields) { if (!f.enabled) continue; const t = ctype(f);
+          if (f.kind === 'seed') { if (f._pin && String(f.value).trim() !== '') fv[f.id] = parseInt(f.value, 10); continue; }
+          if (t === 'lora_rows') { fv[f.id] = (f.value || []).map(r => ({ slot: r.slot, on: r.on, strength: r.strength })); continue; }
+          if (t === 'boolean') { fv[f.id] = !!f.value; continue; }
+          if (f.value !== '' && f.value != null) fv[f.id] = f.value;
+        }
+        if (selectedPreset.value) fv.__preset = selectedPreset.value;
+        return fv;
+      }
+      function remix() {
+        if (!wf.value) return;
+        const pf = cfg.fields.find(f => f.kind === 'prompt' && f.enabled && !f.variant);
+        const loras = cfg.fields.filter(f => f.kind === 'lora_list' && f.enabled).flatMap(f => (f.value || [])).filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
+        const seedPinned = cfg.fields.some(f => f.enabled && f.kind === 'seed' && f._pin && String(f.value).trim() !== '');
+        const label = wf.value.replace(/^APP /, '').replace(/\.json$/, '');
+        // Image fields set to a Media path (via the picker) need uploading at run.
+        const mediaFields = cfg.fields.filter(f => f.enabled && f.kind === 'image_input' && f.value && /[\\/]/.test(String(f.value))).map(f => ({ id: f.id, value: f.value, type: 'image' }));
+        const edits = Object.keys(nodeEdits).length ? JSON.parse(JSON.stringify(nodeEdits)) : null;
+        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits });
+      }
+      function close() { S.open = false; }
+      const onKey = e => { if (e.key === 'Escape') close(); };
+      onMounted(() => { window.addEventListener('keydown', onKey); document.body.classList.add('rmx-noscroll'); });
+      onUnmounted(() => { window.removeEventListener('keydown', onKey); document.body.classList.remove('rmx-noscroll'); });
+      const outUrl = f => (isVideoName(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
+
+      // Log actions (parity with the classic inspect page).
+      const jobLogText = j => (j._log || []).map(l => l.m).join('\n');
+      async function saveLog() {
+        const j = job.value; if (!j) return;
+        saveMsg.value = 'Saving…';
+        try { const r = await fetch('/api/debug-results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp: new Date().toISOString(), host: location.host, page: location.href, workflow: j.workflowFile, status: j._node || j.status, log: jobLogText(j), promptId: j.promptIds[0] }, null, 2) }); saveMsg.value = r.ok ? 'Saved!' : ('Error ' + r.status); } catch (e) { saveMsg.value = e.message; }
+        setTimeout(() => { saveMsg.value = ''; }, 2000);
+      }
+      async function fixWithClaude() {
+        const j = job.value; if (!j) return;
+        if (claudeFix.running) { try { await fetch('/api/claude/stop', { method: 'POST' }); } catch (e) {} return; }
+        const logText = jobLogText(j).trim(); if (!logText) return;
+        try { await fetch('/api/debug-results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: j.workflowFile, log: logText }, null, 2) }); } catch (e) {}
+        const clipped = logText.length > 12000 ? ('…(earlier truncated)…\n' + logText.slice(-12000)) : logText;
+        const prompt = 'The ComfyRemix app ran the workflow file "user/default/workflows/' + j.workflowFile + '" and it failed or misbehaved. Review the run log below, find the root cause, and EDIT that workflow file so it works. Keep the workflow\'s intent — only change what is needed (bad widget values, wrong connections, missing/renamed models; check the models folders for what actually exists before swapping a model name). When done, summarize what you changed in 2-3 sentences.\n\nIf file edits are REJECTED by permissions, fall back to the local APIs via curl: POST http://127.0.0.1:8080/api/workflows/save with {"name":"' + j.workflowFile + '","workflow":<corrected full graph JSON>,"enable":true}, then queue a test run via /api/workflow-prompt?name=' + encodeURIComponent(j.workflowFile) + ' and /api/comfy/api/prompt.\n\n=== RUN LOG ===\n' + clipped;
+        const log = (m, cls) => { j._log.push({ m, cls: cls || '' }); };
+        claudeFix.running = true;
+        log('🤖 Claude is reviewing the log and workflow "' + j.workflowFile + '"…');
+        try {
+          const r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+          if (!r.ok || !r.body) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('HTTP ' + r.status)); }
+          const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+          while (true) {
+            const { done, value } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true }); const parts = buf.split('\n\n'); buf = parts.pop();
+            for (const part of parts) {
+              const line = part.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join(''); if (!line) continue;
+              let evt; try { evt = JSON.parse(line); } catch (e) { continue; }
+              if (evt.type === 'assistant' && evt.message && Array.isArray(evt.message.content)) { for (const c of evt.message.content) { if (c.type === 'text' && c.text.trim()) log(c.text.trim()); else if (c.type === 'tool_use') { const target = c.input && (c.input.file_path || c.input.path || c.input.pattern || c.input.command); log('  🔧 ' + c.name + (target ? ': ' + String(target).slice(0, 120) : '')); } } }
+              else if (evt.type === 'result') { if (evt.is_error) log('Claude finished with an error: ' + (evt.result || ''), 'err'); else log('✅ Claude finished — press ▶ Remix to try again.', 'done'); }
+            }
+          }
+        } catch (e) { log('Claude error: ' + e.message, 'err'); }
+        claudeFix.running = false;
+      }
+
+      // Read-only node inspector for the source media's embedded workflow.
+      // Danger-zone node edits: nodeId -> {key: value}. Applied to the built prompt
+      // at run by matching node id + key (see launchJob).
+      const nodeEdits = reactive({});
+      const editVal = (id, k, orig) => (nodeEdits[id] && k in nodeEdits[id]) ? nodeEdits[id][k] : orig;
+      function setEdit(id, k, orig, val) {
+        let v = val;
+        if (typeof orig === 'number') { const num = Number(val); if (!Number.isNaN(num) && String(val).trim() !== '') v = Number.isInteger(orig) ? Math.round(num) : num; }
+        if (String(v) === String(orig)) { if (nodeEdits[id]) { delete nodeEdits[id][k]; if (!Object.keys(nodeEdits[id]).length) delete nodeEdits[id]; } return; }
+        if (!nodeEdits[id]) nodeEdits[id] = {};
+        nodeEdits[id][k] = v;
+      }
+      // Prompt Replacements UI (state + helpers are module-level singletons).
+      const replActiveCount = computed(() => replacements.filter(r => r.on && r.from && String(r.from).trim()).length);
+      const addRepl = () => replacements.push({ from: '', to: '', on: true });
+      const delRepl = i => { replacements.splice(i, 1); saveReplacements(); };
+      const swapRepl = r => { const a = r.from; r.from = r.to; r.to = a; saveReplacements(); };
+      const toggleReplAll = () => { const on = !replAllOn.value; replacements.forEach(r => r.on = on); saveReplacements(); };
+      const nodeEntries = computed(() => meta.embedded ? Object.entries(meta.embedded) : []);
+      const filteredNodes = computed(() => {
+        const q = nodeFilter.value.trim().toLowerCase();
+        const arr = nodeEntries.value.slice().sort((a, b) => { const at = ((a[1]._meta && a[1]._meta.title) || '').toUpperCase().startsWith('MAIN') ? 0 : 1; const bt = ((b[1]._meta && b[1]._meta.title) || '').toUpperCase().startsWith('MAIN') ? 0 : 1; return at - bt || (parseInt(a[0]) - parseInt(b[0])); });
+        return q ? arr.filter(([id, n]) => (id + ' ' + (n.class_type || '') + ' ' + ((n._meta && n._meta.title) || '')).toLowerCase().includes(q)) : arr;
+      });
+      const nodeInputs = n => Object.entries(n.inputs || {}).map(([k, v]) => {
+        if (Array.isArray(v)) return [k, { editable: false, disp: '← [' + v[0] + ']' }];
+        const editable = typeof v === 'string' || typeof v === 'number';
+        return [k, { editable, raw: v, num: typeof v === 'number', disp: typeof v === 'string' ? v : JSON.stringify(v) }];
+      });
+
+      // Gallery picker — opens a reusable MediaBrowser over the dialog.
+      const picker = reactive({ open: false, type: 'image' });
+      let pickerField = null;
+      function openPicker(field) { pickerField = field; const k = field.kind; picker.type = k === 'video_input' ? 'video' : k === 'audio_input' ? 'audio' : 'image'; picker.open = true; }
+      function onPick(path) { if (pickerField) pickerField.value = path; picker.open = false; }
+      provide('openPicker', openPicker);
+
+      return { S, tab, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
+        replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit };
+    },
+    template: `
+      <div class="rmx-overlay" @click.self="close">
+        <div class="rmx-dialog">
+          <div class="rmx-head">
+            <b class="rmx-title">Remix · {{ S.name }}</b>
+            <div class="rmx-tabs">
+              <button :class="{on: tab==='remix'}" @click="tab='remix'">Remix</button>
+              <button :class="{on: tab==='preview'}" @click="tab='preview'">Preview</button>
+            </div>
+            <select v-show="tab==='remix'" class="rmx-inp" v-model="wf" style="margin-left:8px;max-width:230px">
+              <option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option>
+            </select>
+            <button class="rmx-x" @click="close" title="Close (Esc)">✕</button>
+          </div>
+          <div class="rmx-body">
+            <div class="rmx-media" v-show="tab==='preview'"><video v-if="isVideo" :src="fileUrl" controls loop muted></video><img v-else :src="fileUrl"></div>
+            <div class="rmx-form" v-show="tab==='remix'">
+              <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
+              <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
+              <div v-else>
+                <div v-if="nodeGroups.loose.length" class="rmx-grid">
+                  <div v-for="f in nodeGroups.loose" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
+                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                    <field-control :field="f"></field-control>
+                  </div>
+                </div>
+                <div v-for="g in nodeGroups.titled" :key="g.key" class="rmx-nodegroup">
+                  <div class="rmx-nodegroup-title">{{ g.title }}</div>
+                  <div class="rmx-grid">
+                    <div v-for="f in g.fields" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
+                      <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                      <field-control :field="f"></field-control>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="loraHigh.length || loraLow.length" class="rmx-lora-cols">
+                  <div class="rmx-lora-col">
+                    <div class="rmx-nodegroup-title">High-noise LoRAs</div>
+                    <div v-for="f in loraHigh" :key="f.id" class="rmx-field"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label><field-control :field="f"></field-control></div>
+                  </div>
+                  <div class="rmx-lora-col">
+                    <div class="rmx-nodegroup-title">Low-noise LoRAs</div>
+                    <div v-for="f in loraLow" :key="f.id" class="rmx-field"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label><field-control :field="f"></field-control></div>
+                  </div>
+                </div>
+                <div v-if="loraOther.length" class="rmx-grid" style="margin-top:6px">
+                  <div v-for="f in loraOther" :key="f.id" class="rmx-field wide">
+                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }}</label>
+                    <field-control :field="f"></field-control>
+                  </div>
+                </div>
+                <div v-if="!enabledFields.length" class="rmx-mut">No fields enabled — see hidden list.</div>
+                <div v-if="cfg.presets.length" style="margin-top:12px"><label class="rmx-lbl" style="margin-bottom:5px">Style preset</label>
+                  <select class="rmx-inp" v-model="selectedPreset"><option value="">— none —</option><option v-for="p in cfg.presets" :key="p.title" :value="p.title">{{ p.title }}</option></select>
+                </div>
+                <details class="rmx-repl">
+                  <summary>Prompt Replacements<span class="rmx-mut" v-if="replActiveCount"> — {{ replActiveCount }} active</span><span class="rmx-mut" v-else-if="replacements.length"> — {{ replacements.length }} off</span></summary>
+                  <div class="rmx-repl-body">
+                    <div class="rmx-mut" style="font-size:12px;margin-bottom:8px">Applied to the prompt right before each run (case-insensitive, all matches). Shared with the inspect page.</div>
+                    <label class="rmx-repl-all"><input type="checkbox" :checked="replAllOn" @change="toggleReplAll"> Toggle all on/off</label>
+                    <div v-for="(r,i) in replacements" :key="i" class="rmx-repl-row">
+                      <input type="checkbox" v-model="r.on" @change="saveReplacements" title="Enable this rule">
+                      <input type="text" class="rmx-inp" placeholder="find" v-model="r.from" @change="saveReplacements">
+                      <button type="button" class="rmx-btn2 rmx-repl-swap" title="Swap words" @click="swapRepl(r)">⇄</button>
+                      <input type="text" class="rmx-inp" placeholder="replace with" v-model="r.to" @change="saveReplacements">
+                      <button type="button" class="rmx-repl-del" title="Delete rule" @click="delRepl(i)">✕</button>
+                    </div>
+                    <button type="button" class="rmx-btn2" style="margin-top:6px" @click="addRepl">＋ Add replacement</button>
+                  </div>
+                </details>
+                <details class="rmx-hidden" v-if="hiddenFields.length"><summary>{{ hiddenFields.length }} hidden field{{ hiddenFields.length===1?'':'s' }}</summary>
+                  <div class="rmx-field" v-for="f in hiddenFields" :key="f.id"><label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" @change="f.enabled=true" title="Show field"> {{ f.label }} <span class="rmx-mut" style="text-transform:none">· {{ f.kind }}</span></label><field-control :field="f"></field-control></div>
+                </details>
+              </div>
+              <div class="rmx-run">
+                <button v-if="!job || job.status!=='running'" class="rmx-btn go" @click="remix" :disabled="!wf">▶ Remix</button>
+                <button v-else class="rmx-btn cancel" @click="cancelJob(job)">■ Cancel</button>
+                <span class="rmx-status" v-if="job">{{ job.status==='running' ? (job._node||'…') : job.status }}</span>
+                <span class="rmx-status" v-else>close this anytime — runs keep going in Jobs</span>
+              </div>
+              <div v-if="job && (job.status==='running' || job._pct>0)" class="rmx-prog"><div class="rmx-progfill" :style="{width: job._pct + '%'}"></div></div>
+              <div v-if="job && job._log.length" class="rmx-log"><div v-for="(l,i) in job._log" :key="i" :class="'ll-'+l.cls">{{ l.m }}</div></div>
+              <div v-if="job && job._log.length" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <button class="rmx-btn2" @click="saveLog">{{ saveMsg || '💾 Save log' }}</button>
+                <button v-if="job.status==='error'" class="rmx-btn2" @click="fixWithClaude" title="Save the log and have Claude review + edit the workflow file">{{ claudeFix.running ? '■ Stop Claude' : '🤖 Fix with Claude' }}</button>
+              </div>
+              <div v-if="job && job.results.length" class="rmx-outgrid"><a v-for="f in job.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank" :title="f.name"><img :src="outUrl(f)" loading="lazy"></a></div>
+              <details class="rmx-hidden" v-if="meta.embedded" style="margin-top:12px">
+                <summary>Source workflow · {{ Object.keys(meta.embedded).length }} nodes</summary>
+                <div style="padding:6px 12px 12px">
+                  <input class="rmx-inp" style="width:100%;margin-bottom:8px" placeholder="Filter nodes…" v-model="nodeFilter">
+                  <div class="rmx-mut" style="font-size:11px;margin-bottom:6px">Edit a value to override it on the next run (applied when the node is in the built graph). ⚠ can break the workflow.</div>
+                  <details v-for="[id,n] in filteredNodes" :key="id" class="rmx-node" :class="{edited: nodeEdits[id]}">
+                    <summary>[{{id}}] {{ n.class_type }}<span v-if="n._meta&&n._meta.title" class="rmx-mut"> · {{ n._meta.title }}</span></summary>
+                    <div class="rmx-node-body"><div v-for="[k,v] in nodeInputs(n)" :key="k" class="rmx-node-inp">
+                      <span class="rmx-node-k">{{k}}</span>
+                      <input v-if="v.editable" class="rmx-inp rmx-node-edit" :class="{edited: nodeEdits[id] && k in nodeEdits[id]}" :type="v.num ? 'number' : 'text'" :step="v.num ? 'any' : null" :value="editVal(id,k,v.raw)" @change="setEdit(id,k,v.raw,$event.target.value)" :title="'node '+id+' · '+k">
+                      <span v-else class="rmx-node-v">{{ v.disp }}</span>
+                    </div></div>
+                  </details>
+                  <details class="rmx-node"><summary>Raw prompt JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embedded, null, 2) }}</pre></details>
+                  <details v-if="meta.embeddedWf" class="rmx-node"><summary>Raw workflow JSON</summary><pre class="rmx-raw">{{ JSON.stringify(meta.embeddedWf, null, 2) }}</pre></details>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="picker.open" class="rmx-picker-overlay" @click.self="picker.open=false">
+        <div class="rmx-picker">
+          <div class="rmx-picker-head"><b>Pick {{ picker.type }}</b><button class="rmx-x" style="margin-left:auto" @click="picker.open=false">✕</button></div>
+          <media-browser :type="picker.type" @pick="onPick"></media-browser>
+        </div>
+      </div>
+    `,
+  };
+
+  // Jobs dialog — reads the central store (replaces the /jobs page navigation).
+  const jobsOpen = ref(false);
+  window.openJobs = () => { jobsOpen.value = true; };
+  const JobsDialog = {
+    setup() {
+      const list = computed(() => store.list.slice().sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.startTime - a.startTime));
+      const outUrl = f => (isVideoName(f.name) && f.thumbPath) ? '/file/' + enc(f.thumbPath) : '/file/' + enc(f.path);
+      const rerun = (j) => { if (j._params) { launchJob(Object.assign({}, j._params)); } else { window.openRemix({ path: j.sourcePath, name: j.sourceFile, isVideo: isVideoName(j.sourceFile || ''), isImage: !isVideoName(j.sourceFile || '') }); } };
+      const close = () => { jobsOpen.value = false; };
+      const onKey = e => { if (e.key === 'Escape') close(); };
+      onMounted(() => window.addEventListener('keydown', onKey));
+      onUnmounted(() => window.removeEventListener('keydown', onKey));
+      return { store, list, timeAgo, outUrl, rerun, cancelJob, deleteJob, close };
+    },
+    template: `
+      <div class="rmx-overlay" @click.self="close">
+        <div class="rmx-dialog" style="max-width:820px">
+          <div class="rmx-head"><b class="rmx-title">Jobs</b><button class="rmx-x" @click="close" title="Close (Esc)">✕</button></div>
+          <div class="rmx-jobs">
+            <div v-if="!store.loaded" class="rmx-mut">Loading…</div>
+            <div v-else-if="!list.length" class="rmx-mut">No jobs yet. Remix an image to start one.</div>
+            <div v-for="j in list" :key="j.id" class="rmx-job">
+              <a class="rmx-job-src" :href="'/file/'+encodeURIComponent(j.sourcePath)" target="_blank"><img v-if="j.sourceImageUrl" :src="j.sourceImageUrl"></a>
+              <div class="rmx-job-main">
+                <div class="rmx-job-title"><span class="rmx-dot" :class="j.status"></span>{{ j.workflow }} <span class="rmx-mut">· {{ timeAgo(j.startTime) }}</span></div>
+                <div v-if="j.prompt" class="rmx-job-prompt">{{ j.prompt }}</div>
+                <div v-if="j.status==='running'" class="rmx-prog"><div class="rmx-progfill" :style="{width:j._pct+'%'}"></div></div>
+                <div v-if="j.status==='running'" class="rmx-mut" style="font-size:11px">{{ j._pct }}% — {{ j._node || 'waiting…' }}</div>
+                <div v-if="j.results.length" class="rmx-outgrid" style="margin-top:6px"><a v-for="f in j.results" :key="f.path" class="rmx-out" :href="'/file/'+encodeURIComponent(f.path)" target="_blank"><img :src="outUrl(f)" loading="lazy"></a></div>
+              </div>
+              <div class="rmx-job-acts">
+                <button v-if="j.status==='running'" class="rmx-mini" @click="cancelJob(j)" title="Cancel">■</button>
+                <button v-else class="rmx-mini" @click="rerun(j)" title="Re-run">♻</button>
+                <button class="rmx-mini" @click="deleteJob(j)" title="Delete">🗑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+  };
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  createApp({
+    components: { RemixDialog, JobsDialog },
+    setup() { return { S, jobsOpen, runningCount, leadPct, openJobs: () => jobsOpen.value = true }; },
+    template: `
+      <div v-if="runningCount>0 && !jobsOpen" class="rmx-topbar" @click="openJobs" :title="runningCount + ' job(s) running — click for Jobs'">
+        <div class="rmx-topbar-fill" :class="{indet: leadPct===0}" :style="leadPct>0 ? {width: leadPct + '%'} : {}"></div>
+      </div>
+      <remix-dialog v-if="S.open" :key="S.path"></remix-dialog>
+      <jobs-dialog v-if="jobsOpen"></jobs-dialog>
+      <button v-if="runningCount>0 && !jobsOpen" class="rmx-fab" @click="openJobs" title="Running jobs">⚡ {{ runningCount }}</button>
+    `,
+  }).mount(host);
+})();
+
+</script>
+<!-- REMIX-DIALOG:END -->
 </body>
 </html>
