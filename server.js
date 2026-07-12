@@ -2530,8 +2530,16 @@ runTests();
   if (pn === '/api/workflow-field-config' && req.method === 'POST') {
     let bodyStr = '';
     req.on('data', c => bodyStr += c);
-    req.on('end', () => {
+    req.on('end', async () => {
       let body; try { body = JSON.parse(bodyStr); } catch { jsonRes(res, { error: 'Bad JSON' }, 400); return; }
+      // Build field config from a posted (embedded / un-imported) workflow graph.
+      if (body.workflow && typeof body.workflow === 'object' && Array.isArray(body.workflow.nodes)) {
+        try {
+          let objectInfo = null; try { objectInfo = await getObjectInfo(); } catch (e) {}
+          jsonRes(res, buildFieldConfig(body.workflow, body.name || '__embedded__', 0, objectInfo));
+        } catch (e) { jsonRes(res, { error: 'Field config error: ' + e.message }, 500); }
+        return;
+      }
       if (!body.name) { jsonRes(res, { error: 'Missing name' }, 400); return; }
       const store = loadWfStore();
       if (!store.fieldConfigs) store.fieldConfigs = {};
@@ -2686,30 +2694,33 @@ runTests();
   // API: Load an APP workflow, apply overrides, convert to API/prompt format
   if (pn === '/api/workflow-prompt' && (req.method === 'GET' || req.method === 'POST')) {
     const wfName = url.searchParams.get('name');
-    if (!wfName) { jsonRes(res, { error: 'Missing name' }, 400); return; }
-    const wfPath = path.join(COMFY_DIR, 'user', 'default', 'workflows', wfName);
-    if (!path.resolve(wfPath).startsWith(path.resolve(path.join(COMFY_DIR, 'user', 'default', 'workflows')))) {
-      jsonRes(res, { error: 'Access denied' }, 403); return;
-    }
     let bodyStr = '';
     req.on('data', c => bodyStr += c);
     req.on('end', async () => {
       let overrides = {};
       if (bodyStr) { try { overrides = JSON.parse(bodyStr); } catch {} }
 
-      fs.readFile(wfPath, 'utf8', async (err, raw) => {
-        if (err) { jsonRes(res, { error: err.message }, 500); return; }
-        try {
-          const wf = JSON.parse(raw);
-          const mapping = (loadWfStore().mappings || {})[wfName] || null;
+      // Source graph: a posted (embedded / un-imported) workflow takes precedence
+      // over a named file — this is how "Inherit" runs an image's own workflow.
+      let wf, effName = wfName || '__embedded__', mtime = 0;
+      if (overrides.workflow && typeof overrides.workflow === 'object' && Array.isArray(overrides.workflow.nodes)) {
+        wf = overrides.workflow; effName = '__embedded__';
+      } else if (wfName) {
+        const wfPath = path.join(COMFY_DIR, 'user', 'default', 'workflows', wfName);
+        if (!path.resolve(wfPath).startsWith(path.resolve(path.join(COMFY_DIR, 'user', 'default', 'workflows')))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+        let raw; try { raw = fs.readFileSync(wfPath, 'utf8'); } catch (e) { jsonRes(res, { error: e.message }, 500); return; }
+        try { wf = JSON.parse(raw); } catch (e) { jsonRes(res, { error: 'Parse error: ' + e.message }, 500); return; }
+        const st = fs.statSync(wfPath, { throwIfNoEntry: false }); mtime = st ? st.mtimeMs : 0;
+      } else { jsonRes(res, { error: 'Missing name or workflow' }, 400); return; }
+      try {
+          const mapping = (loadWfStore().mappings || {})[effName] || null;
 
           // New-style generic field overrides: { fieldValues: {<id>: value} }.
           // Applied to the raw graph before conversion; coexists with the legacy
           // keys below (the field panel sends only fieldValues, so those are skipped).
           let fieldWarnings = [];
           if (overrides.fieldValues && typeof overrides.fieldValues === 'object') {
-            const st = fs.statSync(wfPath, { throwIfNoEntry: false });
-            const cfg = buildFieldConfig(JSON.parse(JSON.stringify(wf)), wfName, st ? st.mtimeMs : 0);
+            const cfg = buildFieldConfig(JSON.parse(JSON.stringify(wf)), effName, mtime);
             fieldWarnings = applyFieldConfigOverrides(wf, cfg, overrides.fieldValues).warnings;
           }
 
@@ -2825,7 +2836,6 @@ runTests();
         } catch (e) {
           jsonRes(res, { error: 'Parse error: ' + e.message }, 500);
         }
-      });
     });
     return;
   }

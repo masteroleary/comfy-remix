@@ -2474,8 +2474,8 @@ $('statusFeatures').onclick = () => {
   .rmx-media{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto}
   .rmx-media img,.rmx-media video{max-width:100%;max-height:100%;border-radius:8px}
   .rmx-form{flex:1;min-height:0;padding:16px;overflow:auto}
-  .rmx-runsec{flex:none;border-top:1px solid #2c2c2e;padding:12px 16px 16px;overflow-y:auto;max-height:56%}
-  .rmx-runsec .rmx-run{flex-wrap:wrap;margin:0 0 4px}
+  .rmx-runsec{flex:1;min-height:0;padding:16px;overflow:auto}
+  .rmx-runsec .rmx-run{flex-wrap:wrap;margin:0 0 8px}
   .rmx-inp{background:#1c1c1e;color:#f2f2f7;border:1px solid #48484a;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
   select.rmx-inp{cursor:pointer}
   .rmx-grid{display:flex;flex-wrap:wrap;gap:14px}
@@ -2613,6 +2613,18 @@ $('statusFeatures').onclick = () => {
   const ctype = f => (f.control && f.control.type) || 'text';
   const isVideoName = p => /\.(mp4|webm|mkv|mov|m4v)$/i.test(p || '');
   const timeAgo = ts => { const s = Math.floor((Date.now() - ts) / 1000); if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
+  // Expand ComfyUI %date:FORMAT% filename tokens (yyyy/MM/dd/HH/mm/ss). Base ComfyUI's
+  // SaveImage only expands %year%/%month%/…, not the %date:…% form — an embedded
+  // workflow built elsewhere then writes a literal "%date:yyyy-MM-dd%" folder, which is
+  // an invalid dir name on Windows (WinError 267). Expanding it here keeps such runs alive.
+  function expandDateTokens(s) {
+    return String(s).replace(/%date:([^%]+)%/g, (_, fmt) => {
+      const d = new Date(), p = (n, l = 2) => String(n).padStart(l, '0');
+      return fmt.replace(/yyyy/g, d.getFullYear()).replace(/yy/g, p(d.getFullYear() % 100))
+        .replace(/MM/g, p(d.getMonth() + 1)).replace(/dd/g, p(d.getDate()))
+        .replace(/HH/g, p(d.getHours())).replace(/mm/g, p(d.getMinutes())).replace(/ss/g, p(d.getSeconds()));
+    });
+  }
 
   // ── Prompt Replacements ── global find→replace rules with toggles, applied to
   // prompt/negative field values right before each run (case-insensitive, all
@@ -2872,7 +2884,12 @@ $('statusFeatures').onclick = () => {
       }
       job._node = 'Applying fields…';
       let data;
-      try { data = await fetch('/api/workflow-prompt?name=' + enc(p.workflowFile), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fieldValues: p.fieldValues }) }).then(r => r.json()); }
+      try {
+        // Inherit runs the image's own embedded graph (posted); otherwise a named APP workflow.
+        const wfUrl = p.embeddedWf ? '/api/workflow-prompt' : ('/api/workflow-prompt?name=' + enc(p.workflowFile));
+        const wfBody = p.embeddedWf ? { fieldValues: p.fieldValues, workflow: p.embeddedWf } : { fieldValues: p.fieldValues };
+        data = await fetch(wfUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(wfBody) }).then(r => r.json());
+      }
       catch (e) { log('build prompt: ' + e.message, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
       if (data.error) { log('error: ' + data.error, 'err'); job.status = 'error'; job.endTime = Date.now(); persist(job); return; }
       (data.fieldWarnings || []).forEach(w => log('field: ' + w, 'warn'));
@@ -2883,6 +2900,9 @@ $('statusFeatures').onclick = () => {
       if (p.nodeEdits) { let n = 0; for (const [nid, kv] of Object.entries(p.nodeEdits)) { const node = prompt[nid]; if (node && node.inputs) for (const [k, val] of Object.entries(kv)) { node.inputs[k] = val; n++; } } if (n) log('Applied ' + n + ' node edit(s)'); }
       if (uploadedName) for (const n of Object.values(prompt)) { const t = (n._meta && n._meta.title || '').toUpperCase(); if (t.includes('MAIN IMAGE') && n.inputs) n.inputs.image = uploadedName; }
       for (const n of Object.values(prompt)) { if (n.is_changed) delete n.is_changed; }
+      // Expand %date:FORMAT% filename tokens so save nodes from other setups don't
+      // write a literal "%date:…%" folder (invalid on Windows).
+      for (const n of Object.values(prompt)) { if (n.inputs && typeof n.inputs.filename_prefix === 'string' && n.inputs.filename_prefix.includes('%date:')) n.inputs.filename_prefix = expandDateTokens(n.inputs.filename_prefix); }
       // Run the prompt `runs` times. Each run gets a fresh random seed (unless the
       // seed is pinned) so the runs vary, and outputs are collected after every run
       // so the thumbnails accumulate instead of being replaced.
@@ -2912,7 +2932,7 @@ $('statusFeatures').onclick = () => {
     props: ['field'],
     setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); const openPicker = inject('openPicker', null); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount, openPicker }; },
     template: `
-      <textarea v-if="t==='multiline'" class="rmx-inp" style="width:100%;resize:vertical" rows="3" v-model="field.value"></textarea>
+      <textarea v-if="t==='multiline'" class="rmx-inp" style="width:100%;resize:vertical" rows="7" v-model="field.value"></textarea>
       <span v-else-if="field.kind==='seed'" class="rmx-seedwrap">
         <input type="number" class="rmx-inp" style="width:160px" v-model="field.value" placeholder="random" min="0">
         <button type="button" class="rmx-seed" :class="{on: field._pin}" @click="field._pin = !field._pin"
@@ -3075,14 +3095,21 @@ $('statusFeatures').onclick = () => {
       async function loadWorkflows(embeddedWf) {
         try { workflows.value = await fetch('/api/workflows').then(r => r.json()); } catch (e) { workflows.value = []; }
         let pick = workflows.value[0] && workflows.value[0].name;
-        if (embeddedWf && embeddedWf.nodes) { try { const m = await fetch('/api/workflow-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: embeddedWf }) }).then(r => r.json()); if (m && m.name) { pick = m.name; meta.matchedWf = m.name; } } catch (e) {} }
+        if (embeddedWf && embeddedWf.nodes) {
+          try { const m = await fetch('/api/workflow-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: embeddedWf }) }).then(r => r.json()); if (m && m.name) { pick = m.name; meta.matchedWf = m.name; } } catch (e) {}
+          if (!meta.matchedWf) pick = '__inherit__';   // embedded workflow isn't imported → run it as-is
+        }
         wf.value = pick || '';
       }
       async function loadFields() {
         if (!wf.value) { cfg.fields = []; cfg.loading = false; return; }
         cfg.loading = true;
         try {
-          const c = await fetch('/api/workflow-field-config?name=' + enc(wf.value)).then(r => r.json());
+          const c = wf.value === '__inherit__'
+            ? (meta.embeddedWf
+                ? await fetch('/api/workflow-field-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: meta.embeddedWf }) }).then(r => r.json())
+                : { error: 'This image has no embedded workflow graph to inherit.' })
+            : await fetch('/api/workflow-field-config?name=' + enc(wf.value)).then(r => r.json());
           if (c.error || !Array.isArray(c.fields)) { cfg.error = c.error || 'no config'; cfg.fields = []; cfg.presets = []; }
           else {
             cfg.error = ''; cfg.presets = c.presets || [];
@@ -3141,11 +3168,12 @@ $('statusFeatures').onclick = () => {
         const pf = cfg.fields.find(f => f.kind === 'prompt' && f.enabled && !f.variant);
         const loras = cfg.fields.filter(f => f.kind === 'lora_list' && f.enabled).flatMap(f => (f.value || [])).filter(l => l.on).map(l => ({ slot: l.slot, on: l.on, strength: l.strength }));
         const seedPinned = cfg.fields.some(f => f.enabled && f.kind === 'seed' && f._pin && String(f.value).trim() !== '');
-        const label = wf.value.replace(/^APP /, '').replace(/\.json$/, '');
+        const inherit = wf.value === '__inherit__';
+        const label = inherit ? 'Inherit' : wf.value.replace(/^APP /, '').replace(/\.json$/, '');
         // Image fields set to a Media path (via the picker) need uploading at run.
         const mediaFields = cfg.fields.filter(f => f.enabled && f.kind === 'image_input' && f.value && /[\\/]/.test(String(f.value))).map(f => ({ id: f.id, value: f.value, type: 'image' }));
         const edits = Object.keys(nodeEdits).length ? JSON.parse(JSON.stringify(nodeEdits)) : null;
-        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits, runs: parseInt(runCount.value, 10) || 1 });
+        startedId.value = launchJob({ workflowFile: wf.value, workflowLabel: label, embeddedWf: inherit ? meta.embeddedWf : null, fieldValues: collectFieldValues(), source: { path: S.path, name: S.name, type: S.type }, promptText: pf ? applyReplacements(pf.value) : '', loras: loras.length ? loras : null, preset: selectedPreset.value, seedPinned, mediaFields, nodeEdits: edits, runs: parseInt(runCount.value, 10) || 1 });
       }
       function close() { S.open = false; }
       const onKey = e => { if (e.key === 'Escape') close(); };
@@ -3236,6 +3264,7 @@ $('statusFeatures').onclick = () => {
             <b class="rmx-title">Remix · {{ S.name }}</b>
             <div class="rmx-tabs">
               <button :class="{on: tab==='workflow'}" @click="tab='workflow'">Workflow</button>
+              <button :class="{on: tab==='run'}" @click="tab='run'">Run</button>
               <button :class="{on: tab==='preview'}" @click="tab='preview'">Preview</button>
             </div>
             <button class="rmx-x" @click="close" title="Close (Esc)">✕</button>
@@ -3243,6 +3272,7 @@ $('statusFeatures').onclick = () => {
           <div class="rmx-body">
             <div class="rmx-media" v-show="tab==='preview'"><video v-if="isVideo" :src="fileUrl" controls loop muted></video><img v-else :src="fileUrl"></div>
             <div class="rmx-form" v-show="tab==='workflow'">
+              <div class="rmx-run" style="margin-bottom:12px"><label class="rmx-lbl" style="margin:0;flex:none">Workflow</label><select class="rmx-inp" v-model="wf" style="flex:1;min-width:0" title="Workflow"><option v-if="meta.embeddedWf" value="__inherit__">⤷ Inherit (this image)</option><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select></div>
               <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
               <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
               <div v-else>
@@ -3318,10 +3348,9 @@ $('statusFeatures').onclick = () => {
                 </div>
               </details>
             </div>
-            <!-- Run section: always visible (workflow, run count, thumbs) regardless of tab -->
-            <div class="rmx-runsec">
+            <!-- Run tab: run count, remix, status, log, and output thumbnails -->
+            <div class="rmx-runsec" v-show="tab==='run'">
               <div class="rmx-run">
-                <select class="rmx-inp" v-model="wf" style="min-width:104px;max-width:170px" title="Workflow"><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select>
                 <select class="rmx-inp" v-model="runCount" style="width:70px" title="Number of runs"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select>
                 <button v-if="!job || job.status!=='running'" class="rmx-btn go" @click="remix" :disabled="!wf">▶ Remix</button>
                 <button v-else class="rmx-btn cancel" @click="cancelJob(job)">■ Cancel</button>
