@@ -1,23 +1,25 @@
 # ComfyRemix
 
-A local web app for browsing, curating, and managing AI-generated media (images, videos, audio) from ComfyUI and other tools.
+A local, zero-dependency web app for browsing, curating, and remixing AI-generated media (images, video, audio) from ComfyUI and other tools. A single Node.js process serves the single-page front end plus a small REST/SSE API.
 
-> **To start the app:** `cd D:/Archive && npm start` (runs `node server.js`, serves on **http://localhost:8080**). After editing server.js or index.html, restart with `node restart.js`.
->
-> **Auto-start:** runs headless at boot via scheduled task **`ComfyRemixAutoStart`** (renamed from `ArchiveAutoStartBoot` on 2026-07-07) — Trigger=AtStartup, Principal=**SYSTEM** (RunLevel Highest), runs `C:\Program Files\nodejs\node.exe server.js` from `D:\Archive`, hidden, no time limit, auto-restart 3× on failure. Serves HTTP 8080 + HTTPS 8443 (certs in `certs/`) before any login. The older at-logon task **`ArchiveAutoStart`** (user `webde`) is left **Disabled** to avoid double-starting node (EADDRINUSE on 8080). The 8080 listener is **node** — if you ever see python on 8080, that's an unrelated squatter (e.g. ComfyUI) and a second node will EADDRINUSE.
->
-> **Restarting after code changes (server.js):** run `D:\Archive\scripts\register_comfyremix_task.ps1` (self-elevating; one UAC prompt at the console). It kills the current listener, (re)registers `ComfyRemixAutoStart`, starts it, and writes the outcome to `scripts\register_task_result.txt` — **always read that log to confirm**, because of the visibility gotcha below. Static pages (index/inspect/jobs/chat/voice html, common.css, key-prompt.js) are served from disk — no restart needed.
->
-> **Windows 11 24H2+ gotcha:** non-admin `Get-ScheduledTask` **cannot see SYSTEM tasks** — the boot task will look missing from a normal shell. That's query visibility, not absence. Verify via the result log above, via an elevated shell, or by checking who owns port 8080 (`Get-NetTCPConnection -LocalPort 8080 -State Listen`).
->
-> **Known caveat (SYSTEM context):** under SYSTEM the in-app Claude-chat panel can't resolve the user's global `claude` login — set **`anthropicApiKey`** in ⚙ Settings (it's injected into the CLI env), after which the assistant works headless. Likewise, per-user PATH entries are invisible to SYSTEM: ffmpeg/ffprobe live in the user's WinGet Links folder, so server.js resolves them to absolute paths at startup (`findFfBin`; override with `ffmpegDir` in config.json) — a bare `execFile('ffprobe', …)` fails silently under SYSTEM and all video metadata comes back null. To revert to the per-user at-logon model: `Enable-ScheduledTask ArchiveAutoStart` and disable/unregister `ComfyRemixAutoStart`.
+## Running
+
+```bash
+npm start                          # serve using config.json (HTTP 8080; HTTPS 8443 if certs/ present)
+npm run restart                    # kill the running instance and restart (use after editing server.js)
+node server.js 8081                # override the port
+node server.js 8080 /path/to/media # override port and media root
+```
+
+- After editing **server.js**, restart the server (`npm run restart`) for changes to take effect.
+- Static pages — `index.html`, `inspect.html`, `jobs.html`, `chat.html`, `voice.html`, `common.css`, `key-prompt.js` — are served straight from disk; just reload the browser, no restart needed.
 
 ## Architecture
 
-- **server.js** — Node.js HTTP server (zero dependencies). Serves the SPA, provides REST APIs for file listing/favoriting/deletion, streams Claude Code responses via SSE.
-- **index.html** — Single-page application. Dark theme, responsive grid, modal viewer, Claude Code chat panel.
-- **config.json** — Runtime config (port, paths, API keys). Gitignored.
-- **Media/** — Root media directory. Contains all browsable content. Gitignored.
+- **server.js** — Node.js HTTP server (no external dependencies). Serves the SPA, exposes REST APIs for listing/favoriting/deleting media, proxies ComfyUI (HTTP + WebSocket), and streams Claude Code responses over SSE.
+- **index.html** — Single-page application: dark theme, responsive media grid, full-screen viewer, workflow inspector/re-run, and chat/voice panels.
+- **config.json** — Runtime config (ports, paths, API keys). Gitignored; create it by copying `config.example.json`.
+- **Media/** — Default media root browsed by the app. Gitignored.
 
 ## API Endpoints
 
@@ -34,26 +36,16 @@ A local web app for browsing, curating, and managing AI-generated media (images,
 | GET | `/file/{path}` | Serve media file with range support |
 | GET | `/thumb/{path}` | Serve video thumbnail |
 
-## Running
-
-```bash
-npm start              # Uses config.json defaults
-npm run restart        # Kill existing + restart (use after code changes)
-node server.js 8081    # Override port
-node server.js 8080 E:/other/media  # Override port and media dir
-```
-
-**After editing server.js or index.html**, restart with: `cd D:/Archive && node restart.js`
-
 ## Config
 
-Copy `config.example.json` to `config.json` and fill in your values. Paths/URLs/keys are also editable at runtime via the in-app ⚙ Settings panel (hot-reloaded, no restart):
-- `port` / `httpsPort` — HTTP (default 8080) / HTTPS (default 8443, needs `certs/`)
-- `mediaDir` — Path to media files root
-- `comfyDir` — ComfyUI install directory (workflow list, Claude Code cwd)
-- `comfyOutput` — Path to ComfyUI output folder
+Copy `config.example.json` to `config.json` and fill in your values. Every field is also editable at runtime from the in-app ⚙ Settings panel (hot-reloaded, no restart):
+
+- `port` / `httpsPort` — HTTP (default 8080) / HTTPS (default 8443, needs a cert+key in `certs/`)
+- `mediaDir` — path to the media library root
+- `comfyDir` — ComfyUI install directory (workflow list, Claude Code working dir)
+- `comfyOutput` — path to ComfyUI's output folder
 - `comfyUrl` — ComfyUI API address (default `http://127.0.0.1:8188`; used by the run proxy, WS proxy, and status checks)
-- `comfyStartCmd` — command that launches ComfyUI (shell string or `[cmd, ...args]` array); if unset, auto-detects `Start ComfyUI.bat` next to `comfyDir`. Used by the Run button's "start it now" offer (`POST /api/comfy/start`). Note: launched by the SYSTEM server it runs invisibly in session 0.
+- `comfyStartCmd` — command that launches ComfyUI (shell string or `[cmd, ...args]` array); if unset, auto-detects `Start ComfyUI.bat` next to `comfyDir`. Used by the Run button's "start it now" offer (`POST /api/comfy/start`). Note: when the app itself runs as a background service, a launched GUI may be invisible (it starts in the service session).
 - `comfyNotesDir` — optional notes folder passed to Claude Code via `--add-dir`
 - `ollamaUrl` / `voxtralUrl` — local LLM / TTS service addresses
 - `voxtralStartCmd` — command that launches your Voxtral service (shell string or `[cmd, ...args]` array); the Start button errors without it
@@ -62,59 +54,31 @@ Copy `config.example.json` to `config.json` and fill in your values. Paths/URLs/
 
 ## Claude Code Integration
 
-The chat panel (robot button) spawns `claude -p` in headless mode against the ComfyUI directory. Each message is a fresh session. The server streams `stream-json` output back to the browser via SSE.
+The chat panel (🤖 button) spawns `claude -p` in headless mode against the ComfyUI directory. Each message is a fresh session; the server streams `stream-json` output back to the browser via SSE.
 
-Requires `@anthropic-ai/claude-code` installed globally: `npm install -g @anthropic-ai/claude-code`
+Requires the CLI installed globally: `npm install -g @anthropic-ai/claude-code`. Authenticate with either an Anthropic API key (in ⚙ Settings) or the host account's `claude` login.
 
-## Network / Firewall (Tailscale-only access)
+## Running headless / at startup
 
-This machine (Tailscale hostname **`<machine>`**, IP `100.x.y.z`) is hardened so the Archive app and remote access are reachable **only over Tailscale + localhost**, not the LAN or public internet. Windows Defender Firewall: all profiles ON, default inbound = Block. The Tailscale adapter is classified **Private**; the physical Wi-Fi NIC is **Public**.
+The server is a plain `node server.js` process, so any service manager can keep it alive at boot:
 
-Rules don't rely on profile classification alone — they're pinned to the Tailscale address ranges:
-- IPv4 CGNAT: `100.64.0.0/10`
-- IPv6 ULA: `fd7a:115c:a1e0::/48`
+- **Windows** — a Scheduled Task running `node server.js` from the app directory. Run it as **SYSTEM at startup** to have the app reachable before anyone logs in (headless / remote), or **at logon** for a per-user setup. Copy-paste setup is in the [README](README.md#run-at-startup-windows).
+- **Linux / macOS** — a `systemd` user unit or `launchd` plist invoking `node server.js` in the app directory.
 
-Inbound ALLOW rules configured (RemoteAddress = the two Tailscale ranges above, so they're Tailscale-only regardless of profile):
+Caveats when running under a service account (e.g. Windows SYSTEM) or otherwise headless:
 
-| Rule | Port/Proto | Profile | Notes |
-|------|-----------|---------|-------|
-| `Archive HTTP 8080` | TCP 8080 | Private | Scoped to Tailscale ranges |
-| `Archive HTTPS 8443` | TCP 8443 | Private | Scoped to Tailscale ranges |
-| `RDP Tailscale only` | TCP 3389 | **Any** | Profile=Any (not Private) so it still matches if the Tailscale adapter is classified Public/Unidentified pre-login; built-in "Remote Desktop" group left DISABLED so RDP can't be reached from the LAN |
-| `RDP Tailscale only UDP` | UDP 3389 | **Any** | **Required companion** — RDP's RemoteFX transport uses UDP 3389. Without it, RDP connects over TCP then hangs at "Configuring remote PC". |
-| `Ollama Tailscale only` | TCP 11434 | Replaces the broad auto-created `ollama.exe` "Defer to user" rules, which are now DISABLED |
+- The in-app 🤖 Claude assistant can't use an interactive `claude` login — set an **Anthropic API key** in ⚙ Settings instead (it's injected into the CLI environment).
+- Service accounts don't inherit your per-user `PATH`, so `ffmpeg` / `ffprobe` may not resolve by name. server.js locates them and stores absolute paths at startup (`findFfBin`; override with `ffmpegDir` in config). A bare `ffprobe` invocation fails silently under a service account and video metadata comes back `null`.
+- Use **one** autostart mechanism only — two instances collide on port 8080 (`EADDRINUSE`).
 
-Notes / gotchas:
-- The original `ollama.exe` inbound rules were "Defer to user" allow rules — `Set-NetFirewallRule -RemoteAddress` can't scope those (`HRESULT 0x80070057`). They were disabled and replaced with the explicit `Ollama Tailscale only` rule.
-- Localhost keeps working for all of the above (loopback isn't subject to these rules).
-- Broad app rules intentionally left alone: OVR/VR Server and Meta Quest/VR (used over Wi-Fi/LAN, not Tailscale), plus node/VS Code/Steam/etc.
-- Open follow-ups: Ollama was observed listening on IPv6 `::` only (not `0.0.0.0`), so IPv4 Tailscale clients may not reach `11434` until it also binds IPv4. The Archive app binds `0.0.0.0`; binding it to the Tailscale IP would add defense in depth.
+## Remote access hardening (optional)
 
-**Tailscale unattended mode** (required for pre-login reachability): `HKLM\SOFTWARE\Tailscale IPN\UnattendedMode = "always"` (REG_SZ) is set, so the tailnet stays connected after reboot **before any user logs in**. Without it, Tailscale drops at logoff and the box is unreachable until someone logs in at the desk (this broke pre-login RDP). Combined with the SYSTEM at-startup `ComfyRemixAutoStart` task + Profile=Any RDP rules, the machine is fully reachable headless after a cold boot. Setup script: `D:\Archive\scripts\enable_headless_access.ps1` (unattended + Profile=Any in one run).
+The app binds `0.0.0.0` but is intended to stay private. To reach it from other devices without exposing it to the LAN or the public internet, put it behind a mesh VPN such as **Tailscale**: block inbound 8080/8443 at the firewall except from **localhost** and your **VPN address ranges**, and enable the VPN's unattended mode so the machine is reachable after a cold reboot before login. Step-by-step client + firewall setup is in the [README](README.md#accessing-it-privately-over-tailscale).
 
-To re-verify rule scope (read-only):
-```powershell
-'Archive HTTP 8080','Archive HTTPS 8443','RDP Tailscale only','Ollama Tailscale only' | ForEach-Object {
-  $r = Get-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue
-  if ($r) { $af = $r | Get-NetFirewallAddressFilter
-    [pscustomobject]@{ Rule=$_; Enabled=$r.Enabled; Profile=$r.Profile; Remote=($af.RemoteAddress -join ',') } }
-} | Format-Table -Auto
-```
+## Prompt sanitizer
 
-## Auto-mute at logon
+The prompt/filename search index runs user prompt text through a sanitizer whose filter terms are **base64-encoded** in server.js (and mirrored in `config.json`'s `nsfwTermsB64`) so no plaintext terms live in source. Preserve that encoding when editing the term list.
 
-`mute_audio.ps1` mutes **all active render endpoints** via the Windows Core Audio API (`IMMDeviceEnumerator.EnumAudioEndpoints(eRender, ACTIVE)` → `IAudioEndpointVolume.SetMute($true)` on each) — no external deps, sets mute=true definitively. Muting *all* active endpoints (not just the default) is required for RDP: in an RDP session the active device is **"Remote Audio"** (the redirected endpoint), and it's created *late* on connect — muting only the default at logon missed it. `mute_audio.ps1 list` enumerates endpoints (name / default flags / muted) for diagnosis. **Keep this file**; the scheduled task references it.
+---
 
-Scheduled task **`MuteAudioAtLogon`** (user `<MACHINE>\<user>`, RunLevel=Limited, LogonType=Interactive, hidden) runs it on **two triggers**: At-logon **and** TerminalServices session connect/reconnect (`Microsoft-Windows-TerminalServices-LocalSessionManager/Operational` Event ID 21/25), each with a **5s delay** so the Remote Audio endpoint is initialized first. Re-registered via `Register-ScheduledTask` (no elevation for a per-user interactive task).
-
-```powershell
-# inspect / re-run
-Get-ScheduledTask -TaskName 'MuteAudioAtLogon' | Select State,@{n='RunLevel';e={$_.Principal.RunLevel}}
-powershell -NoProfile -ExecutionPolicy Bypass -File D:\Archive\scripts\mute_audio.ps1   # manual mute now
-```
-
-> Scratch scripts/reports from the firewall + mute setup were moved into `D:\Archive\_fw_scratch\` (hard-delete was blocked); safe to delete that folder manually.
-
-## "Dark drive" privacy (D:)
-
-To minimize D:\ files surfacing in Windows UI, these per-user settings were applied (HKCU, no admin): `Explorer\Advanced` → `ShowRecent=0`, `ShowFrequent=0` (Quick Access recents/frequent off), `Start_TrackDocs=0` (recent-docs/jump-list tracking off); jump lists cleared (`%AppData%\Microsoft\Windows\Recent\AutomaticDestinations` + `CustomDestinations`, wholesale); explorer restarted. Turning OFF D: content indexing (`Win32_Volume IndexingEnabled=$false`) needs admin — run `D:\Archive\scripts\set_dark_indexing.ps1` (self-elevating). Details/before-after in `scripts\dark_drive_notes.txt`. NOT covered: app MRU lists (Office/VS Code/etc.), and files stay visible to anyone browsing D: directly.
+> Deployment specifics for a particular install (real paths, service/task names, firewall rules) don't belong in this committed file — keep them in a gitignored `CLAUDE.local.md`, which Claude Code also auto-loads.

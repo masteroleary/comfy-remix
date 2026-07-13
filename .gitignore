@@ -36,3 +36,6 @@ app-prompt-index.json
 debug-results.json
 .claude/
 Workflows/
+
+# Machine-specific runbook (real paths, task names, firewall rules)
+CLAUDE.local.md

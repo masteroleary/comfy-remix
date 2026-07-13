@@ -6,11 +6,11 @@ Browse and curate your AI-generated media (images, video, audio), then **remix**
 >
 > **License:** [CC BY-NC 4.0](LICENSE) — free to use, share, and modify **with credit** to [masteroleary/comfy-remix](https://github.com/masteroleary/comfy-remix); **commercial use requires written consent** (webdevllc@gmail.com).
 
-- **Start:** `cd D:/Archive && npm start` → serves on **http://localhost:8080** (HTTPS on **8443**).
+- **Start:** `cd comfy-remix && npm start` → serves on **http://localhost:8080** (HTTPS on **8443**).
 - **Auto-start:** can run headless at boot as a Windows scheduled task, before any user logs in — see [Run at startup](#run-at-startup-windows).
 - **API keys / settings:** click the **⚙** button in the app header (Claude, Grok/xAI, Civitai keys, service URLs).
 
-See [CLAUDE.md](CLAUDE.md) for architecture, API endpoints, and the full firewall/hardening details.
+See [CLAUDE.md](CLAUDE.md) for architecture, API endpoints, config, and headless/remote-access guidance.
 
 ---
 
@@ -161,7 +161,7 @@ On Linux/macOS the equivalent is a `systemd` user unit or `launchd` plist runnin
 
 ## Accessing it privately over Tailscale
 
-The app is deliberately **not exposed to the LAN or the public internet**. The Windows firewall blocks inbound 8080/8443 except from **localhost** and the **Tailscale** network. Tailscale is a private mesh VPN (WireGuard): only devices signed in to *your* tailnet can reach this machine, and the traffic is end-to-end encrypted. Nothing is port-forwarded and there's no public URL.
+The app is deliberately **not exposed to the LAN or the public internet**. Your host firewall blocks inbound 8080/8443 except from **localhost** and the **Tailscale** network (setup commands below). Tailscale is a private mesh VPN (WireGuard): only devices signed in to *your* tailnet can reach this machine, and the traffic is end-to-end encrypted. Nothing is port-forwarded and there's no public URL.
 
 This machine's Tailscale identity:
 
@@ -172,12 +172,46 @@ This machine's Tailscale identity:
 | Tailscale IP | `100.x.y.z` |
 | Ports | `8080` (HTTP), `8443` (HTTPS) |
 
+### Lock down the host firewall
+
+This is the one-time host-side step that makes the app Tailscale-only: allow inbound 8080/8443 **only** from the Tailscale address ranges (localhost is always implicitly allowed), and block everything else. The ranges are the same on every platform:
+
+- IPv4 (CGNAT): `100.64.0.0/10`
+- IPv6 (ULA): `fd7a:115c:a1e0::/48`
+
+> **Windows only.** Run the commands below in an **elevated** PowerShell. macOS/Linux users: skip to the note underneath — the concept is identical, only the tool differs.
+
+```powershell
+# Windows — allow 8080/8443 in only from the Tailscale ranges
+$ts = '100.64.0.0/10','fd7a:115c:a1e0::/48'
+New-NetFirewallRule -DisplayName 'ComfyRemix HTTP 8080'  -Direction Inbound -Action Allow `
+  -Protocol TCP -LocalPort 8080 -RemoteAddress $ts
+New-NetFirewallRule -DisplayName 'ComfyRemix HTTPS 8443' -Direction Inbound -Action Allow `
+  -Protocol TCP -LocalPort 8443 -RemoteAddress $ts
+Set-NetFirewallProfile -All -DefaultInboundAction Block   # deny anything not explicitly allowed (usually already the Windows default)
+```
+
+Verify the rules are scoped to Tailscale (read-only):
+
+```powershell
+'ComfyRemix HTTP 8080','ComfyRemix HTTPS 8443' | ForEach-Object {
+  $r = Get-NetFirewallRule -DisplayName $_
+  [pscustomobject]@{ Rule = $_; Enabled = $r.Enabled
+    Remote = (($r | Get-NetFirewallAddressFilter).RemoteAddress -join ',') }
+} | Format-Table -Auto
+```
+
+**macOS / Linux:** apply the same rule with your own firewall — allow inbound TCP 8080/8443 from the two ranges above, deny elsewhere.
+- **Linux (ufw):** `sudo ufw default deny incoming`, then `sudo ufw allow proto tcp from 100.64.0.0/10 to any port 8080,8443` (repeat with the IPv6 range).
+- **macOS:** add `pf` rules pinned to the same ranges (`/etc/pf.conf`), or turn on the built-in Application Firewall and only allow `node`.
+- **Any OS, defense in depth:** the server currently binds `0.0.0.0` (all interfaces). Changing the two `server.listen(..., '0.0.0.0', ...)` calls in `server.js` to the host's Tailscale IP makes it never listen on the LAN at all — optional, on top of the firewall rule above.
+
 ### One-time setup on the device you want to browse from (phone, laptop, tablet)
 
 1. **Install Tailscale** on the client device:
    - iOS / Android: "Tailscale" in the App Store / Play Store
    - macOS / Windows / Linux: https://tailscale.com/download
-2. **Sign in with the same account** that owns the `office` machine. The device joins your tailnet.
+2. **Sign in with the same account** that owns this machine. The device joins your tailnet.
 3. Make sure Tailscale is **connected/enabled** on that device (toggle it on).
 
 That's it — no config on this machine is needed; it's already on the tailnet in unattended mode (stays connected across reboots, even before anyone logs in).
@@ -197,16 +231,16 @@ For HTTPS use **https://<machine>.<your-tailnet>.ts.net:8443**. The certificate 
 
 - **Firewall pinned to Tailscale ranges.** Inbound rules for 8080/8443 only allow the Tailscale address ranges (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), so even a device on the same Wi-Fi/LAN cannot connect.
 - **No public exposure.** No router port-forwarding, no public DNS, no `tailscale funnel`. Off the tailnet, the machine is unreachable.
-- **Reachable pre-login.** Tailscale runs in unattended mode and the app starts at boot as SYSTEM, so it's available after a cold reboot without anyone logging in at the desk.
+- **Reachable pre-login.** Tailscale runs in unattended mode and the app starts at boot (on Windows, as a SYSTEM scheduled task; `systemd`/`launchd` on Linux/macOS — see [Run at startup](#run-at-startup-windows)), so it's available after a cold reboot without anyone logging in at the desk.
 
 ### Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | Page won't load | Tailscale is **connected** on the client device (open the Tailscale app, confirm it's on). |
-| Still won't load | In the Tailscale admin console (login.tailscale.com), confirm `office` shows as **online**. |
+| Still won't load | In the Tailscale admin console (login.tailscale.com), confirm this machine shows as **online**. |
 | MagicDNS name fails but IP works | MagicDNS may be disabled for your tailnet — use `http://100.x.y.z:8080`, or enable MagicDNS in the admin console (DNS tab). |
 | Works on Wi-Fi at home only | That means you're hitting it over the LAN, not Tailscale — it should work from *anywhere* the client has Tailscale on. Turn off Wi-Fi to test over cellular. |
 | HTTPS warning | Expected (self-signed cert). Accept the warning, or just use the `http://…:8080` URL. |
 
-To change these Tailscale/firewall settings on the host, see the **Network / Firewall** and **Tailscale unattended mode** sections of [CLAUDE.md](CLAUDE.md).
+For the generic approach to headless startup and locking access down to your VPN, see the **Running headless / at startup** and **Remote access hardening** sections of [CLAUDE.md](CLAUDE.md).
