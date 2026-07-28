@@ -120,8 +120,19 @@ module.exports = function createFieldConfigRuntime(deps) {
         if (!node || !Array.isArray(node.widgets_values)) { warnings.push(`lora target missing for ${fid}`); continue; }
         if (t.widget === 'loras') { // Power Lora Loader — row.slot indexes widgets_values
           for (const r of rows || []) {
-            const cur = node.widgets_values[r.slot];
-            if (cur && typeof cur === 'object' && 'lora' in cur) { cur.on = !!r.on; if (r.strength != null) cur.strength = r.strength; }
+            const cur = (r.slot != null) ? node.widgets_values[r.slot] : null;
+            if (cur && typeof cur === 'object' && 'lora' in cur) {
+              cur.on = !!r.on;
+              if (r.strength != null) cur.strength = r.strength;
+              if (r.lora && r.lora !== cur.lora) cur.lora = r.lora;
+            } else if (r.lora) {
+              // New row added in the Remix form → insert a lora widget object after
+              // the last existing one (before the loader's trailing footer widgets).
+              let lastLora = -1;
+              for (let i = 0; i < node.widgets_values.length; i++) { const w = node.widgets_values[i]; if (w && typeof w === 'object' && 'lora' in w) lastLora = i; }
+              const obj = { on: r.on !== false, lora: r.lora, strength: r.strength != null ? r.strength : 1, strengthTwo: null };
+              node.widgets_values.splice(lastLora >= 0 ? lastLora + 1 : node.widgets_values.length, 0, obj);
+            }
           }
         } else { warnings.push(`lora-stack apply not yet supported (${fid})`); }
         continue;

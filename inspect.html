@@ -2542,7 +2542,8 @@ async function fixWithClaude() {
     const base = (currentFileName || 'embedded').replace(/\.[^.]+$/, '');
     try {
       const sr = await fetch('/api/workflows/save', { method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name: 'DEBUG - ' + base + '.json', workflow: window.workingWorkflow, enable: true }) });
+        // overwrite: re-saving the same DEBUG file across fix attempts is the point
+        body: JSON.stringify({ name: 'DEBUG - ' + base + '.json', workflow: window.workingWorkflow, enable: true, overwrite: true }) });
       const sd = await sr.json();
       if (sd.ok) {
         targetWf = sd.name;
@@ -2576,7 +2577,7 @@ async function fixWithClaude() {
   try { const s = await fetch('/api/settings').then(r => r.json()); appHttpPort = (s.info && s.info.port) || 8080; } catch {}
   const apiFallback =
     '\n\nIf file edits are REJECTED by permissions, do not give up — fall back to the local APIs via curl:'
-    + '\n1. Save the corrected workflow through the ComfyRemix server (it writes the file for you): POST to http://127.0.0.1:' + appHttpPort + '/api/workflows/save with JSON {"name":"' + targetWf + '","workflow":<corrected full graph JSON>,"enable":true}. The JSON is large — write it to a temp file and use curl -d @file if you can, else pipe it via stdin with -d @-.'
+    + '\n1. Save the corrected workflow through the ComfyRemix server (it writes the file for you): POST to http://127.0.0.1:' + appHttpPort + '/api/workflows/save with JSON {"name":"' + targetWf + '","workflow":<corrected full graph JSON>,"enable":true,"overwrite":true}. The "overwrite" flag is required — without it the server refuses to replace an existing workflow (HTTP 409). The JSON is large — write it to a temp file and use curl -d @file if you can, else pipe it via stdin with -d @-.'
     + '\n2. To prove the fix end-to-end, queue a test run: POST {} to http://127.0.0.1:' + appHttpPort + '/api/workflow-prompt?name=' + encodeURIComponent(targetWf) + ' to get {prompt, workflow}, then POST {"prompt":<prompt>,"client_id":"claude-fix","extra_data":{"extra_pnginfo":{"workflow":<workflow>}}} to http://127.0.0.1:' + appHttpPort + '/api/comfy/api/prompt. The generated image will carry the fixed workflow embedded in its metadata, so the fix is preserved even if the file could not be written.';
   const prompt = (targetWf !== 'inherit'
       ? 'The ComfyRemix app ran the workflow file "user/default/workflows/' + targetWf + '" and it failed or misbehaved.'

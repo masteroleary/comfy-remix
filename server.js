@@ -554,6 +554,21 @@ function promptIndexMove(src, dest) {
   const d = String(dest || '').replace(/\\/g, '/');
   if (promptIndex.files[s]) { promptIndex.files[d] = promptIndex.files[s]; delete promptIndex.files[s]; savePromptIndex(); }
 }
+// Same, but `src` may be a whole folder: re-key everything indexed beneath it.
+function promptIndexMovePath(src, dest) {
+  const s = String(src || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const d = String(dest || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (promptIndex.files[s]) { promptIndexMove(s, d); return; }
+  const pre = s + '/';
+  let hit = false;
+  for (const k of Object.keys(promptIndex.files)) {
+    if (!k.startsWith(pre)) continue;
+    promptIndex.files[d + k.slice(s.length)] = promptIndex.files[k];
+    delete promptIndex.files[k];
+    hit = true;
+  }
+  if (hit) savePromptIndex();
+}
 setTimeout(buildPromptIndex, 5000);                  // initial build shortly after boot
 setInterval(buildPromptIndex, 10 * 60 * 1000);       // pick up new generations
 
@@ -647,26 +662,42 @@ function extractVideoMetadata(filePath, cb) {
 
 
 
-// Cache for ComfyUI object_info
+// Cache for ComfyUI object_info. The upstream call costs 10-30s (see the TTFB
+// note below), so it is served stale-while-revalidate: any cached copy answers
+// instantly and a refresh runs behind the request once it ages past the TTL.
+// Only a call with nothing cached at all can block, and the boot prefetch below
+// normally gets there first. Stale data only means a newly-installed model is
+// briefly missing from a dropdown; it never affects running a workflow.
+const OBJECT_INFO_TTL_MS = 10 * 60 * 1000;
 let objectInfoCache = null;
 let objectInfoFetchTime = 0;
+let objectInfoInflight = null;   // shared promise, so concurrent callers never stack up fetches
+// Progress of an in-flight /object_info fetch, polled by the Remix dialog so it
+// can show a real bar instead of a static "Loading…". Measured on this box:
+// ComfyUI takes ~10s to *begin* answering and then ships the whole 8MB body in
+// ~30ms — the wait is time-to-first-byte, so there are no bytes to count.
+// What is measurable is elapsed time against how long the previous fetch took.
+let objectInfoProgress = { active: false, startedAt: 0, lastMs: 0 };
 
-function getObjectInfo() {
-  return new Promise((resolve, reject) => {
-    // Cache for 60 seconds
-    if (objectInfoCache && Date.now() - objectInfoFetchTime < 60000) {
-      return resolve(objectInfoCache);
-    }
+function fetchObjectInfo() {
+  if (objectInfoInflight) return objectInfoInflight;   // one fetch at a time; everyone shares it
+  objectInfoInflight = new Promise((resolve, reject) => {
     const ch = comfyHostPort();
     const opts = {
       hostname: ch.hostname, port: ch.port,
       path: '/object_info', method: 'GET',
       headers: { 'Accept': 'application/json' },
     };
+    // Mark active before sending: the whole wait happens before the response
+    // callback fires, so flagging it in there would report nothing at all.
+    const startedAt = Date.now();
+    objectInfoProgress = { active: true, startedAt, lastMs: objectInfoProgress.lastMs };
     const req = http.request(opts, (res) => {
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
+        objectInfoProgress = { active: false, startedAt: 0, lastMs: Date.now() - startedAt };
+        objectInfoInflight = null;
         try {
           objectInfoCache = JSON.parse(body);
           objectInfoFetchTime = Date.now();
@@ -674,10 +705,34 @@ function getObjectInfo() {
         } catch (e) { reject(e); }
       });
     });
-    req.on('error', reject);
+    req.on('error', e => {
+      objectInfoProgress = { active: false, startedAt: 0, lastMs: objectInfoProgress.lastMs };
+      objectInfoInflight = null;
+      reject(e);
+    });
     req.end();
   });
+  return objectInfoInflight;
 }
+
+function getObjectInfo() {
+  if (objectInfoCache) {
+    // Answer from cache immediately; if it has aged out, refresh behind the caller.
+    if (Date.now() - objectInfoFetchTime >= OBJECT_INFO_TTL_MS) fetchObjectInfo().catch(() => {});
+    return Promise.resolve(objectInfoCache);
+  }
+  return fetchObjectInfo();
+}
+
+// Warm the cache at boot so the first Remix dialog of the session doesn't pay
+// for it. ComfyUI is often not up yet (or not running at all), so retry quietly
+// for up to an hour, then leave it to the first real request.
+function warmObjectInfo(attempt = 0) {
+  fetchObjectInfo().catch(() => {
+    if (attempt < 60) setTimeout(() => warmObjectInfo(attempt + 1), 60000);
+  });
+}
+setTimeout(warmObjectInfo, 3000);
 
 // Convert visual workflow JSON (LiteGraph format) to API/prompt format
 async function workflowToPrompt(wf) {
@@ -1689,9 +1744,12 @@ runTests();
     const asc = url.searchParams.get('asc') !== 'false';
     const typeFilter = url.searchParams.get('type') || 'all'; // all | video | image | audio | folder
     const safeMode = url.searchParams.get('safe') === '1'; // omit NSFW-tagged items entirely
+    // flatten=1 walks the whole subtree under `dir` and returns every media file
+    // (no folder cards, unpaginated) so the SPA can show one long grouped-by-folder view.
+    const flatten = url.searchParams.get('flatten') === '1';
 
-    // A search (or scope=all) spans the whole subtree; plain browsing lists one directory.
-    const deep = !!search || scopeAll;
+    // A search, scope=all, or flatten spans the whole subtree; plain browsing lists one directory.
+    const deep = !!search || scopeAll || flatten;
     const items = [];
     // scope=all seeds both roots (skipping ComfyUI output if it nests under ROOT).
     const scanQueue = scopeAll
@@ -1715,6 +1773,7 @@ runTests();
         const isDir = stat.isDirectory();
         if (deep && isDir) {
           scanQueue.push(fullPath);
+          if (flatten) continue; // flatten: recurse into it, but never emit a folder card
           // A folder whose *name* matches still shows up (as a navigable chip)
           if (!name.toLowerCase().includes(search)) continue;
         }
@@ -1725,6 +1784,9 @@ runTests();
         const isVideo = VIDEO_EXT.has(ext);
         const isImage = IMAGE_EXT.has(ext);
         const isAudio = AUDIO_EXT.has(ext);
+
+        // Flatten shows media thumbnails only — drop stray non-media files.
+        if (flatten && !isVideo && !isImage && !isAudio) continue;
 
         // Type filter
         if (typeFilter === 'video' && !isVideo) continue;
@@ -1774,13 +1836,14 @@ runTests();
 
       const total = items.length;
       const start = (page - 1) * limit;
-      const pageItems = items.slice(start, start + limit);
+      // flatten returns the whole subtree in one shot; the SPA lazy-loads thumbs on scroll.
+      const pageItems = flatten ? items : items.slice(start, start + limit);
       const parentDir = path.dirname(dir);
       const isRoot = scopeAll || dir === ROOT || dir === parentDir;
 
       jsonRes(res, {
         dir: scopeAll ? ROOT : dir, root: ROOT, parent: isRoot ? null : parentDir,
-        page, limit, total, pages: Math.ceil(total / limit) || 1,
+        page, limit, total, pages: flatten ? 1 : (Math.ceil(total / limit) || 1),
         items: pageItems,
         favoritesDir: FAVORITES_DIR,
         comfyOutputDir: COMFY_OUTPUT,
@@ -1903,6 +1966,83 @@ runTests();
           }
         }
         jsonRes(res, { results });
+      } catch (e) { jsonRes(res, { error: e.message }, 400); }
+    });
+    return;
+  }
+
+  // API: merge folders — move every entry of `sources` into `target`, then drop
+  // the emptied source folders. Colliding names get a " (n)" suffix chosen per
+  // basename, so a media file and its sidecar thumbnail stay paired.
+  if (pn === '/api/merge-folders' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', async () => {
+      try {
+        const { sources, target } = JSON.parse(body);
+        if (!Array.isArray(sources) || !sources.length || !target) { jsonRes(res, { error: 'Missing sources/target' }, 400); return; }
+        const n = s => String(s).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+        const nr = n(ROOT), nc = n(COMFY_OUTPUT);
+        const inRoot = p => n(p).startsWith(nr) || n(p).startsWith(nc);
+        const isRoot = p => n(p) === nr || n(p) === nc;
+
+        const tgt = path.resolve(target);
+        if (!inRoot(tgt)) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+        let ts; try { ts = fs.statSync(tgt); } catch { jsonRes(res, { error: 'Target folder not found' }, 404); return; }
+        if (!ts.isDirectory()) { jsonRes(res, { error: 'Target is not a folder' }, 400); return; }
+
+        const srcs = [];
+        for (const s of sources) {
+          const abs = path.resolve(s);
+          if (n(abs) === n(tgt)) continue;                  // target may ride along in the selection
+          if (!inRoot(abs)) { jsonRes(res, { error: 'Access denied: ' + s }, 403); return; }
+          if (isRoot(abs)) { jsonRes(res, { error: 'Cannot merge a root folder' }, 400); return; }
+          // Merging a folder into one of its own descendants would move the target into itself.
+          if (n(tgt).startsWith(n(abs) + '/')) { jsonRes(res, { error: 'Cannot merge a folder into its own subfolder' }, 400); return; }
+          let st; try { st = fs.statSync(abs); } catch { jsonRes(res, { error: 'Folder not found: ' + s }, 404); return; }
+          if (!st.isDirectory()) { jsonRes(res, { error: 'Not a folder: ' + s }, 400); return; }
+          srcs.push(abs);
+        }
+        if (!srcs.length) { jsonRes(res, { error: 'Nothing to merge' }, 400); return; }
+
+        // "a.png" and "a.jpg" share the stem "a" — track stems, not full names,
+        // so a renamed file drags its thumbnail along to the same new stem.
+        const stemOf = name => { const e = path.extname(name); return e ? name.slice(0, -e.length) : name; };
+        const taken = new Set(fs.readdirSync(tgt).map(x => stemOf(x).toLowerCase()));
+
+        let moved = 0, removed = 0;
+        const errors = [];
+        for (const src of srcs) {
+          let entries;
+          try { entries = fs.readdirSync(src); } catch (e) { errors.push({ path: src, error: e.message }); continue; }
+          const stems = new Map();   // original stem (lc) -> stem to use in the target
+          for (const name of entries) {
+            const ext = path.extname(name), stem = stemOf(name);
+            let use = stems.get(stem.toLowerCase());
+            if (use === undefined) {
+              use = stem;
+              for (let i = 2; taken.has(use.toLowerCase()); i++) use = `${stem} (${i})`;
+              stems.set(stem.toLowerCase(), use);
+              taken.add(use.toLowerCase());
+            }
+            const from = path.join(src, name), to = path.join(tgt, use + ext);
+            try {
+              try { await fs.promises.rename(from, to); }
+              catch (e) {
+                if (e.code !== 'EXDEV') throw e;              // different volume: copy then drop
+                await fs.promises.cp(from, to, { recursive: true });
+                await fs.promises.rm(from, { recursive: true, force: true });
+              }
+              promptIndexMovePath(from, to);
+              moved++;
+            } catch (e) { errors.push({ path: from, error: e.message }); }
+          }
+          try {
+            if (fs.readdirSync(src).length) errors.push({ path: src, error: 'Not empty after merge — folder left in place' });
+            else { fs.rmdirSync(src); removed++; }
+          } catch (e) { errors.push({ path: src, error: e.message }); }
+        }
+        jsonRes(res, { ok: true, moved, removed, target: tgt, errors });
       } catch (e) { jsonRes(res, { error: e.message }, 400); }
     });
     return;
@@ -2508,6 +2648,32 @@ runTests();
   }
 
   // API: Generate the field config for a workflow (detected fields + user edits).
+  // API: list available LoRA files (for the Remix form's "add LoRA row" picker).
+  if (pn === '/api/loras' && req.method === 'GET') {
+    (async () => {
+      let objectInfo = null; try { objectInfo = await getObjectInfo(); } catch (e) {}
+      let loras = [];
+      if (objectInfo) {
+        for (const cls of ['LoraLoader', 'LoraLoaderModelOnly', 'Power Lora Loader (rgthree)']) {
+          const inf = objectInfo[cls]; if (!inf || !inf.input) continue;
+          const spec = (inf.input.required && inf.input.required.lora_name) || (inf.input.optional && inf.input.optional.lora_name);
+          if (spec && Array.isArray(spec[0]) && spec[0].length) { loras = spec[0].slice(); break; }
+        }
+      }
+      jsonRes(res, { loras });
+    })();
+    return;
+  }
+
+  // State of the in-flight /object_info fetch (drives the Remix dialog's progress
+  // bar while a field config is being built). lastMs is the previous fetch's
+  // duration — the UI uses it as the ETA denominator.
+  if (pn === '/api/objectinfo-progress' && req.method === 'GET') {
+    const p = objectInfoProgress;
+    jsonRes(res, { active: p.active, elapsedMs: p.active ? Date.now() - p.startedAt : 0, lastMs: p.lastMs || 0 });
+    return;
+  }
+
   if (pn === '/api/workflow-field-config' && req.method === 'GET') {
     const wfName = url.searchParams.get('name');
     if (!wfName) { jsonRes(res, { error: 'Missing name' }, 400); return; }
@@ -2568,6 +2734,13 @@ runTests();
       if (!name.toLowerCase().endsWith('.json')) name += '.json';
       const wfPath = path.join(WORKFLOWS_DIR, name);
       if (!path.resolve(wfPath).startsWith(path.resolve(WORKFLOWS_DIR))) { jsonRes(res, { error: 'Access denied' }, 403); return; }
+      // Never clobber an existing workflow unless the caller explicitly asks to.
+      // The Remix dialog never asks; "Fix with Claude" does, because re-saving
+      // the same DEBUG file is exactly how that loop works.
+      if (!body.overwrite && fs.existsSync(wfPath)) {
+        jsonRes(res, { error: 'A workflow named "' + name + '" already exists', exists: true, name }, 409);
+        return;
+      }
       try {
         fs.mkdirSync(WORKFLOWS_DIR, { recursive: true });
         fs.writeFileSync(wfPath, JSON.stringify(body.workflow, null, 2));

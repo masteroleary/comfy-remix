@@ -12,12 +12,22 @@ html{height:100%;background:var(--bg)}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;min-height:100%;padding-bottom:calc(16px + var(--safe-b))}
 
 /* ── HEADER ── */
-.hdr{
+/* The Vue mount root must not form a box: a sticky child can only travel
+   inside its parent, and #toolbarApp is only ~190px tall, so the header used
+   to unstick and scroll away almost immediately. display:contents hands the
+   stack to <body>, letting it pin for the whole page.
+   ([v-cloak]{display:none !important} still wins until Vue mounts.) */
+#toolbarApp{display:contents}
+/* Header + filter/select bars pin together as one block, so the filter row
+   stays reachable while scrolling without hard-coding the header's height. */
+.hdr-stack{
   position:sticky;top:0;z-index:50;
   background:rgba(13,13,13,.92);
   backdrop-filter:saturate(180%) blur(20px);
   -webkit-backdrop-filter:saturate(180%) blur(20px);
   border-bottom:1px solid var(--border);
+}
+.hdr{
   padding:calc(10px + var(--safe-t)) calc(12px + var(--safe-r)) 10px calc(12px + var(--safe-l));
 }
 .hdr-path{margin-bottom:6px;overflow:hidden}
@@ -84,7 +94,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 /* ── FILTER BAR ── */
 .filter-bar{
   display:flex;gap:6px;
-  padding:8px calc(12px + var(--safe-l)) 4px calc(12px + var(--safe-l));
+  padding:8px calc(12px + var(--safe-l)) 8px calc(12px + var(--safe-l));
   overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
 }
 .filter-bar::-webkit-scrollbar{display:none}
@@ -217,6 +227,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   user-select:none;border:1px solid var(--border);
 }
 .folder-chip:active{transform:scale(.95)}
+.folder-chip-flatten{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
+.folder-chip-flatten .folder-label{color:var(--accent);font-weight:600}
 .folder-chip .folder-emoji{font-size:18px;line-height:1}
 .folder-chip .folder-label{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .folder-chip .ms-cb{display:none;width:16px;height:16px;cursor:pointer;accent-color:#0a84ff;flex-shrink:0}
@@ -537,6 +549,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- Toolbar (Vue-mounted; in-DOM template) -->
 <div id="toolbarApp" v-cloak>
+<!-- Header + filter/select bars: one sticky block (see .hdr-stack) -->
+<div class="hdr-stack">
 <!-- Header -->
 <div class="hdr">
   <div class="hdr-path">
@@ -574,11 +588,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <span style="color:#8e8e93;font-size:13px;white-space:nowrap">{{ c.bulkCount }} selected</span>
     <button class="filter-chip" style="font-size:12px" @click="bulkSelAll">Select All</button>
     <button class="filter-chip" style="font-size:12px" @click="bulkSelFiles">Select Files</button>
+    <button v-show="c.bulkDirCount > 1" class="filter-chip" style="font-size:12px;background:#1e3a5a;color:#6cb6e0" title="Move the contents of the selected folders into the last one (alphanumerically) and delete the empties" @click="bulkMerge">🗂 Merge {{ c.bulkDirCount }}</button>
     <button class="filter-chip" style="font-size:12px;background:#2d5a1e;color:#a8e06c" @click="bulkFav">⭐ Favorite</button>
     <button class="filter-chip" style="font-size:12px;background:#5a1e1e;color:#e06c6c" @click="bulkDel">🗑 Delete</button>
     <button class="filter-chip" style="font-size:12px" @click="toggleSelect">Cancel</button>
   </div>
 </div>
+</div><!-- /.hdr-stack -->
 
 <!-- Files & Media tabs (shown only inside the combined Files view, hidden while searching) -->
 <div class="file-tabs" v-show="c.showFileTabs">
@@ -816,6 +832,7 @@ const S = {
   items: [],        // current page items
   mediaItems: [],   // media-only items for modal nav
   multiSelect: false,
+  flatten: false,   // recursive grouped "Flatten" view of the current dir
   modalIdx: -1,
   videoMuted: true, // default-mute videos in modal
   navStack: [],     // [{dir,page,search,type}]
@@ -826,17 +843,18 @@ const S = {
 // fetching and navigation; renderGrid() just pushes the current page into here.
 const gridState = Vue.reactive({
   loading: true, error: '', items: [],
-  search: '', dir: null, filesMode: false, onHome: false,
+  search: '', dir: null, filesMode: false, onHome: false, flatten: false,
   comfyOutputDir: '', favDir: '', root: '',
 });
 // Reactive state for the media viewer modal (Vue-rendered on #modalApp).
-const modalState = Vue.reactive({ open: false, item: null, muted: true });
+// page/pages mirror S so ‹ › know whether an adjacent page exists to walk into.
+const modalState = Vue.reactive({ open: false, item: null, muted: true, idx: -1, count: 0, page: 1, pages: 1, loading: false });
 // Reactive state for the toolbar (Vue-rendered on #toolbarApp).
 const tbar = Vue.reactive({
   showControls: false, pathHome: false, searchLabel: '', crumbs: [],
   backDisabled: true, sortLabel: 'Date ↓',
   type: 'all', filtersOpen: false, filterCount: 0,
-  multiSelect: false, bulkCount: 0,
+  multiSelect: false, bulkCount: 0, bulkDirCount: 0,
   blurOn: true, safeOn: true,
   fileTabs: [], showFileTabs: false,
   stats: '', pageInfo: '',
@@ -887,6 +905,16 @@ function toggleMultiSelect(on) {
 
 function updateBulkBar() {
   tbar.bulkCount = document.querySelectorAll('.ms-cb:checked').length;
+  tbar.bulkDirCount = checkedFolders().length;   // ≥2 folders reveals Merge
+}
+
+// Checked folder chips, sorted alphanumerically by name — the last one is the
+// merge target ("2" sorts before "10", matching how the listing reads).
+function checkedFolders() {
+  const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  return Array.from(document.querySelectorAll('.folder-chip .ms-cb:checked'))
+    .map(cb => ({ path: cb.dataset.path, name: (cb.closest('.folder-chip').querySelector('.folder-label') || {}).textContent || cb.dataset.path }))
+    .sort((a, b) => coll.compare(a.name, b.name));
 }
 
 function bulkSelAll() {
@@ -950,6 +978,38 @@ async function bulkFav() {
       showToast('⭐ Moved ' + ok + ' item(s) to Favorites');
       toggleMultiSelect(false);
       refreshCurrentPage();
+    }
+  );
+}
+
+// Merge 2+ selected folders: everything inside them moves into the last one
+// alphanumerically, and the emptied folders are removed.
+async function bulkMerge() {
+  const dirs = checkedFolders();
+  if (dirs.length < 2) return;
+  const target = dirs[dirs.length - 1];
+  const sources = dirs.slice(0, -1);
+  confirm(
+    'Merge Folders',
+    `Move the contents of ${sources.map(d => `"${d.name}"`).join(', ')} into "${target.name}", then delete the emptied folder${sources.length > 1 ? 's' : ''}?`,
+    '🗂 Merge ' + dirs.length,
+    '',
+    async () => {
+      try {
+        const r = await fetch('/api/merge-folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sources: sources.map(d => d.path), target: target.path }),
+        }).then(r => r.json());
+        if (r.error) throw new Error(r.error);
+        showToast(`🗂 Moved ${r.moved} item(s) into "${target.name}"` +
+          (r.errors && r.errors.length ? ` — ${r.errors.length} failed` : ''));
+        if (r.errors && r.errors.length) console.warn('[merge] partial failures:', r.errors);
+        toggleMultiSelect(false);
+        refreshCurrentPage();
+      } catch (err) {
+        showToast('Merge failed: ' + err.message);
+      }
     }
   );
 }
@@ -1084,17 +1144,22 @@ const GridApp = {
   computed: {
     folders() { return this.s.items.filter(i => i.isDir); },
     files() { return this.s.items.filter(i => !i.isDir); },
-    grouped() { return !!this.s.search && this.files.some(f => f.parentDir); },
+    // Offer Flatten only while plainly browsing a folder that has subfolders.
+    showFlatten() { return !this.s.search && !this.s.flatten && !this.s.onHome && this.folders.length > 0; },
+    grouped() { return (this.s.flatten || !!this.s.search) && this.files.some(f => f.parentDir); },
     groups() {
       const map = new Map();
       for (const f of this.files) { const k = f.parentDir || ''; if (!map.has(k)) map.set(k, []); map.get(k).push(f); }
       const cur = (this.s.dir || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
-      return [...map.entries()].map(([gdir, files]) => {
+      const out = [...map.entries()].map(([gdir, files]) => {
         let rel;
         if (this.s.filesMode) { rel = filesGroupLabel(gdir); }
         else { rel = gdir.replace(/\\/g, '/'); if (cur && rel.toLowerCase().startsWith(cur)) rel = rel.slice(cur.length).replace(/^\//, '') || '(this folder)'; }
         return { dir: gdir, label: rel, files };
       });
+      // Flatten: order the directory groups by path ('(this folder)' sorts first).
+      if (this.s.flatten) out.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }));
+      return out;
     },
     canDeleteEmpty() {
       const nrm = s => (s || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
@@ -1111,6 +1176,7 @@ const GridApp = {
     },
     onFolderCheck(e) { const chip = e.target.closest('.folder-chip'); if (chip) chip.classList.toggle('ms-checked', e.target.checked); updateBulkBar(); },
     openGroup(gdir) { searchInp.value = ''; if (this.s.filesMode) S.filesTab = filesTabForDir(gdir); loadDir(gdir, 1); },
+    onFlatten() { openFlatten(); },
     delEmpty() { deleteEmptyFolder(); },
   },
   template: `
@@ -1121,7 +1187,10 @@ const GridApp = {
       <button v-if="canDeleteEmpty" class="btn-ok" @click="delEmpty" style="margin-top:20px;background:#5a1e1e;color:#e06c6c;font-size:15px;font-weight:600;padding:14px 22px;border:none;border-radius:12px;cursor:pointer">🗑 Delete Empty Folder</button>
     </div>
     <template v-else>
-      <div v-if="folders.length" class="folder-row">
+      <div v-if="folders.length || showFlatten" class="folder-row">
+        <div v-if="showFlatten" class="folder-chip folder-chip-flatten" @click="onFlatten" title="Show every media file under this folder, grouped by subfolder">
+          <span class="folder-emoji">🗂</span><span class="folder-label">Flatten</span>
+        </div>
         <div v-for="f in folders" :key="f.path" class="folder-chip" @click="onFolderClick(f, $event)">
           <input type="checkbox" class="ms-cb" :data-path="f.path" @click.stop @change="onFolderCheck">
           <span class="folder-emoji">📁</span><span class="folder-label">{{ f.name }}</span>
@@ -1190,7 +1259,7 @@ function toggleSafe() {
   tbar.safeOn = S.safeMode;
   sessionStorage.setItem('safeMode', S.safeMode ? '1' : '0');
   // On the home landing there's no file list to filter — don't navigate into one.
-  if (!S.onHome) loadDir(S.dir, 1, false); // re-fetch with/without the filter
+  if (!S.onHome) loadDir(S.dir, 1, false, S.flatten); // re-fetch, preserving the flatten view
 }
 
 // Censor / Hide (blur): re-engage only when the tab actually becomes hidden
@@ -1234,7 +1303,7 @@ function cycleSort() {
   const o = SORTS[sortIdx];
   tbar.sortLabel = o.label;
   S.sort = o.sort; S.asc = o.asc;
-  loadDir(S.dir, 1, false);
+  loadDir(S.dir, 1, false, S.flatten); // keep the flatten view when re-sorting
 }
 
 // ── Filter chips ──────────────────────────────────────────────────────────
@@ -1248,7 +1317,7 @@ function toggleFilters() {
 function setType(t) {
   S.type = t; tbar.type = t;
   updateFilterCount();
-  loadDir(S.dir, 1, false);
+  loadDir(S.dir, 1, false, S.flatten); // stay in the flatten view if it's active
 }
 
 // ── Search ── wired to the (re-captured) input after the toolbar mounts.
@@ -1277,8 +1346,9 @@ function wireSearch() {
 }
 
 // ── Load directory ────────────────────────────────────────────────────────
-async function loadDir(dir, page = 1, pushStack = true) {
+async function loadDir(dir, page = 1, pushStack = true, flatten = false) {
   S.onHome = false;
+  S.flatten = flatten;
   tbar.pathHome = false;
   tbar.showControls = true;   // reveal search + filters (hidden on home)
   // Dismiss any open card action menu
@@ -1295,7 +1365,9 @@ async function loadDir(dir, page = 1, pushStack = true) {
     S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
   }
 
-  S.dir = dir; S.page = page; S.search = searchInp ? searchInp.value.trim() : '';
+  S.dir = dir; S.page = page;
+  // The flatten view ignores the search box; plain browsing reads it.
+  S.search = (!flatten && searchInp) ? searchInp.value.trim() : '';
   const sc = $('searchClear'); if (sc) sc.style.display = (searchInp && searchInp.value) ? 'block' : 'none';
 
   // Inside the Files & Media view, a search spans all three tabs at once.
@@ -1304,13 +1376,14 @@ async function loadDir(dir, page = 1, pushStack = true) {
   try {
     const q = new URLSearchParams({
       dir: dir || '',
-      page, limit: S.search ? 200 : S.limit, // searching: max page so Select All covers more
+      page, limit: flatten ? 100000 : (S.search ? 200 : S.limit), // searching: max page so Select All covers more
       search: S.search,
       sort: S.sort,
       asc: S.asc,
       type: S.type,
       safe: S.safeMode ? '1' : '0',
     });
+    if (flatten) q.set('flatten', '1');
     if (filesSearchAll) q.set('scope', 'all');
     const data = await fetch('/api/list?' + q).then(r => r.json());
     if (data.error) throw new Error(data.error);
@@ -1326,6 +1399,14 @@ async function loadDir(dir, page = 1, pushStack = true) {
   } catch (err) {
     gridState.error = err.message; gridState.loading = false;
   }
+}
+
+// Flatten: show every media file under the current dir, grouped by subfolder.
+// Push the current (normal) view so Back returns here instead of leaving the folder.
+function openFlatten() {
+  S.navStack.push({ dir: S.dir, page: S.page, search: S.search, type: S.type });
+  if (searchInp) searchInp.value = '';
+  loadDir(S.dir, 1, false, true);
 }
 
 // ── Files & Media combined view (tabs: ComfyUI Output / Favorites) ──
@@ -1554,6 +1635,7 @@ function renderGrid(items) {
   gridState.dir = S.dir;
   gridState.filesMode = S.filesMode;
   gridState.onHome = S.onHome;
+  gridState.flatten = !!S.flatten;
   gridState.comfyOutputDir = S.comfyOutputDir || '';
   gridState.favDir = S.favDir || '';
   gridState.root = S.root || '';
@@ -1563,14 +1645,18 @@ function renderGrid(items) {
 
 // Reactively drop one item from the grid (used after favorite/delete). Falls back
 // to a full refresh if it isn't on the current page.
+// Returns true if the card was dropped from the grid in place, false if the
+// whole page had to be reloaded (callers use this to know if S.mediaItems is
+// already up to date synchronously).
 function removeGridItem(path) {
   const idx = gridState.items.findIndex(i => i.path === path);
   if (idx >= 0) {
     gridState.items.splice(idx, 1);
     S.mediaItems = gridState.items.filter(i => !i.isDir && (i.isVideo || i.isImage || i.isAudio));
-  } else {
-    refreshCurrentPage();
+    return true;
   }
+  refreshCurrentPage();
+  return false;
 }
 
 function closeCardMenu() {
@@ -1616,6 +1702,8 @@ catch (e) { console.error('[pager] Vue mount failed:', e); }
 function openModal(item) {
   if (!item) return;
   modalState.item = item;
+  modalState.idx = S.modalIdx;   // reactive mirror of S (which isn't reactive)
+  syncModalPage();               // so hasPrev/hasNext recompute
   modalState.open = true;
   document.body.style.overflow = 'hidden';
 }
@@ -1624,16 +1712,67 @@ function closeModal() {
   modalState.item = null;   // v-if drops the media element, stopping playback
   document.body.style.overflow = '';
 }
-function modalNav(delta) {
+// Mirror the non-reactive page counters the viewer's ‹ › depend on.
+function syncModalPage() {
+  modalState.count = S.mediaItems.length;
+  modalState.page = S.page;
+  modalState.pages = S.pages || 1;
+}
+function modalShow(i) {
+  S.modalIdx = i; modalState.idx = i; modalState.item = S.mediaItems[i];
+}
+// Step the viewer. Inside the loaded page that's a plain index move; at either
+// end it pulls in the adjacent page (the grid follows along) and lands on that
+// page's first / last media item.
+let modalNavBusy = false;
+async function modalNav(delta) {
   const ni = S.modalIdx + delta;
-  if (ni >= 0 && ni < S.mediaItems.length) { S.modalIdx = ni; modalState.item = S.mediaItems[ni]; }
+  if (ni >= 0 && ni < S.mediaItems.length) { modalShow(ni); return; }
+  if (modalNavBusy) return;
+  modalNavBusy = true;
+  modalState.loading = true;
+  try { await modalNavPage(delta); }
+  finally { modalNavBusy = false; modalState.loading = false; }
+}
+// Walk pages in `delta`'s direction until one has media to show; pages holding
+// only folders are skipped. If the direction runs dry we return to the page we
+// started on, still showing the same item.
+async function modalNavPage(delta) {
+  const fromPage = S.page, fromPath = modalState.item ? modalState.item.path : null;
+  for (let p = fromPage + delta; p >= 1 && p <= (S.pages || 1); p += delta) {
+    await loadDir(S.dir, p, false, S.flatten);
+    if (!modalState.open) return;   // closed mid-load — leave the grid where it landed
+    if (gridState.error) break;     // fetch failed: keep showing the current item
+    syncModalPage();
+    if (!S.mediaItems.length) continue;
+    modalShow(delta > 0 ? 0 : S.mediaItems.length - 1);
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (S.page !== fromPage) {
+    await loadDir(S.dir, fromPage, false, S.flatten);
+    syncModalPage();
+    const back = S.mediaItems.findIndex(m => m.path === fromPath);
+    if (back >= 0) modalShow(back);
+  }
+}
+// The item on screen was just favorited/deleted: stay open and show the item
+// that slid into its slot (the next one), falling back to the previous one at
+// the end of the list. Closes only when nothing is left.
+function modalAfterRemoval(removedInPlace) {
+  if (!modalState.open) return;
+  if (!removedInPlace) { closeModal(); return; }   // list reloading async — can't advance safely
+  const list = S.mediaItems;
+  if (!list.length) { closeModal(); return; }
+  syncModalPage();
+  modalShow(Math.min(S.modalIdx, list.length - 1));
 }
 const ModalApp = {
   setup() { return { s: modalState }; },
   computed: {
     fileUrl() { return this.s.item ? '/file/' + enc(this.s.item.path) : ''; },
-    hasPrev() { return S.modalIdx > 0; },
-    hasNext() { return S.modalIdx < S.mediaItems.length - 1; },
+    hasPrev() { return this.s.idx > 0 || this.s.page > 1; },
+    hasNext() { return this.s.idx < this.s.count - 1 || this.s.page < this.s.pages; },
   },
   methods: {
     close: closeModal,
@@ -1652,9 +1791,9 @@ const ModalApp = {
         <button class="modal-act-btn m-del" @click="del">🗑 Delete</button>
       </div>
       <button class="modal-close" @click="close">✕</button>
-      <button class="modal-nav" id="modalPrev" :disabled="!hasPrev" @click="prev">‹</button>
+      <button class="modal-nav" id="modalPrev" :disabled="!hasPrev || s.loading" @click="prev">‹</button>
       <button v-if="s.item && s.item.isVideo" class="modal-nav" id="modalMute" @click="toggleMute">{{ s.muted ? '🔇' : '🔊' }}</button>
-      <button class="modal-nav" id="modalNext" :disabled="!hasNext" @click="next">›</button>
+      <button class="modal-nav" id="modalNext" :disabled="!hasNext || s.loading" @click="next">›</button>
       <div class="modal-body">
         <video v-if="s.item && s.item.isVideo" ref="vid" :key="s.item.path" :src="fileUrl" controls playsinline autoplay loop @loadstart="$event.target.muted = s.muted"></video>
         <img v-else-if="s.item && s.item.isImage" :key="s.item.path" :src="fileUrl" :alt="s.item.name">
@@ -1691,9 +1830,9 @@ async function doFavorite(item, cardEl, fromModal = false) {
         }).then(r => r.json());
         if (r.error) throw new Error(r.error);
         showToast('⭐ Moved to Favorites');
-        if (fromModal) closeModal();
-        // Remove card from grid
-        removeGridItem(item.path);
+        // Remove card from grid, then advance the viewer instead of closing it
+        const removed = removeGridItem(item.path);
+        if (fromModal) modalAfterRemoval(removed);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -1717,8 +1856,8 @@ async function doDelete(item, cardEl, fromModal = false) {
         }).then(r => r.json());
         if (r.error) throw new Error(r.error);
         showToast('🗑 Deleted');
-        if (fromModal) closeModal();
-        removeGridItem(item.path);
+        const removed = removeGridItem(item.path);
+        if (fromModal) modalAfterRemoval(removed);
       } catch (err) {
         showToast('Error: ' + err.message);
       }
@@ -1727,7 +1866,7 @@ async function doDelete(item, cardEl, fromModal = false) {
 }
 
 function refreshCurrentPage() {
-  loadDir(S.dir, S.page, false);
+  loadDir(S.dir, S.page, false, S.flatten);
 }
 
 // ── Metadata Viewer ──────────────────────────────────────────────────────
@@ -2088,7 +2227,7 @@ try {
       toggleSelect() { toggleMultiSelect(); },
       openSettings() { if (window.openSettingsPanel) window.openSettingsPanel(); },
       openWords() { if (window.openWordsPanel) window.openWordsPanel(); },
-      bulkSelAll, bulkSelFiles, bulkFav, bulkDel,
+      bulkSelAll, bulkSelFiles, bulkMerge, bulkFav, bulkDel,
       clickTab(id) { if (S.filesTab !== id) loadFilesTab(id); },
     },
   }).mount('#toolbarApp');
@@ -2484,6 +2623,15 @@ $('statusFeatures').onclick = () => {
   .rmx-lbl{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93;text-transform:uppercase;letter-spacing:.4px}
   .rmx-tgl{width:15px;height:15px;accent-color:#0a84ff;cursor:pointer}
   .rmx-mut{color:#8e8e93}
+  /* Field-build progress. The bar is determinate only while there is something
+     real to measure (the /object_info byte count); otherwise it slides. */
+  .rmx-prog{padding:10px 2px}
+  .rmx-prog-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12.5px;color:#c7c7cc;margin-bottom:7px}
+  .rmx-prog-sub{color:#8e8e93;font-size:11.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .rmx-prog-bar{height:6px;border-radius:3px;background:#2c2c2e;overflow:hidden}
+  .rmx-prog-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#0a84ff,#64d2ff);transition:width .25s ease}
+  .rmx-prog-bar.indet .rmx-prog-fill{width:38%!important;transition:none;animation:rmxSlide 1.15s ease-in-out infinite}
+  @keyframes rmxSlide{0%{margin-left:-38%}100%{margin-left:100%}}
   .rmx-seedwrap{display:flex;gap:8px;align-items:center}
   .rmx-seed{position:relative;width:58px;height:30px;border-radius:15px;border:1px solid #48484a;background:#2c2c2e;cursor:pointer;padding:0;flex:none;transition:background .15s,border-color .15s}
   .rmx-seed.on{background:#0a84ff;border-color:#0a84ff}
@@ -2542,11 +2690,19 @@ $('statusFeatures').onclick = () => {
   .rmx-tabs button{background:none;border:none;color:#8e8e93;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:6px}
   .rmx-tabs button.on{background:#2c2c2e;color:#f2f2f7}
   .rmx-btn2{background:#2c2c2e;border:1px solid #48484a;border-radius:8px;color:#f2f2f7;cursor:pointer;padding:6px 12px;font-size:12px}
+  .rmx-btn2:disabled{opacity:.45;cursor:not-allowed}
+  .rmx-inp.taken{border-color:#e06c6c}
   .rmx-btn2:hover{border-color:#0a84ff}
   .rmx-lora-more{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;padding:5px 9px;margin-top:2px;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:8px;font-size:12px;color:#8e8e93;user-select:none}
   .rmx-lora-more:hover{border-color:#0a84ff;color:#c7c7cc}
   .rmx-lora-arrow{transition:transform .12s;color:#8e8e93}
   .rmx-lora-arrow.open{transform:rotate(180deg)}
+  /* Field help: an ⓘ icon with a hover/focus tooltip (e.g. Model Sampling Shift). */
+  .rmx-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#2c2c2e;color:#c7c7cc;font-size:10px;font-style:normal;font-weight:700;line-height:1;cursor:help;margin-left:5px;border:1px solid #3a3a3c;vertical-align:middle;flex:none}
+  .rmx-info .rmx-tip{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);white-space:pre-line;width:max-content;max-width:250px;background:#1c1c1e;color:#eaeaea;border:1px solid #3a3a3c;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.55;box-shadow:0 8px 24px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .12s;z-index:120;text-align:left;font-weight:400;text-transform:none;letter-spacing:0}
+  .rmx-info:hover .rmx-tip,.rmx-info:focus .rmx-tip{opacity:1}
+  .rmx-lora-add{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .rmx-lora-add select{flex:1;min-width:0}
   .rmx-node{background:#161618;border:1px solid #2c2c2e;border-radius:8px;margin-top:6px}
   .rmx-node>summary{list-style:none;cursor:pointer;padding:7px 10px;font-size:12px;color:#c7c7cc}
   .rmx-node>summary::-webkit-details-marker{display:none}
@@ -2940,7 +3096,16 @@ $('statusFeatures').onclick = () => {
 
   const FieldControl = {
     props: ['field'],
-    setup(props) { const loraExpanded = ref(false); const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length); const openPicker = inject('openPicker', null); return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount, openPicker }; },
+    setup(props) {
+      const loraExpanded = ref(false);
+      const offCount = computed(() => (props.field.value || []).filter(r => r && !r.on).length);
+      const openPicker = inject('openPicker', null);
+      const loraOptions = inject('loraOptions', ref([]));
+      const addLoraRow = inject('addLoraRow', null);
+      const newLora = ref('');
+      function doAdd() { if (addLoraRow && newLora.value) { addLoraRow(props.field, newLora.value); newLora.value = ''; } }
+      return { t: computed(() => ctype(props.field)), shortLora, loraExpanded, offCount, openPicker, loraOptions, addLoraRow, newLora, doAdd };
+    },
     template: `
       <textarea v-if="t==='multiline'" class="rmx-inp" style="width:100%;resize:vertical" rows="7" v-model="field.value"></textarea>
       <span v-else-if="field.kind==='seed'" class="rmx-seedwrap">
@@ -2958,6 +3123,11 @@ $('statusFeatures').onclick = () => {
         </div>
         <div v-if="!field.value.length" class="rmx-mut" style="font-size:12px">no lora slots</div>
         <div v-else-if="offCount" class="rmx-lora-more" @click="loraExpanded=!loraExpanded"><span>{{ loraExpanded ? 'Hide disabled loras' : ('＋ ' + offCount + ' more lora' + (offCount===1?'':'s')) }}</span><span class="rmx-lora-arrow" :class="{open: loraExpanded}">▾</span></div>
+        <div v-if="addLoraRow && loraOptions.length" class="rmx-lora-add">
+          <input class="rmx-inp" :list="'rmx-lora-list-'+field.id" v-model="newLora" placeholder="＋ Add LoRA — type to search…">
+          <datalist :id="'rmx-lora-list-'+field.id"><option v-for="o in loraOptions" :key="o" :value="o"></option></datalist>
+          <button type="button" class="rmx-btn2" :disabled="!newLora" @click="doAdd">Add</button>
+        </div>
       </div>
       <span v-else-if="t==='image' || t==='video' || t==='audio'" class="rmx-imgf">
         <input type="text" class="rmx-inp" style="width:200px" v-model="field.value">
@@ -3084,6 +3254,9 @@ $('statusFeatures').onclick = () => {
       const meta = reactive({ prompt: '', seed: null, embedded: null, embeddedWf: null, matchedWf: null });
       const startedId = ref(null);
       const saveMsg = ref('');
+      // "Save workflow" — import this image's embedded graph into the app so any
+      // other image can pick it from the dropdown. Only offered on Inherit.
+      const wfSave = reactive({ open: false, name: '', busy: false, msg: '', existing: [] });
       const claudeFix = reactive({ running: false });
       const nodeFilter = ref('');
       const tab = ref('workflow');
@@ -3092,6 +3265,51 @@ $('statusFeatures').onclick = () => {
       const job = computed(() => startedId.value ? byId(startedId.value) : null);
       const isVideo = computed(() => S.type === 'video');
       const fileUrl = computed(() => '/file/' + enc(S.path));
+
+      // ── Load progress ──────────────────────────────────────────────────
+      // Building the controls stalls on ComfyUI's /object_info, which takes ~10s
+      // to answer with nothing observable in between. The honest bar is elapsed
+      // time against the previous fetch's duration (the server reports both);
+      // with no prior measurement it slides instead of inventing a number.
+      const prog = reactive({ on: false, pct: 0, exact: false, label: '', detail: '', secs: 0, ownClock: false });
+      let progTick = null, progPoll = null, progT0 = 0;
+      function progStart(label, pct) {
+        prog.on = true; prog.label = label; prog.pct = pct; prog.exact = false; prog.detail = ''; prog.ownClock = false;
+        if (!progTick) { progT0 = Date.now(); prog.secs = 0; progTick = setInterval(() => { prog.secs = ((Date.now() - progT0) / 1000).toFixed(1); }, 100); }
+      }
+      // Poll the server's byte counter while the field-config request is out.
+      function progWatch(nodeCount) {
+        clearInterval(progPoll);
+        progPoll = setInterval(async () => {
+          try {
+            const p = await fetch('/api/objectinfo-progress').then(r => r.json());
+            if (p.active) {
+              prog.label = 'Waiting for ComfyUI node definitions…';
+              prog.ownClock = true;   // this stage reports its own elapsed time
+              const el = (p.elapsedMs / 1000).toFixed(1);
+              if (p.lastMs && p.elapsedMs <= p.lastMs) {
+                prog.exact = true;
+                prog.pct = 30 + Math.round(55 * (p.elapsedMs / p.lastMs));
+                prog.detail = el + 's of ~' + (p.lastMs / 1000).toFixed(0) + 's';
+              } else if (p.lastMs) {
+                // Past the estimate: stop implying a known remainder.
+                prog.exact = false;
+                prog.detail = el + 's — longer than the usual ~' + (p.lastMs / 1000).toFixed(0) + 's';
+              } else { prog.exact = false; prog.detail = el + 's'; }
+            } else {
+              prog.ownClock = false;
+              prog.exact = false; prog.pct = 88;
+              prog.label = 'Building controls…';
+              prog.detail = nodeCount ? nodeCount + ' nodes' : '';
+            }
+          } catch (e) {}
+        }, 250);
+      }
+      function progStop() {
+        clearInterval(progTick); clearInterval(progPoll); progTick = progPoll = null;
+        prog.on = false; prog.pct = 0; prog.exact = false;
+      }
+      onUnmounted(progStop);
 
       async function loadMeta() {
         meta.prompt = ''; meta.seed = null; meta.embedded = null; let embeddedWf = null;
@@ -3112,20 +3330,37 @@ $('statusFeatures').onclick = () => {
         wf.value = pick || '';
       }
       async function loadFields() {
-        if (!wf.value) { cfg.fields = []; cfg.loading = false; return; }
+        if (!wf.value) { cfg.fields = []; cfg.loading = false; progStop(); return; }
         cfg.loading = true;
+        const nodeCount = (meta.embeddedWf && meta.embeddedWf.nodes) ? meta.embeddedWf.nodes.length : 0;
+        progStart('Building controls…', 30);
+        if (nodeCount) prog.detail = nodeCount + ' nodes';
+        progWatch(nodeCount);
         try {
           const c = wf.value === '__inherit__'
             ? (meta.embeddedWf
                 ? await fetch('/api/workflow-field-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: meta.embeddedWf }) }).then(r => r.json())
                 : { error: 'This image has no embedded workflow graph to inherit.' })
             : await fetch('/api/workflow-field-config?name=' + enc(wf.value)).then(r => r.json());
+          clearInterval(progPoll); progPoll = null;
+          prog.exact = true; prog.pct = 96;
+          prog.label = 'Rendering controls…';
+          prog.detail = Array.isArray(c.fields) ? c.fields.length + ' controls' : '';
           if (c.error || !Array.isArray(c.fields)) { cfg.error = c.error || 'no config'; cfg.fields = []; cfg.presets = []; }
           else {
             cfg.error = ''; cfg.presets = c.presets || [];
             for (const f of c.fields) { if (f.kind === 'seed') { if (Number(f.value) < 0) f.value = ''; f._pin = false; } if (ctype(f) === 'lora_rows' && !Array.isArray(f.value)) f.value = []; if (ctype(f) === 'boolean') f.value = !!f.value; }
-            if (meta.prompt) { const pf = c.fields.find(f => f.kind === 'prompt' && !f.variant); if (pf) pf.value = meta.prompt; }
-            if (meta.seed != null && meta.seed >= 0) { const sf = c.fields.find(f => f.kind === 'seed'); if (sf) sf.value = meta.seed; }
+            // A named workflow opens on its stored defaults, so seed it from the
+            // image's metadata. Inherit must NOT do that: its config was generated
+            // from this image's own graph, so every value is already the one that
+            // produced the image — while mainPromptOf()/meta.seed are heuristics
+            // over the flat API prompt. In a graph with several CLIPTextEncode
+            // nodes (only one wired to the sampler) the heuristic picks whichever
+            // text is longest, replacing the real prompt with an unused one.
+            if (wf.value !== '__inherit__') {
+              if (meta.prompt) { const pf = c.fields.find(f => f.kind === 'prompt' && !f.variant); if (pf) pf.value = meta.prompt; }
+              if (meta.seed != null && meta.seed >= 0) { const sf = c.fields.find(f => f.kind === 'seed'); if (sf) sf.value = meta.seed; }
+            }
             // When the source media carries this exact workflow, prefill every field
             // (loras, steps, cfg, size…) from the values it was actually generated with.
             if (meta.embeddedWf && wf.value === meta.matchedWf) prefillFromEmbedded(c.fields, meta.embeddedWf);
@@ -3133,8 +3368,55 @@ $('statusFeatures').onclick = () => {
           }
         } catch (e) { cfg.error = String(e.message || e); }
         cfg.loading = false;
+        progStop();
       }
-      async function init() { startedId.value = null; cfg.loading = true; const e = await loadMeta(); await loadWorkflows(e); await loadFields(); }
+      // ── Save the inherited workflow into the app ───────────────────────
+      const wfFileName = n => (n.toLowerCase().endsWith('.json') ? n : n + '.json');
+      // Taken names are refused outright — never overwrite an existing workflow.
+      // (The server enforces this too; this just says so before the round trip.)
+      const wfNameTaken = computed(() => {
+        const n = (wfSave.name || '').trim();
+        return !!n && wfSave.existing.includes(wfFileName(n).toLowerCase());
+      });
+      watch(() => wfSave.name, () => { wfSave.msg = ''; });   // editing the name clears a stale error
+      async function openWfSave() {
+        wfSave.name = (S.name || 'workflow').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_');
+        wfSave.msg = ''; wfSave.open = true;
+        try { wfSave.existing = (await fetch('/api/workflows/all').then(r => r.json())).map(w => w.name.toLowerCase()); }
+        catch (e) { wfSave.existing = []; }
+      }
+      async function saveEmbeddedWf() {
+        const name = (wfSave.name || '').trim();
+        if (!name || !meta.embeddedWf || wfSave.busy) return;
+        if (wfNameTaken.value) { wfSave.msg = '"' + wfFileName(name) + '" already exists — pick another name.'; return; }
+        wfSave.busy = true; wfSave.msg = '';
+        try {
+          const r = await fetch('/api/workflows/save', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, workflow: meta.embeddedWf, enable: true }),
+          }).then(r => r.json());
+          if (!r.ok) throw new Error(r.error || 'Save failed');
+          workflows.value = await fetch('/api/workflows').then(r => r.json());
+          // This image's graph now IS that saved workflow, so record the match:
+          // it keeps the field values coming from the image rather than from the
+          // metadata heuristics (see the Inherit note in loadFields).
+          meta.matchedWf = r.name;
+          wfSave.open = false;
+          wf.value = r.name;                       // switches the dropdown (reloads fields)
+          saveMsg.value = 'Saved "' + r.name + '"';
+          setTimeout(() => { saveMsg.value = ''; }, 2500);
+        } catch (e) { wfSave.msg = String(e.message || e); }
+        wfSave.busy = false;
+      }
+
+      async function init() {
+        startedId.value = null; cfg.loading = true;
+        progStart('Reading image metadata…', 8);
+        const e = await loadMeta();
+        progStart('Matching saved workflows…', 20);
+        await loadWorkflows(e);
+        await loadFields();
+      }
       onMounted(init);
       watch(wf, () => { startedId.value = null; loadFields(); });
 
@@ -3166,7 +3448,7 @@ $('statusFeatures').onclick = () => {
         const fv = {};
         for (const f of cfg.fields) { if (!f.enabled) continue; const t = ctype(f);
           if (f.kind === 'seed') { if (f._pin && String(f.value).trim() !== '') fv[f.id] = parseInt(f.value, 10); continue; }
-          if (t === 'lora_rows') { fv[f.id] = (f.value || []).map(r => ({ slot: r.slot, on: r.on, strength: r.strength })); continue; }
+          if (t === 'lora_rows') { fv[f.id] = (f.value || []).map(r => ({ slot: r.slot, on: r.on, strength: r.strength, lora: r.lora })); continue; }
           if (t === 'boolean') { fv[f.id] = !!f.value; continue; }
           if (f.value !== '' && f.value != null) fv[f.id] = f.value;
         }
@@ -3219,7 +3501,7 @@ $('statusFeatures').onclick = () => {
         const logText = jobLogText(j).trim(); if (!logText) return;
         try { await fetch('/api/debug-results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow: j.workflowFile, log: logText }, null, 2) }); } catch (e) {}
         const clipped = logText.length > 12000 ? ('…(earlier truncated)…\n' + logText.slice(-12000)) : logText;
-        const prompt = 'The ComfyRemix app ran the workflow file "user/default/workflows/' + j.workflowFile + '" and it failed or misbehaved. Review the run log below, find the root cause, and EDIT that workflow file so it works. Keep the workflow\'s intent — only change what is needed (bad widget values, wrong connections, missing/renamed models; check the models folders for what actually exists before swapping a model name). When done, summarize what you changed in 2-3 sentences.\n\nIf file edits are REJECTED by permissions, fall back to the local APIs via curl: POST http://127.0.0.1:8080/api/workflows/save with {"name":"' + j.workflowFile + '","workflow":<corrected full graph JSON>,"enable":true}, then queue a test run via /api/workflow-prompt?name=' + encodeURIComponent(j.workflowFile) + ' and /api/comfy/api/prompt.\n\n=== RUN LOG ===\n' + clipped;
+        const prompt = 'The ComfyRemix app ran the workflow file "user/default/workflows/' + j.workflowFile + '" and it failed or misbehaved. Review the run log below, find the root cause, and EDIT that workflow file so it works. Keep the workflow\'s intent — only change what is needed (bad widget values, wrong connections, missing/renamed models; check the models folders for what actually exists before swapping a model name). When done, summarize what you changed in 2-3 sentences.\n\nIf file edits are REJECTED by permissions, fall back to the local APIs via curl: POST http://127.0.0.1:8080/api/workflows/save with {"name":"' + j.workflowFile + '","workflow":<corrected full graph JSON>,"enable":true,"overwrite":true} ("overwrite" is required — the server returns HTTP 409 rather than replacing an existing workflow without it), then queue a test run via /api/workflow-prompt?name=' + encodeURIComponent(j.workflowFile) + ' and /api/comfy/api/prompt.\n\n=== RUN LOG ===\n' + clipped;
         const log = (m, cls) => { j._log.push({ m, cls: cls || '' }); };
         claudeFix.running = true;
         log('🤖 Claude is reviewing the log and workflow "' + j.workflowFile + '"…');
@@ -3278,9 +3560,42 @@ $('statusFeatures').onclick = () => {
       function onPick(path) { if (pickerField) pickerField.value = path; picker.open = false; }
       provide('openPicker', openPicker);
 
+      // Add-LoRA-row support: available lora files + a handler that adds a row and,
+      // when the workflow has a High + Low pair of Power Lora Loaders, mirrors the
+      // add into the other loader (swapping the high/low token in the filename).
+      const loraOptions = ref([]);
+      (async () => { try { const d = await fetch('/api/loras').then(r => r.json()); loraOptions.value = (d && d.loras) || []; } catch (e) {} })();
+      function swapHiLo(name, toLow) {
+        if (!name) return name;
+        const rules = toLow
+          ? [[/high[_-]?noise/gi, m => m.replace(/high/i, 'low')], [/([_\-\b])high\b/gi, '$1low'], [/\bHIGH\b/g, 'LOW']]
+          : [[/low[_-]?noise/gi, m => m.replace(/low/i, 'high')], [/([_\-\b])low\b/gi, '$1high'], [/\bLOW\b/g, 'HIGH']];
+        let out = name; for (const [re, rep] of rules) out = out.replace(re, rep); return out;
+      }
+      const newLoraRow = (lora, on) => ({ slot: null, on: on !== false, lora, strength: 1, strengthTwo: null, _new: true });
+      function addLoraRow(field, lora) {
+        if (!lora) return;
+        if (!Array.isArray(field.value)) field.value = [];
+        field.value.push(newLoraRow(lora, true));
+        // High/Low sync: mirror into the paired loader when there are exactly two.
+        const loraFields = cfg.fields.filter(f => f.enabled && f.kind === 'lora_list');
+        if (loraFields.length === 2) {
+          const other = loraFields.find(f => f.id !== field.id);
+          if (other) {
+            const thisIsHigh = /high/i.test(String(field.label));
+            const cand = swapHiLo(lora, thisIsHigh); // other loader is the opposite noise level
+            const otherLora = (cand !== lora && loraOptions.value.includes(cand)) ? cand : lora;
+            if (!Array.isArray(other.value)) other.value = [];
+            other.value.push(newLoraRow(otherLora, true));
+          }
+        }
+      }
+      provide('loraOptions', loraOptions);
+      provide('addLoraRow', addLoraRow);
+
       return { S, tab, runCount, workflows, wf, cfg, selectedPreset, meta, job, isVideo, fileUrl, enabledFields, hiddenFields, isWide, nodeGroups, enabledLoras, loraHigh, loraLow, loraOther, remix, cancelJob, close, outUrl, saveMsg, claudeFix, nodeFilter, saveLog, fixWithClaude, filteredNodes, nodeInputs, picker, onPick,
         replacements, replAllOn, replActiveCount, addRepl, delRepl, swapRepl, toggleReplAll, saveReplacements, nodeEdits, editVal, setEdit,
-        lightbox, lbItems, lbCur, openResult, lbNav };
+        lightbox, lbItems, lbCur, openResult, lbNav, prog, wfSave, wfNameTaken, openWfSave, saveEmbeddedWf };
     },
     template: `
       <div class="rmx-overlay" @click.self="close">
@@ -3297,13 +3612,29 @@ $('statusFeatures').onclick = () => {
           <div class="rmx-body">
             <div class="rmx-media" v-show="tab==='preview'"><video v-if="isVideo" :src="fileUrl" controls loop muted></video><img v-else :src="fileUrl"></div>
             <div class="rmx-form" v-show="tab==='workflow'">
-              <div class="rmx-run" style="margin-bottom:12px"><label class="rmx-lbl" style="margin:0;flex:none">Workflow</label><select class="rmx-inp" v-model="wf" style="flex:1;min-width:0" title="Workflow"><option v-if="meta.embeddedWf" value="__inherit__">⤷ Inherit (this image)</option><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select></div>
-              <div v-if="cfg.loading" class="rmx-mut">Loading fields…</div>
+              <div class="rmx-run" style="margin-bottom:12px"><label class="rmx-lbl" style="margin:0;flex:none">Workflow</label><select class="rmx-inp" v-model="wf" style="flex:1;min-width:0" title="Workflow"><option v-if="meta.embeddedWf" value="__inherit__">⤷ Inherit (this image)</option><option v-for="w in workflows" :key="w.name" :value="w.name">{{ w.label }}</option></select>
+                <button v-if="wf==='__inherit__' && meta.embeddedWf && !wfSave.open" class="rmx-btn2" @click="openWfSave" title="Save this image's embedded workflow into the app so any image can select it">💾 Save workflow</button>
+              </div>
+              <div v-if="wfSave.open" class="rmx-run" style="margin:-6px 0 12px">
+                <input class="rmx-inp" :class="{taken: wfNameTaken}" style="flex:1;min-width:0" v-model="wfSave.name" placeholder="Workflow name" spellcheck="false" @keyup.enter="saveEmbeddedWf" @keyup.esc="wfSave.open=false">
+                <button class="rmx-btn2" :disabled="wfSave.busy || !wfSave.name.trim() || wfNameTaken" @click="saveEmbeddedWf">{{ wfSave.busy ? 'Saving…' : 'Save' }}</button>
+                <button class="rmx-btn2" @click="wfSave.open=false">Cancel</button>
+              </div>
+              <div v-if="wfSave.open && wfNameTaken" class="rmx-mut" style="margin:-6px 0 10px;font-size:12px;color:#e06c6c">⚠ "{{ wfSave.name.trim() }}" already exists — pick another name.</div>
+              <div v-else-if="wfSave.msg" class="rmx-mut" style="margin:-6px 0 10px;font-size:12px">⚠ {{ wfSave.msg }}</div>
+              <div v-if="saveMsg && !job" class="rmx-mut" style="margin:-6px 0 10px;font-size:12px">✓ {{ saveMsg }}</div>
+              <div v-if="cfg.loading" class="rmx-prog">
+                <div class="rmx-prog-top">
+                  <span>{{ prog.label || 'Loading fields…' }}</span>
+                  <span class="rmx-prog-sub">{{ prog.detail }}<template v-if="!prog.ownClock"><template v-if="prog.detail"> · </template>{{ prog.secs }}s</template></span>
+                </div>
+                <div class="rmx-prog-bar" :class="{indet: !prog.exact}"><div class="rmx-prog-fill" :style="{width: prog.pct + '%'}"></div></div>
+              </div>
               <div v-else-if="cfg.error" class="rmx-mut">Couldn’t load fields: {{ cfg.error }}</div>
               <div v-else>
                 <div v-if="nodeGroups.loose.length" class="rmx-grid">
                   <div v-for="f in nodeGroups.loose" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
-                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                    <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.help" class="rmx-info" tabindex="0" @click.prevent.stop><span class="rmx-tip">{{ f.help }}</span>i</span> <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
                     <field-control :field="f"></field-control>
                   </div>
                 </div>
@@ -3311,7 +3642,7 @@ $('statusFeatures').onclick = () => {
                   <div class="rmx-nodegroup-title">{{ g.title }}</div>
                   <div class="rmx-grid">
                     <div v-for="f in g.fields" :key="f.id" class="rmx-field" :class="{wide: isWide(f)}">
-                      <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
+                      <label class="rmx-lbl"><input type="checkbox" class="rmx-tgl" checked @change="f.enabled=false" title="Hide field"> {{ f.label }} <span v-if="f.help" class="rmx-info" tabindex="0" @click.prevent.stop><span class="rmx-tip">{{ f.help }}</span>i</span> <span v-if="f.unreachable" style="color:#ff9f0a" title="not on the output path">⚠</span></label>
                       <field-control :field="f"></field-control>
                     </div>
                   </div>
