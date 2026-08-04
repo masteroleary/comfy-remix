@@ -734,12 +734,176 @@ function warmObjectInfo(attempt = 0) {
 }
 setTimeout(warmObjectInfo, 3000);
 
+// ── Subgraph flattening ──────────────────────────────────────────────────────
+// A workflow node whose `type` is a UUID listed in `definitions.subgraphs` is a
+// *subgraph instance*: ComfyUI's frontend inlines its interior at queue time and
+// nothing in object_info describes it. Without this pass the instance is dropped
+// (its entire interior never runs) and links out of it hit the unknown-node
+// pass-through in resolveBypass, which silently rewires consumers to the
+// subgraph's FIRST input — ComfyUI then rejects them with a type mismatch.
+// Interior ids are namespaced `<instance>:<inner>` (ComfyUI's own convention).
+// Muted (mode 2) / bypassed (mode 4) instances are left unexpanded on purpose:
+// resolveBypass already gives them the correct dead / type-matched pass-through.
+function flattenSubgraphs(wf) {
+  // Normalize both link encodings: top-level uses arrays, definitions use objects.
+  const toArr = (l) => Array.isArray(l)
+    ? [l[0], String(l[1]), l[2], String(l[3]), l[4], l[5]]
+    : [l.id, String(l.origin_id), l.origin_slot, String(l.target_id), l.target_slot, l.type];
+  const nodes = (wf.nodes || []).slice();
+  const links = (wf.links || []).map(toArr);
+  const defs = new Map();
+  for (const d of (wf.definitions && wf.definitions.subgraphs) || []) defs.set(String(d.id), d);
+  if (!defs.size) return { nodes, links };
+
+  let nextLink = 1;
+  for (const l of links) { const n = Number(l[0]); if (Number.isFinite(n) && n >= nextLink) nextLink = n + 1; }
+
+  // One instance per pass; interiors may hold further instances (nested subgraphs),
+  // so keep going until none are left. The cap is a cycle guard.
+  for (let pass = 0; pass < 500; pass++) {
+    const idx = nodes.findIndex(n => defs.has(String(n.type)) && n.mode !== 2 && n.mode !== 4);
+    if (idx < 0) break;
+    const inst = nodes[idx];
+    const def = defs.get(String(inst.type));
+    const pfx = String(inst.id) + ':';
+    nodes.splice(idx, 1);
+
+    const instInputs = inst.inputs || [];
+    // Promoted widgets: every widget-flagged socket consumes one widgets_values
+    // slot in order (linked ones included — the stale value stays behind), but
+    // only an UNLINKED one actually carries a value into the interior.
+    const promoted = {};
+    let wIdx = 0;
+    const wv = Array.isArray(inst.widgets_values) ? inst.widgets_values : [];
+    for (const inp of instInputs) {
+      if (!inp || !inp.widget) continue;
+      if (inp.link == null && wIdx < wv.length) promoted[inp.name] = wv[wIdx];
+      wIdx++;
+    }
+    // Match the instance's sockets to the definition's inputs by name — a
+    // definition can declare an input the instance doesn't show (and vice versa),
+    // so positional matching would misalign the rest.
+    const feed = (def.inputs || []).map((di, i) => {
+      const inp = instInputs.find(x => x && x.name === di.name) || instInputs[i];
+      return { link: inp && inp.link != null ? inp.link : null, value: promoted[di.name] };
+    });
+
+    const inner = (def.nodes || []).map(n => Object.assign({}, n, {
+      id: pfx + n.id,
+      inputs: (n.inputs || []).map(i => Object.assign({}, i, { link: null })),
+    }));
+    const innerById = new Map(inner.map(n => [String(n.id), n]));
+    const outProducer = [];
+    const newLinks = [];
+    for (const raw of def.links || []) {
+      const [, from, fromSlot, to, toSlot, type] = toArr(raw);
+      if (to === '-20') { outProducer[toSlot] = { node: pfx + from, slot: fromSlot }; continue; }
+      const tgt = innerById.get(pfx + to);
+      const tgtInp = tgt && tgt.inputs[toSlot];
+      if (from === '-10') {
+        const f = feed[fromSlot];
+        if (!tgtInp || !f) continue;
+        // Reuse the OUTER link id so resolveBypass still walks reroutes/bypassed
+        // nodes upstream of the subgraph exactly as it does for a plain link.
+        if (f.link != null) tgtInp.link = f.link;
+        else if (f.value !== undefined) tgt.__promoted = Object.assign(tgt.__promoted || {}, { [tgtInp.name]: f.value });
+        continue;
+      }
+      const id = nextLink++;
+      if (tgtInp) tgtInp.link = id;
+      newLinks.push([id, pfx + from, fromSlot, pfx + to, toSlot, type]);
+    }
+    // Consumers keep their link ids; the link's ORIGIN moves from the instance to
+    // the interior node that actually produces that output slot. An unconnected
+    // subgraph output leaves the link dangling, which the prune pass cleans up.
+    for (const l of links) {
+      if (l[1] !== String(inst.id)) continue;
+      const p = outProducer[l[2]];
+      l[1] = p ? p.node : '__subgraph_unconnected__';
+      if (p) l[2] = p.slot;
+    }
+    nodes.push(...inner);
+    links.push(...newLinks);
+  }
+  return { nodes, links };
+}
+
+// V3 dynamic combos (COMFY_DYNAMICCOMBO_V3): the selected option reveals extra
+// REQUIRED inputs whose ids are dotted ("format.bit_depth"). ComfyUI expands them
+// server-side from the chosen key, so they never appear in object_info's required
+// map — emit them here or validation fails with a bare "Required input is
+// missing". Their values follow the selector in widgets_values.
+function expandDynamicCombo(inputs, name, def, selectedKey, widgetValues, widgetIdx) {
+  const opt = (((def && def[1]) || {}).options || []).find(o => o.key === selectedKey);
+  if (!opt || !opt.inputs) return widgetIdx;
+  for (const cat of ['required', 'optional']) {
+    for (const [sub, subDef] of Object.entries(opt.inputs[cat] || {})) {
+      const id = name + '.' + sub;
+      const subType = Array.isArray(subDef) ? (Array.isArray(subDef[0]) ? 'COMBO' : String(subDef[0])) : String(subDef);
+      const subOpts = (Array.isArray(subDef) && subDef[1]) || {};
+      let val;
+      while (widgetIdx < widgetValues.length) {
+        let v = widgetValues[widgetIdx++];
+        if (Array.isArray(v) && v.length === 2 && Array.isArray(v[1])) v = v[0];
+        const typeOk =
+          subType === 'BOOLEAN' ? (typeof v === 'boolean' || v === 0 || v === 1)
+          : (subType === 'INT' || subType === 'FLOAT') ? typeof v === 'number'
+          : (v === null || typeof v !== 'object');
+        if (typeOk) { val = v; break; }
+      }
+      const choices = Array.isArray(subOpts.options) ? subOpts.options : (Array.isArray(subDef[0]) ? subDef[0] : null);
+      if (choices && choices.length && !choices.includes(val)) val = choices.includes(subOpts.default) ? subOpts.default : choices[0];
+      if (val === undefined) val = subOpts.default;
+      if (val !== undefined) inputs[id] = val;
+      if (subType === 'COMFY_DYNAMICCOMBO_V3') widgetIdx = expandDynamicCombo(inputs, id, subDef, val, widgetValues, widgetIdx);
+    }
+  }
+  return widgetIdx;
+}
+
+// V3 dynamic *container* inputs. Their value never travels in widgets_values —
+// ComfyUI expands them server-side into dotted member ids (AUTOGROW's "branches"
+// becomes branches.item0, branches.item1, …) and, unlike DynamicCombo, purposely
+// does NOT keep the container itself as an input. Emitting one would both invent a
+// bogus value and shift every widget after it.
+const DYNAMIC_CONTAINER_TYPES = new Set(['COMFY_AUTOGROW_V3', 'COMFY_DYNAMICSLOT_V3', 'COMFY_MULTITYPED_V3', 'COMFY_MATCHTYPE_V3']);
+
+// Frontend-only node types: absent from object_info by design (they carry no work,
+// they drive the editor), so their absence is never worth warning about. rgthree's
+// muters/bypassers/labels live here; its real nodes (Power Lora Loader, Seed, …) are
+// in object_info when installed and so never reach this check.
+const UI_ONLY_NODE_TYPES = new Set([
+  'Reroute', 'PrimitiveNode', 'Note', 'MarkdownNote', 'GetNode', 'SetNode', 'easy getNode', 'easy setNode',
+]);
+const UI_ONLY_NODE_PATTERNS = [
+  /^(Anything Everywhere|Prompts Everywhere|Seed Everywhere)/,
+  /^(Label|Bookmark|Note Plus|Reroute|Fast Muter|Fast Bypasser|Fast Groups Muter|Fast Groups Bypasser|Fast Actions Button|Mute \/ Bypass (Repeater|Relay)) \(rgthree\)$/,
+];
+const isUiOnlyNode = (t) => UI_ONLY_NODE_TYPES.has(t) || UI_ONLY_NODE_PATTERNS.some(re => re.test(t));
+
+// Every type any installed node can emit from an output — i.e. everything that can
+// legitimately arrive over a link. Used to tell a socket from a custom widget type.
+let linkTypeCache = null, linkTypeCacheSrc = null;
+function getLinkTypes(objectInfo) {
+  if (linkTypeCacheSrc === objectInfo && linkTypeCache) return linkTypeCache;
+  const s = new Set();
+  for (const inf of Object.values(objectInfo || {})) {
+    for (const o of (inf && inf.output) || []) {
+      if (typeof o === 'string') for (const t of o.split(',')) s.add(t.trim());
+    }
+  }
+  linkTypeCache = s; linkTypeCacheSrc = objectInfo;
+  return s;
+}
+
 // Convert visual workflow JSON (LiteGraph format) to API/prompt format
 async function workflowToPrompt(wf) {
-  const nodes = wf.nodes || [];
-  const links = wf.links || [];
+  const flat = flattenSubgraphs(wf);
+  const nodes = flat.nodes;
+  const links = flat.links;
   let objectInfo;
   try { objectInfo = await getObjectInfo(); } catch { objectInfo = {}; }
+  const linkTypes = getLinkTypes(objectInfo);
 
   // Build link lookup: linkId -> {fromNode, fromSlot}
   const linkMap = {};
@@ -795,11 +959,21 @@ async function workflowToPrompt(wf) {
       }
       return null;
     }
-    // Unknown UI-only node (not in object_info) — treat as pass-through like reroute
+    // Unknown node (not in object_info) — either a UI-only pass-through (rgthree
+    // labels and friends) or a custom node that isn't installed. Only pass through
+    // when the requested output has a TYPE-COMPATIBLE input to pass through TO:
+    // blindly taking input 0 hands the consumer whatever that node happens to be
+    // fed first (a MODEL where an IMAGE was wanted), and ComfyUI then rejects the
+    // consumer with a baffling type mismatch instead of the branch simply dropping.
     if (!objectInfo[node.type] && node.mode !== 4) {
-      const firstInput = (node.inputs || [])[0];
-      if (firstInput && firstInput.link != null && linkMap[firstInput.link]) {
-        const upstream = linkMap[firstInput.link];
+      const outT = String((((node.outputs || [])[slotIdx]) || {}).type || '').toUpperCase();
+      const cands = (node.inputs || []).filter(i => i && i.link != null && linkMap[i.link]);
+      const match = cands.find(i => {
+        const t = String(i.type || '').toUpperCase();
+        return !outT || !t || outT === '*' || t === '*' || outT === t;
+      });
+      if (match) {
+        const upstream = linkMap[match.link];
         return resolveBypass(upstream.fromNode, upstream.fromSlot, (depth || 0) + 1);
       }
       return null;
@@ -943,19 +1117,40 @@ async function workflowToPrompt(wf) {
         // types (e.g. LoraManager's AUTOCOMPLETE_TEXT_LORAS) aren't in the scalar
         // list, but the visual node marks them widget:true — honor that.
         const visualInp = nodeInputs.find(i => i.name === name);
-        const isWidget = ['INT', 'FLOAT', 'STRING', 'BOOLEAN', 'COMBO'].includes(typeName)
+        const isWidget = ['INT', 'FLOAT', 'STRING', 'BOOLEAN', 'COMBO', 'COMFY_DYNAMICCOMBO_V3'].includes(typeName)
           || Array.isArray(def[0])
           || !!(visualInp && visualInp.widget);
+        // A PURE widget (never convertible to a socket, e.g. LoraManager's
+        // AUTOCOMPLETE_TEXT_LORAS text box) has no entry in the visual node's inputs
+        // array at all — modern saves list every socket, wired or not. So "absent from
+        // inputs, and no part of its type can arrive over a link" means widget-only.
+        // Without this its value is never emitted and ComfyUI rejects the node for a
+        // missing required input. Deliberately conservative: unions like "MODEL,CLIP"
+        // and one-off socket types stay sockets.
+        const speculativeWidget = !isWidget && !visualInp
+          && !DYNAMIC_CONTAINER_TYPES.has(typeName)
+          && !typeName.split(',').some(t => linkTypes.has(t.trim()));
         // Also check forceInput flag
         const opts = def[1] || {};
         if (opts.forceInput) continue; // Pure socket, no widget
 
-        if (isWidget) {
+        if (isWidget || speculativeWidget) {
           // Scan forward past values that can't belong to this widget type — some
           // custom nodes (e.g. LoraManager toggles) append extra array/object state
           // into widgets_values, which would otherwise shift every later widget.
           let assigned = false;
           let scanIdx = widgetIdx;
+          // Custom nodes inject UI-only entries into widgets_values, which shifts every
+          // field after them. For a COMBO we can recognise one: an empty/null candidate
+          // that is not itself a valid option can never be a real selection, so it's
+          // filler — skip it. Anything else stays positional even when it matches no
+          // installed option (a model filename absent from disk, a project that no
+          // longer exists): searching further ahead would cheerfully steal the NEXT
+          // field's value, which is how a stale lora name eats its own strength value.
+          const choices = typeName === 'COMBO'
+            ? (Array.isArray(def[0]) ? def[0] : (Array.isArray(opts.options) ? opts.options : null))
+            : null;
+          let fillerSkips = 0;
           while (scanIdx < widgetValues.length) {
             let val = widgetValues[scanIdx];
             // Handle [value, [config]] for booleans
@@ -967,20 +1162,36 @@ async function workflowToPrompt(wf) {
               : (typeName === 'INT' || typeName === 'FLOAT') ? typeof val === 'number'
               : (val === null || typeof val !== 'object'); // STRING/COMBO/custom accept any scalar
             if (typeOk) {
-              // Single-choice combos are UI placeholders whose label text drifts
-              // between node-pack versions ("Select Wildcard 🟢 Full Cache" vs the
-              // installed pack's label) — coerce to the installed value.
-              if (typeName === 'COMBO' && Array.isArray(def[0]) && def[0].length === 1
-                  && typeof val === 'string' && !def[0].includes(val)) {
-                val = def[0][0];
+              if (choices && choices.length && !choices.includes(val)) {
+                // Single-choice combos are UI placeholders whose label text drifts
+                // between node-pack versions ("Select Wildcard 🟢 Full Cache" vs the
+                // installed pack's label) — coerce to the installed value.
+                if (choices.length === 1 && typeof val === 'string') {
+                  val = choices[0];
+                } else if ((val === '' || val === null) && fillerSkips++ < 2) {
+                  scanIdx++; continue; // UI-only filler entry
+                }
               }
               inputs[name] = val; widgetIdx = scanIdx + 1; assigned = true; break;
             }
             scanIdx++; // junk entry — skip it
           }
           if (!assigned) {
-            widgetIdx++;
+            // A speculative widget that found no value was probably a socket after
+            // all — don't consume a slot, or every later widget shifts.
+            if (!speculativeWidget) widgetIdx++;
             if (opts.default !== undefined) inputs[name] = opts.default;
+            else if (typeName === 'COMFY_DYNAMICCOMBO_V3' && (opts.options || []).length) inputs[name] = opts.options[0].key;
+          }
+          // Clamp numerics into the schema's declared range. An out-of-range value
+          // (a -1 "random" seed against min 0) is a hard ComfyUI rejection, so the
+          // clamped value is the only one that can run.
+          if (assigned && (typeName === 'INT' || typeName === 'FLOAT') && typeof inputs[name] === 'number') {
+            if (typeof opts.min === 'number' && inputs[name] < opts.min) inputs[name] = opts.min;
+            if (typeof opts.max === 'number' && inputs[name] > opts.max) inputs[name] = opts.max;
+          }
+          if (typeName === 'COMFY_DYNAMICCOMBO_V3') {
+            widgetIdx = expandDynamicCombo(inputs, name, def, inputs[name], widgetValues, widgetIdx);
           }
           // Skip extra control_after_generate widget that follows seed INT inputs
           if (typeName === 'INT' && widgetIdx < widgetValues.length) {
@@ -1004,6 +1215,12 @@ async function workflowToPrompt(wf) {
           widgetIdx++;
         }
       }
+    }
+
+    // A value set on a subgraph instance's promoted widget belongs to whichever
+    // interior input that subgraph socket feeds (see flattenSubgraphs).
+    if (node.__promoted) {
+      for (const [k, v] of Object.entries(node.__promoted)) if (!linkedInputs.has(k)) inputs[k] = v;
     }
 
     prompt[nodeId] = {
@@ -3002,6 +3219,20 @@ runTests();
               if (ctl) ctl.set(cfgVal);   // sliders/primitives stay visually consistent
             }
           }
+          // Warn about node types this ComfyUI doesn't have installed. Their branch is
+          // either dropped or (when an input type matches) passed through, so the run
+          // can look fine while doing something the workflow never asked for.
+          try {
+            const oi = await getObjectInfo();
+            const missing = new Set();
+            for (const n of wf.nodes || []) {
+              if (!n.type || oi[n.type] || n.mode === 2 || n.mode === 4) continue;
+              if (isUiOnlyNode(n.type) || !(n.outputs || []).length) continue;
+              if (((wf.definitions && wf.definitions.subgraphs) || []).some(d => String(d.id) === String(n.type))) continue;
+              missing.add(n.type);
+            }
+            for (const t of missing) fieldWarnings.push('node type "' + t + '" is not installed in ComfyUI — that branch was skipped');
+          } catch (e) {}
           // Return the (override-applied) visual graph too: the client submits it
           // as extra_data.extra_pnginfo.workflow, which graph-introspecting nodes
           // (WidgetToString etc.) require at execution time.

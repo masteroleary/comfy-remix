@@ -295,7 +295,50 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .modal-nav[disabled]{opacity:.15;cursor:default}
 #modalPrev{left:calc(6px + var(--safe-l))}
 #modalNext{right:calc(6px + var(--safe-r))}
-#modalMute{left:50%;transform:translateX(-50%);font-size:20px}
+/* Bottom-centre cluster. Only ▶ is in flow, so it stays dead-centre; the side
+   groups hang off it absolutely and can hold anything without shifting it. */
+.modal-ctl{
+  position:absolute;bottom:calc(8px + var(--safe-b));left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;z-index:10;
+}
+.modal-ctl .modal-nav{position:static;transform:none;font-size:20px}
+.ctl-side{
+  position:absolute;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;gap:8px;white-space:nowrap;
+}
+.ctl-left{right:calc(100% + 8px);justify-content:flex-end}
+.ctl-right{left:calc(100% + 8px)}
+#modalMute{width:46px}
+#modalPlay.on,.modal-chip.on{background:color-mix(in srgb,var(--accent) 45%,rgba(255,255,255,.1));color:#fff}
+.modal-chip{
+  background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.7);
+  height:40px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:5px;
+  -webkit-tap-highlight-color:transparent;
+}
+.modal-chip:active{opacity:.6}
+.modal-speed{
+  color:rgba(255,255,255,.4);font-size:12px;font-variant-numeric:tabular-nums;
+  user-select:none;pointer-events:none;
+}
+.modal-speed.on{color:var(--accent)}
+.modal-speed.waiting{opacity:.35}
+/* Phones: shrink the whole bottom row so the cluster clears the ‹ › arrows. */
+@media (max-width:520px){
+  .modal-nav{width:52px}
+  .modal-chip{padding:0 8px;font-size:11px}
+  .modal-speed{font-size:11px}
+  .ctl-side{gap:6px}
+  .ctl-left{right:calc(100% + 6px)}
+  .ctl-right{left:calc(100% + 6px)}
+}
+@media (max-width:420px){ .chip-emoji{display:none} }
+@media (max-width:380px){
+  .modal-nav,#modalMute{width:44px}
+  #modalPrev{left:calc(4px + var(--safe-l))}
+  #modalNext{right:calc(4px + var(--safe-r))}
+  .modal-chip{padding:0 6px}
+}
 
 .modal-body{
   width:100%;max-width:100%;
@@ -848,7 +891,14 @@ const gridState = Vue.reactive({
 });
 // Reactive state for the media viewer modal (Vue-rendered on #modalApp).
 // page/pages mirror S so ‹ › know whether an adjacent page exists to walk into.
-const modalState = Vue.reactive({ open: false, item: null, muted: true, idx: -1, count: 0, page: 1, pages: 1, loading: false });
+const modalState = Vue.reactive({ open: false, item: null, muted: true, idx: -1, count: 0, page: 1, pages: 1, loading: false, playing: false, speedIdx: 2, videoPlay: false });
+// Slideshow cadence, slowest → fastest; ‹ › become − + while playing.
+const SLIDE_STEPS = [8000, 5000, 3000, 2000, 1500, 1000, 700, 500];
+try {
+  const v = parseInt(localStorage.getItem('archiveSlideSpeed'), 10);
+  if (v >= 0 && v < SLIDE_STEPS.length) modalState.speedIdx = v;
+  modalState.videoPlay = localStorage.getItem('archiveSlideVideoPlay') === '1';
+} catch (e) {}
 // Reactive state for the toolbar (Vue-rendered on #toolbarApp).
 const tbar = Vue.reactive({
   showControls: false, pathHome: false, searchLabel: '', crumbs: [],
@@ -1708,6 +1758,7 @@ function openModal(item) {
   document.body.style.overflow = 'hidden';
 }
 function closeModal() {
+  slideStop();
   modalState.open = false;
   modalState.item = null;   // v-if drops the media element, stopping playback
   document.body.style.overflow = '';
@@ -1756,6 +1807,87 @@ async function modalNavPage(delta) {
     if (back >= 0) modalShow(back);
   }
 }
+// ── Slideshow ─────────────────────────────────────────────────────────────
+// Auto-advance through the viewer's list, wrapping from the last item back to
+// the first. In a flattened / searched view the whole list is one page, so the
+// loop covers every file under the folder; while browsing normally it walks
+// page by page like ‹ › do. Self-scheduling timeout (not setInterval) so a slow
+// page fetch can't stack up ticks.
+let slideTimer = null, slideGuard = null;
+// Video Play: hold on a clip until it ends instead of ticking through it. The
+// <video> loses its `loop` while we wait, so `ended` actually fires.
+function slideWaitsForVideo() {
+  return modalState.playing && modalState.videoPlay && !!(modalState.item && modalState.item.isVideo);
+}
+// Is the <video> on screen the current item's, and already rolling?
+function slideVideoRolling() {
+  const el = document.querySelector('.modal-body video');
+  return !!(el && !el.paused && !el.ended
+            && modalState.item && el.getAttribute('src') === '/file/' + enc(modalState.item.path));
+}
+function slideSchedule() {
+  clearTimeout(slideTimer); slideTimer = null;
+  clearTimeout(slideGuard); slideGuard = null;
+  if (!modalState.playing) return;
+  if (slideWaitsForVideo()) {
+    // A clip that's already running reports `ended` on its own, however long it
+    // is. Only guard the case where nothing ever starts (blocked autoplay, dead
+    // file) so the slideshow can't be stranded on it — @playing clears it.
+    if (!slideVideoRolling()) slideGuard = setTimeout(() => { if (slideWaitsForVideo()) slideTick(); }, 10000);
+    return;
+  }
+  slideTimer = setTimeout(slideTick, SLIDE_STEPS[modalState.speedIdx]);
+}
+async function slideTick() {
+  if (!modalState.playing || !modalState.open) return;
+  await slideshowAdvance();
+  if (modalState.playing && modalState.open) slideSchedule();
+}
+function slideStart() { if (!modalState.playing) { modalState.playing = true; slideSchedule(); } }
+function slideStop() {
+  modalState.playing = false;
+  clearTimeout(slideTimer); slideTimer = null;
+  clearTimeout(slideGuard); slideGuard = null;
+}
+function slideToggleVideoPlay() {
+  modalState.videoPlay = !modalState.videoPlay;
+  try { localStorage.setItem('archiveSlideVideoPlay', modalState.videoPlay ? '1' : '0'); } catch (e) {}
+  slideSchedule();   // switch between "wait for `ended`" and the interval
+}
+// delta > 0 = faster (shorter interval). Restarts the pending tick at the new pace.
+function slideSpeed(delta) {
+  const ni = modalState.speedIdx + delta;
+  if (ni < 0 || ni >= SLIDE_STEPS.length) return;
+  modalState.speedIdx = ni;
+  try { localStorage.setItem('archiveSlideSpeed', String(ni)); } catch (e) {}
+  slideSchedule();
+}
+async function slideshowAdvance() {
+  if (S.modalIdx + 1 < S.mediaItems.length) { modalShow(S.modalIdx + 1); return; }
+  if (S.page < (S.pages || 1)) {
+    const before = modalState.item ? modalState.item.path : null;
+    await modalNav(1);
+    // Every page ahead held only folders — modalNav put us back where we were.
+    if (modalState.open && modalState.item && modalState.item.path === before) await slideshowWrap();
+    return;
+  }
+  await slideshowWrap();
+}
+// Back to the very first item of the list.
+async function slideshowWrap() {
+  if (S.page === 1 || (S.pages || 1) <= 1) { if (S.mediaItems.length) modalShow(0); return; }
+  if (modalNavBusy) return;
+  modalNavBusy = true;
+  modalState.loading = true;
+  try {
+    await loadDir(S.dir, 1, false, S.flatten);
+    if (!modalState.open || gridState.error) return;
+    syncModalPage();
+    if (S.mediaItems.length) { modalShow(0); window.scrollTo(0, 0); }
+    else await modalNavPage(1);   // page 1 holds only folders — walk forward
+  } finally { modalNavBusy = false; modalState.loading = false; }
+}
+
 // The item on screen was just favorited/deleted: stay open and show the item
 // that slid into its slot (the next one), falling back to the previous one at
 // the end of the list. Closes only when nothing is left.
@@ -1773,14 +1905,29 @@ const ModalApp = {
     fileUrl() { return this.s.item ? '/file/' + enc(this.s.item.path) : ''; },
     hasPrev() { return this.s.idx > 0 || this.s.page > 1; },
     hasNext() { return this.s.idx < this.s.count - 1 || this.s.page < this.s.pages; },
+    canPlay() { return this.s.count > 1 || this.s.pages > 1; },
+    canSlower() { return this.s.speedIdx > 0; },
+    canFaster() { return this.s.speedIdx < SLIDE_STEPS.length - 1; },
+    speedLabel() { return (SLIDE_STEPS[this.s.speedIdx] / 1000).toFixed(1) + 's'; },
+    // While a clip plays out, the interval isn't what's driving the slideshow.
+    onVideo() { return this.s.playing && this.s.videoPlay && !!(this.s.item && this.s.item.isVideo); },
   },
   methods: {
     close: closeModal,
-    prev() { modalNav(-1); },
-    next() { modalNav(1); },
+    // While the slideshow runs, ‹ › drive the cadence instead of the position.
+    prev() { if (this.s.playing) slideSpeed(-1); else modalNav(-1); },
+    next() { if (this.s.playing) slideSpeed(1); else modalNav(1); },
+    togglePlay() { if (this.s.playing) slideStop(); else slideStart(); },
+    // Clicking the media stops a running slideshow (the speed is kept for the
+    // next ▶); with nothing playing the click is left to the media itself.
+    onMediaClick() { if (this.s.playing) slideStop(); },
+    toggleVideoPlay: slideToggleVideoPlay,
+    onVideoPlaying() { clearTimeout(slideGuard); slideGuard = null; },
+    onVideoEnd() { if (slideWaitsForVideo()) slideTick(); },
+    onVideoError() { if (slideWaitsForVideo()) slideTick(); },   // unplayable file: move on
     toggleMute() { modalState.muted = !modalState.muted; const v = this.$refs.vid; if (v) v.muted = modalState.muted; },
-    fav() { if (this.s.item) doFavorite(this.s.item, null, true); },
-    del() { if (this.s.item) doDelete(this.s.item, null, true); },
+    fav() { slideStop(); if (this.s.item) doFavorite(this.s.item, null, true); },
+    del() { slideStop(); if (this.s.item) doDelete(this.s.item, null, true); },
     onTouchStart(e) { this._tx = e.touches[0].clientX; },
     onTouchEnd(e) { const dx = e.changedTouches[0].clientX - (this._tx || 0); if (Math.abs(dx) > 55) { if (dx > 0) this.prev(); else this.next(); } },
   },
@@ -1791,11 +1938,28 @@ const ModalApp = {
         <button class="modal-act-btn m-del" @click="del">🗑 Delete</button>
       </div>
       <button class="modal-close" @click="close">✕</button>
-      <button class="modal-nav" id="modalPrev" :disabled="!hasPrev || s.loading" @click="prev">‹</button>
-      <button v-if="s.item && s.item.isVideo" class="modal-nav" id="modalMute" @click="toggleMute">{{ s.muted ? '🔇' : '🔊' }}</button>
-      <button class="modal-nav" id="modalNext" :disabled="!hasNext || s.loading" @click="next">›</button>
-      <div class="modal-body">
-        <video v-if="s.item && s.item.isVideo" ref="vid" :key="s.item.path" :src="fileUrl" controls playsinline autoplay loop @loadstart="$event.target.muted = s.muted"></video>
+      <button class="modal-nav" id="modalPrev"
+              :disabled="s.playing ? !canSlower : (!hasPrev || s.loading)"
+              :title="s.playing ? 'Slower' : 'Previous'" @click="prev">{{ s.playing ? '−' : '‹' }}</button>
+      <div class="modal-ctl">
+        <div class="ctl-side ctl-left">
+          <button v-if="s.item && s.item.isVideo" class="modal-nav" id="modalMute" @click="toggleMute">{{ s.muted ? '🔇' : '🔊' }}</button>
+          <span class="modal-speed" :class="{on: s.playing, waiting: onVideo}">{{ speedLabel }}</span>
+        </div>
+        <button class="modal-nav" id="modalPlay" :class="{on: s.playing}" :disabled="!canPlay"
+                :title="s.playing ? 'Stop slideshow' : 'Play slideshow'" @click="togglePlay">{{ s.playing ? '⏸' : '▶' }}</button>
+        <div class="ctl-side ctl-right">
+          <button class="modal-chip" id="modalVidPlay" :class="{on: s.videoPlay}" @click="toggleVideoPlay"
+                  title="Let videos play to the end before the slideshow advances"><span class="chip-emoji">🎬</span>Video Play</button>
+        </div>
+      </div>
+      <button class="modal-nav" id="modalNext"
+              :disabled="s.playing ? !canFaster : (!hasNext || s.loading)"
+              :title="s.playing ? 'Faster' : 'Next'" @click="next">{{ s.playing ? '+' : '›' }}</button>
+      <div class="modal-body" @click="onMediaClick">
+        <video v-if="s.item && s.item.isVideo" ref="vid" :key="s.item.path" :src="fileUrl" controls playsinline autoplay
+               :loop="!onVideo" @loadstart="$event.target.muted = s.muted"
+               @playing="onVideoPlaying" @ended="onVideoEnd" @error="onVideoError"></video>
         <img v-else-if="s.item && s.item.isImage" :key="s.item.path" :src="fileUrl" :alt="s.item.name">
         <div v-else-if="s.item && s.item.isAudio" class="modal-audio-wrap"><div style="font-size:64px">🎵</div><audio :key="s.item.path" :src="fileUrl" controls autoplay></audio></div>
       </div>
@@ -1810,8 +1974,14 @@ catch (e) { console.error('[modal] Vue mount failed:', e); }
 document.addEventListener('keydown', e => {
   if (!modalState.open) return;
   if (e.key === 'Escape') closeModal();
-  if (e.key === 'ArrowLeft') modalNav(-1);
-  if (e.key === 'ArrowRight') modalNav(1);
+  // Arrows mirror the on-screen ‹ ›: position normally, speed while playing.
+  if (e.key === 'ArrowLeft') modalState.playing ? slideSpeed(-1) : modalNav(-1);
+  if (e.key === 'ArrowRight') modalState.playing ? slideSpeed(1) : modalNav(1);
+  // Space toggles play, unless the browser is already using it (focused control).
+  if (e.key === ' ' && !/^(VIDEO|AUDIO|INPUT|TEXTAREA|BUTTON|SELECT)$/.test(e.target.tagName || '')) {
+    e.preventDefault();
+    modalState.playing ? slideStop() : slideStart();
+  }
 });
 
 // ── Favorite ──────────────────────────────────────────────────────────────
